@@ -1,0 +1,20 @@
+{
+  "logistic": {
+    "all_features_shuffled_mae": 0.21024346039616643,
+    "all_features_shuffled_rank_correlation": -0.00041967641967641966,
+    "bootstrap_brier_interval_width": 0.008062010172756262,
+    "bootstrap_auc_interval_width": 0.02323040542939958
+  },
+  "xgboost": {
+    "all_features_shuffled_mae": 0.2045711874961853,
+    "all_features_shuffled_rank_correlation": -0.01320866520866521,
+    "bootstrap_brier_interval_width": 0.007932404157596246,
+    "bootstrap_auc_interval_width": 0.022337288615543516
+  },
+  "tabicl": {
+    "all_features_shuffled_mae": 0.22484588623046875,
+    "all_features_shuffled_rank_correlation": 0.0016859871905259038,
+    "bootstrap_brier_interval_width": 0.008882074423944425,
+    "bootstrap_auc_interval_width": 0.02334041369497486
+  }
+}
