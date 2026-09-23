@@ -6,6 +6,7 @@ from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
 from pptx.util import Inches, Pt
+from PIL import Image
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -61,6 +62,12 @@ def card(slide, label, value, x, y, color=ORANGE, note=""):
 
 
 def picture(slide, path, x, y, w):
+    # Keep tall figures inside the content area rather than clipping the footer.
+    with Image.open(path) as img:
+        ratio = img.height / img.width
+    fitted_width = min(w, (6.85 - y) / ratio)
+    x += (w - fitted_width) / 2
+    w = fitted_width
     slide.shapes.add_picture(str(path), Inches(x), Inches(y), width=Inches(w))
 
 
@@ -107,7 +114,7 @@ bullets(s, ["Post-release violations, tests, programs and employment excluded to
 
 # 4 — Three models
 s = make_slide(prs); title(s, "Three model families, one comparison", "03 · Model design")
-panel(s, "LOGISTIC", "White-box anchor\n\nRegularized linear score\n\nSigned, inspectable effects", .7, 1.9, color=ORANGE)
+panel(s, "LOGISTIC", "White-box anchor\n\nCV-tuned L1, C=0.2154\n\nSigned, inspectable effects", .7, 1.9, color=ORANGE)
 panel(s, "XGBOOST", "Nonlinear workhorse\n\nOrdinal counts + 5-fold CV tuning\n\nFast operational scoring", 4.8, 1.9, color=TEAL)
 panel(s, "TABICLv2", "Foundation model\n\nPretrained in-context transformer\n\nIn-context prediction; no native attribution implemented", 8.9, 1.9, color=PURPLE)
 textbox(s, "Same eligible fields · Same held-out people · Same metrics", 2.5, 6.22, 8.3, .4, 17, ORANGE, True, PP_ALIGN.CENTER); footer(s, 4)
@@ -156,7 +163,7 @@ textbox(s, "Jaccard is intersection / union, not the share of people switching. 
 
 # 11 — Fairness at the deployed point
 s = make_slide(prs); title(s, "Fairness at the proposed allocation rule", "10 · Subgroup audit")
-picture(s, FIG / "fairness_operating_point.png", .4, 1.7, 8.5)
+picture(s, FIG / "fairness_support_access.png", .4, 1.7, 8.5)
 card(s, "GENDER FPR · XGB", f"{fpr20.loc['xgboost','Gender']:.3f}", 9.35, 1.9, TEAL)
 card(s, "GENDER FPR · TABICL", f"{fpr20.loc['tabicl','Gender']:.3f}", 9.35, 3.5, RED)
 card(s, "RACE FPR · XGB", f"{fpr20.loc['xgboost','Race']:.3f}", 9.35, 5.1, ORANGE)

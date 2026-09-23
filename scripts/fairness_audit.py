@@ -121,11 +121,11 @@ def frontier(pred: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def figures(result: pd.DataFrame, front: pd.DataFrame) -> None:
+def operating_figure(result: pd.DataFrame, metric: str, filename: str) -> None:
     sns.set_theme(style="whitegrid", context="talk")
     fig, axes = plt.subplots(1, 2, figsize=(16, 6), sharey=True)
     for ax, attr in zip(axes, ATTRIBUTES):
-        part = result[(result.attribute == attr) & (result.metric == "fpr")]
+        part = result[(result.attribute == attr) & (result.metric == metric)]
         x = np.arange(len(MODELS))
         for j, rule in enumerate(["threshold_0.5", "top_20pct"]):
             r = part[part.rule == rule].set_index("model").loc[MODELS]
@@ -134,13 +134,17 @@ def figures(result: pd.DataFrame, front: pd.DataFrame) -> None:
         ax.axhline(0, color="grey", lw=1)
         ax.set_xticks(x, [DISPLAY[m] for m in MODELS], fontsize=11)
         a, b = ATTRIBUTES[attr]
-        ax.set_title(f"FPR gap by {attr.lower()} ({a} minus {b}), 95% CI")
-    axes[0].set_ylabel("False-positive-rate gap")
+        ax.set_title(f"{metric.upper()} gap by {attr.lower()} ({a} minus {b}), 95% CI")
+    axes[0].set_ylabel(f"{metric.upper()} gap")
     axes[0].legend(fontsize=10)
     fig.tight_layout()
-    fig.savefig(FIGURE_DIR / "fairness_operating_point.png", dpi=180, bbox_inches="tight")
+    fig.savefig(FIGURE_DIR / filename, dpi=180, bbox_inches="tight")
     plt.close(fig)
 
+
+def figures(result: pd.DataFrame, front: pd.DataFrame) -> None:
+    operating_figure(result, "fpr", "fairness_operating_point.png")
+    operating_figure(result, "fnr", "fairness_support_access.png")
     fig, axes = plt.subplots(1, 2, figsize=(17, 6))
     for ax, attr in zip(axes, ATTRIBUTES):
         a, b = ATTRIBUTES[attr]

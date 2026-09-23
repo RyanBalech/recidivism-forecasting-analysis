@@ -78,6 +78,7 @@ def classification_metrics(y: Iterable[int], p: Iterable[float], threshold: floa
         "ece_10": expected_calibration_error(y_arr, p_arr),
         "selection_rate": float(pred.mean()),
         "tpr": float(tp / (tp + fn)) if tp + fn else np.nan,
+        "fnr": float(fn / (tp + fn)) if tp + fn else np.nan,
         "fpr": float(fp / (fp + tn)) if fp + tn else np.nan,
         "precision": float(tp / (tp + fp)) if tp + fp else np.nan,
         "accuracy": float((pred == y_arr).mean()),

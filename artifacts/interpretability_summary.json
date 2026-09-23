@@ -1,5 +1,5 @@
 {
-  "logistic_individual_probability": 0.9525655129814827,
+  "logistic_individual_probability": 0.949590146795122,
   "xgboost_individual_probability": 0.937201738357544,
   "surrogate_depth": 3,
   "surrogate_fidelity_r2_test": 0.6095788334531511,

@@ -163,6 +163,8 @@ with tab_cmp:
 
 with tab_fair:
     st.subheader("Fairness audit by race and gender")
+    st.write("For beneficial support, missed access matters: inspect FNR (1 − TPR) and selection rates first. Arrest is only a proxy for need; these errors do not identify treatment benefit.")
+    figure("fairness_support_access.png", "False-negative-rate gaps at the proposed capacity rule and at 0.5; signed group differences.")
     inf = data["fairness_inference"]
     if inf is not None:
         rule = st.radio("Operating point", ["top_20pct", "threshold_0.5"], horizontal=True,
@@ -183,6 +185,8 @@ with tab_fair:
             view = data["intersectional_audit"].query("attribute == 'Race x Gender'")
             st.dataframe(view.round(4), width="stretch", hide_index=True)
             st.caption("Inspect subgroup sample sizes; small intersections have greater uncertainty. These point estimates do not establish fairness.")
+        with st.expander("Age-group audit (descriptive, threshold 0.5)"):
+            st.dataframe(data["intersectional_audit"].query("attribute == 'Age at release'").round(4), width="stretch", hide_index=True)
     figure("fairness_frontier.png", "Group thresholds were optimized using these evaluation labels: exploratory illustration only. Thresholds change decisions, not probability calibration.")
     if data["race_ab_test"] is not None:
         st.markdown("**A/B test: model trained with race vs without race**")

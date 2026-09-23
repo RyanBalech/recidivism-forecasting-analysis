@@ -14,7 +14,7 @@ Race, gender and PUMA are excluded from inputs; race and gender are audited. Pos
 
 Imputation/scaling are fitted within pipelines. Logistic uses one-hot categories; XGBoost first ordinal-encodes selected ordered categories/counts. They use the same eligible raw information, **not the same transformed matrix**. TabICLv2 uses mixed inputs with categorical missing values filled from training modes. Filling missing gang affiliation removes a direct gender missingness marker, not all proxy information.
 
-Logistic uses L2 regularization with C=0.25. XGBoost's shallow-tree parameters come from a historical five-fold AUC search, not Brier optimization. TabICLv2 uses two ensemble members as a compute-budget choice.
+Logistic uses the merged team's L1 regularization with C=0.2154 and one-hot encoding, chosen by its five-fold grid. The team's six-candidate ML comparison and readable labels are retained. XGBoost's shallow-tree parameters come from a historical five-fold AUC search, not Brier optimization. TabICLv2 uses two ensemble members as a compute-budget choice.
 
 The fresh five-fold conventional-model CV in `validation_cv.csv` evaluates fixed configurations with fold-local preprocessing. Earlier tuning used the same training data, so this is **not nested validation of the search procedure**. No new TabICLv2 CV sweep is included.
 
@@ -34,7 +34,7 @@ Economic scenarios assume 20% capacity, $5,000 support cost, $50,000 event cost 
 
 ## Interpretability
 
-SHAP explains logistic/XGBoost predictions in log-odds, aggregated to raw features. LIME is a local approximation; neither identifies causal effects. The shallow surrogate has imperfect fidelity and cannot replace the original model.
+SHAP explains logistic/XGBoost predictions in log-odds, aggregated to raw features. Reconstruction tests verify that summed SHAP values recover saved-model probabilities. LIME is a local approximation; inspect its recorded local surrogate R² before trusting the explanation (the review run was about 0.25, a weak fit). Neither identifies causal effects. The shallow global surrogate has imperfect fidelity and cannot replace the original model.
 
 XPER approximates performance attribution on 150 records and 60 sampled coalitions. Its sample AUC and approximate contributions must not be treated as definitive full-population feature rankings.
 
@@ -51,6 +51,8 @@ Refit sensitivity does not measure temporal drift. Random subsets of one histori
 ## Fairness
 
 Report FPR, TPR, selection rates, precision, Brier and calibration by race/gender, plus descriptive race-by-gender intersections and denominators. Small intersections and single-class groups have less reliable or undefined statistics. Bootstrap intervals are exploratory, with no multiple-testing correction.
+
+For beneficial support, prioritize missed access (FNR = 1 − TPR) and selection rates; retain FPR as a secondary allocation-error measure. Arrest is only a proxy for need and does not identify who benefits from support. An age-group descriptive audit is also included because age is a model input. Local sensitivity for the same person across all three models and a transformed-unit logistic coefficient/odds-ratio table complement the explanations.
 
 The proposed capacity rule selects exactly round(n × 0.20). Its gaps differ from those at probability 0.5 because decisions differ. A smaller gap at another operating point does not mean the model itself improved.
 

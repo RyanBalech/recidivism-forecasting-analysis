@@ -35,7 +35,7 @@ def main() -> None:
     rows, best = [], None
     for encoding in ["onehot", "ordinal"]:
         search = GridSearchCV(
-            logistic_model(split.X_train, encoding=encoding), GRID, cv=cv, n_jobs=-1,
+            logistic_model(split.X_train, encoding=encoding), GRID, cv=cv, n_jobs=2,
             scoring={"roc_auc": "roc_auc", "brier": "neg_brier_score"}, refit="roc_auc",
         )
         search.fit(split.X_train, split.y_train)

@@ -38,6 +38,12 @@ def main():
     test = pd.read_csv(ROOT / "nij-challenge2021_test_dataset_1.csv")
     assert set(training.ID) == set(split.audit_train.ID)
     assert set(test.ID) == set(split.audit_test.ID)
+    for year in [2, 3]:
+        released = pd.read_csv(ROOT / f"nij-challenge2021_test_dataset_{year}.csv")
+        eligible = raw.Training_Sample.eq(0)
+        for earlier in range(1, year):
+            eligible &= raw[f"Recidivism_Arrest_Year{earlier}"].eq("No")
+        assert set(released.ID) == set(raw.loc[eligible, "ID"])
     year_cols = [f"Recidivism_Arrest_Year{i}" for i in [1, 2, 3]]
     annual = raw[year_cols].apply(lambda s: s.map({"Yes": 1, "No": 0})).astype(int)
     assert (annual.sum(axis=1) <= 1).all()
@@ -60,6 +66,8 @@ def main():
             groups.append(fairness_table(y, p, pred[attribute], attribute).assign(model=name))
         groups.append(fairness_table(y, p, pred.Race + " / " + pred.Gender,
                                      "Race x Gender").assign(model=name))
+        groups.append(fairness_table(y, p, split.X_test.Age_at_Release,
+                                     "Age at release").assign(model=name))
     pd.DataFrame(rows).to_csv(ARTIFACT_DIR / "validation_baselines.csv", index=False)
     pd.concat(groups).to_csv(ARTIFACT_DIR / "intersectional_audit.csv", index=False)
 

@@ -68,6 +68,12 @@ def main() -> None:
     background = X_train.iloc[rng.choice(len(X_train), 500, replace=False)]
     models = {m: joblib.load(MODEL_DIR / f"{m}.joblib") for m in ["logistic", "xgboost"]}
     summary = {}
+    logistic = models["logistic"]
+    coefficients = pd.DataFrame({"feature": logistic[-2].get_feature_names_out(),
+                                 "coefficient": logistic[-1].coef_[0]})
+    coefficients["odds_ratio_per_transformed_unit"] = np.exp(coefficients.coefficient)
+    coefficients["nonzero"] = coefficients.coefficient.ne(0)
+    coefficients.to_csv(ARTIFACT_DIR / "logistic_coefficients.csv", index=False)
 
     # Individual to explain everywhere: the highest-risk person under XGBoost in the sample.
     p_xgb = models["xgboost"].predict_proba(sample)[:, 1]

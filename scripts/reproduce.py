@@ -11,7 +11,7 @@ def main():
     steps = ["train_evaluate", "incumbent_benchmark", "fairness_audit",
              "validate_project", "learning_curve", "interpretability",
              "stability_structural", "race_ab_test", "xper_attribution",
-             "tradeoff_matrix", "improvement_journey", "build_notebook",
+             "tradeoff_matrix", "improvement_journey", "refresh_readme", "build_notebook",
              "build_slides", "build_prevalidation_pdf"]
     parser = argparse.ArgumentParser()
     parser.add_argument("--from-step", choices=steps, default=steps[0])

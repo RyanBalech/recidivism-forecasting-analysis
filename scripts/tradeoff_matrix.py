@@ -28,6 +28,8 @@ def main() -> None:
     inf = pd.read_csv(ARTIFACT_DIR / "fairness_inference.csv")
     fpr = inf[(inf.rule == "top_20pct") & (inf.metric == "fpr")].pivot_table(
         index="model", columns="attribute", values="gap")
+    fnr = inf[(inf.rule == "top_20pct") & (inf.metric == "fnr")].pivot_table(
+        index="model", columns="attribute", values="gap")
     surrogate = json.loads((ARTIFACT_DIR / "interpretability_summary.json").read_text())["surrogate_fidelity_r2_test"]
 
     # (label, {model: (text, colour)}) — one row per sub-metric, grouped by the four dimensions.
@@ -45,6 +47,8 @@ def main() -> None:
         ("Score drift across refits", {x: (f"{st.loc[x,'mean_abs_prob_diff']:.3f}", None) for x in MODELS}),
         ("Top-20% overlap", {x: (f"{st.loc[x,'top20_jaccard']:.0%}", None) for x in MODELS}),
         ("FAIRNESS (top-20%)", None),
+        ("Race FNR gap", {x: (f"{fnr.loc[x,'Race']:.3f}", None) for x in MODELS}),
+        ("Gender FNR gap", {x: (f"{fnr.loc[x,'Gender']:.3f}", None) for x in MODELS}),
         ("Race FPR gap", {x: (f"{fpr.loc[x,'Race']:.3f}", None) for x in MODELS}),
         ("Gender FPR gap", {x: (f"{fpr.loc[x,'Gender']:.3f}", None) for x in MODELS}),
         ("COST", None),
@@ -54,12 +58,12 @@ def main() -> None:
 
     # Auto-colour numeric rows: best = green, worst = red, middle = amber.
     lower_better = {"Brier loss", "Score drift across refits", "Race FPR gap",
-                    "Gender FPR gap", "Train+predict (s)"}
+                    "Gender FPR gap", "Race FNR gap", "Gender FNR gap", "Train+predict (s)"}
     for label, cells in rows:
         if cells is None or any(c[1] for c in cells.values()):
             continue
         vals = {x: float(cells[x][0].replace("%", "").replace(",", "")) for x in MODELS}
-        if label in {"Race FPR gap", "Gender FPR gap"}:
+        if label.endswith(" gap"):
             vals = {x: abs(v) for x, v in vals.items()}
         order = sorted(vals, key=vals.get, reverse=label not in lower_better)
         colour = {order[0]: GREEN, order[1]: AMBER, order[2]: RED}

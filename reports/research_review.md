@@ -41,4 +41,10 @@ The brief allocates 5 points each to technical skill, presentation and Q&A, and 
 
 ## Remaining research needs
 
+Team merge integration preserved the tuned L1 logistic configuration, additional ML candidates,
+feature labels and the detailed pending course-method plan. All downstream results were rerun
+after integration. The review also added FNR support-access figures, age-group descriptions,
+logistic coefficients and a common-person local-sensitivity table. Advanced tests/mitigations
+listed as TODO in PLAN.md are not claimed as completed.
+
 Prospective temporal/external evaluation, pre-registered policy thresholds, causal intervention-benefit estimation, stronger local TFM explanations, and independently validated mitigation are not established here. New modeling experiments should use training-only nested validation rather than further optimizing this familiar evaluation set. A support policy must ultimately be evaluated on service benefit and access, not only arrest prediction.

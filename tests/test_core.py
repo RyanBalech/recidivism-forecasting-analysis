@@ -118,3 +118,28 @@ def test_tabicl_frames_do_not_expose_gender_through_missingness():
     assert split.X_train.Gang_Affiliated.isna().any(), "source data changed; revisit this test"
     for frame in tabicl_frames(split.X_train, split.X_test):
         assert not frame.select_dtypes(exclude="number").isna().any().any()
+
+
+def test_merged_logistic_configuration_and_override():
+    from recidivism.modeling import logistic_model
+    frame = pd.DataFrame({"score": [1, 2, 3]})
+    model = logistic_model(frame)
+    assert model[-1].penalty == "l1" and model[-1].C == 0.2154
+    assert logistic_model(frame, penalty="l2", C=1)[-1].penalty == "l2"
+
+
+def test_shap_reconstructs_saved_model_probabilities():
+    import importlib.util
+    import joblib
+    from scipy.special import expit
+    from recidivism.config import ROOT, MODEL_DIR
+    spec = importlib.util.spec_from_file_location("interpretability", ROOT / "scripts/interpretability.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    split = load_official_split()
+    for name in ["logistic", "xgboost"]:
+        model = joblib.load(MODEL_DIR / f"{name}.joblib")
+        sample = split.X_test.head(5)
+        values, base = module.shap_for(model, split.X_train.head(100), sample, name)
+        np.testing.assert_allclose(expit(base + values.sum(axis=1)),
+                                   model.predict_proba(sample)[:, 1], atol=1e-6)

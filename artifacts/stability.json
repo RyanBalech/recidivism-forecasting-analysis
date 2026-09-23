@@ -1,9 +1,9 @@
 {
   "logistic": {
-    "all_features_shuffled_mae": 0.21024346039616643,
-    "all_features_shuffled_rank_correlation": -0.00041967641967641966,
-    "bootstrap_brier_interval_width": 0.008062010172756262,
-    "bootstrap_auc_interval_width": 0.02323040542939958
+    "all_features_shuffled_mae": 0.207109211192384,
+    "all_features_shuffled_rank_correlation": 0.0005344325344325344,
+    "bootstrap_brier_interval_width": 0.008026357236276122,
+    "bootstrap_auc_interval_width": 0.022968399777090198
   },
   "xgboost": {
     "all_features_shuffled_mae": 0.2042931467294693,
