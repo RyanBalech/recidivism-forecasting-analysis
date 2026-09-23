@@ -46,6 +46,20 @@ predates the fix** — including the 0.273 gender FPR gap, "TabICL drifts most",
 "proxy leakage". Re-run the full pipeline before quoting any TabICL figure. The leak itself is a
 strong Q&A story: our fairness audit found a protected attribute leaking through missingness.
 
+## To-do order (validated 23 Sep against the course slides, the brief, and the data)
+
+Priority = what the brief grades and what the jury will ask. Details under each dimension below.
+1. **Fairness, course-aligned** — FNR primary; course test table + TOST; FPDP/candidate variables
+   (gender first); X/D vs X/Y scatter (= proxy answer); course mitigation; **age audit**.
+2. **Notebook data-preparation section** (brief: "from data preparation to model evaluation").
+3. **Interpretability** — logistic coefficient table; per-person explanations for all three models;
+   XPER vs PI vs SHAP.
+4. **Stability** — course distances; disjoint halves; TabICL seed-only variability.
+5. Paired model tests saved as an artifact.
+6. **Full re-run** with the leak fix, then **app update** (FNR, TabICL per-person explanation).
+7. Team decision on the recommendation → deck, report, notes, README, JOURNEY.md.
+8. Q&A rehearsal.
+
 ## Key findings so far
 
 - All three models plateau at ~0.73 AUC / ~0.20 Brier. Confirmed by CV search (best CV AUC
@@ -111,9 +125,19 @@ look for:
 - **Fairness test statistics** (χ² / CMH / z-tests) with p-values, in the course's table layout
   (statistical parity, conditional statistical parity, equal odds, equal opportunity, predictive
   equality, sufficiency) × 3 models × {race, gender}. Keep the bootstrap CIs alongside.
+- **State the course's convention mapping on the slide:** course Y=1 = "good type" who deserves the
+  favorable output, Ŷ=1 = favorable output. Here Y=1 = would be re-arrested (needs support) and
+  Ŷ=1 = selected for support, so the course's *equal opportunity* is exactly our equal FNR.
 - **Fairness interpretability: FPDP + candidate variables**, and the **X/D vs X/Y dependence
   scatter** (p260). This doubles as the **proxy-variable answer** (reviewer #7: are gang
-  affiliation or prior arrests proxies for race?).
+  affiliation or prior arrests proxies for race?). A candidate variable is defined relative to a
+  *rejected* fairness null, so run FPDP for **gender** (rejected for all models) and for race only
+  where a race test rejects; for logistic at top-20% nothing rejects on race.
+- **Age is a protected attribute in the course (p266)** and our top feature (test re-arrest rate 72%
+  at 18–22 vs 44% at 48+). Add an age-group audit (selection rate, FNR by age band) and a stated
+  justification: age is a legitimate, validated risk factor, and in a support-allocation product a
+  higher score means *more* help for younger people. Expect this question.
+- Intersectional cells are small (339 Black women in test): do not report race × gender gaps.
 - **Course-style mitigation:** neutralize candidate variables with and without re-estimation,
   report SP p-value + AUC (pp. 261–262), instead of relying only on group thresholds.
 - **Fairness equivalence (TOST, tolerance δ):** "not significant" ≠ "fair". Use TOST to *certify*
@@ -135,7 +159,9 @@ Done since: SHAP global + individual (logistic, XGBoost), LIME, depth-3 surrogat
 for all three, XPER. Readable feature labels everywhere (`config.pretty`; no more `_v1`).
 **[TODO]**
 - **Logistic coefficient table**: coefficient, odds ratio, average marginal effect (course p66). The
-  white-box advantage is invisible without it.
+  white-box advantage is invisible without it. With an L1 penalty the textbook standard errors and
+  p-values do not apply, so report bootstrap intervals from the stability refits instead (and the
+  share of refits in which L1 keeps each coefficient non-zero).
 - **Individual explanations for all three models** on 1–2 test people (one clearly selected, one near
   the top-20% cut where models disagree). KernelSHAP on raw features makes TabICL explainable for a
   single person, so "no explanation path" becomes "explainable per person, but slow".
@@ -148,6 +174,8 @@ for all three, XPER. Readable feature labels everywhere (`config.pretty`; no mor
     **[TODO] align with the course definitions (§7.1):**
     - distance between models as **‖θ₁ − θ₂‖₂** on logistic coefficients, and **‖φ(f₁) − φ(f₂)‖₂** on
       feature-importance vectors (we currently report rank correlation);
+    - the course's definition is literally "two datasets from the same population": add a refit on
+      **two disjoint halves** of the training set next to the bootstrap refits;
     - per-person score SD across refits (how much one individual's score moves);
     - **TabICL seed-only variability** (same data, different seeds/ensemble views) separated from
       data resampling — course §7.2 on randomness: report seed, hardware (CPU vs GPU), version;
@@ -165,6 +193,14 @@ for all three, XPER. Readable feature labels everywhere (`config.pretty`; no mor
     downstream script and the app.
 15. **[TODO] Refresh README, report, deck, notes and JOURNEY.md** with post-fix numbers; add the leak
     to JOURNEY.md as a fairness finding.
+16. **[TODO] Notebook data-preparation section.** The current notebook starts from saved artifacts.
+    Add: target balance, the official split, excluded columns (protected, PUMA, post-release
+    dynamics) and why, missingness by group (the Gang_Affiliated/gender finding), encoding choices.
+17. **[TODO] App update** after the re-run: FNR-based fairness tab, TabICL per-person explanation
+    (KernelSHAP, cached), readable labels (done).
+18. **Incumbent comparison caveat:** our models use `Supervision_Risk_Score_First` as one input, so
+    the benchmark is "incumbent alone vs incumbent + other baseline information". Say so. Its mean
+    barely differs by race (6.2 vs 6.0) or gender (6.0 vs 6.1), so it is not an obvious proxy.
 
 ## Deliverables checklist
 
