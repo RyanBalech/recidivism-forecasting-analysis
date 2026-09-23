@@ -46,17 +46,40 @@ predates the fix** — including the 0.273 gender FPR gap, "TabICL drifts most",
 "proxy leakage". Re-run the full pipeline before quoting any TabICL figure. The leak itself is a
 strong Q&A story: our fairness audit found a protected attribute leaking through missingness.
 
+## First post-fix numbers (CPU run, 23 Sep evening; confirm with the GPU re-run)
+
+| Model | AUC before fix → after | Brier | ECE |
+|---|---|---:|---:|
+| Logistic (tuned) | 0.7295 → 0.7298 | 0.2054 | 0.0129 |
+| XGBoost | 0.7326 → 0.7325 | 0.2044 | 0.0103 |
+| TabICLv2 | **0.7338 → 0.7317** | 0.2047 | 0.0208 |
+
+TabICL's lead came partly from reading gender through missingness. After the fix it ranks
+**below XGBoost** and calibrates worst; like the other two it now over-predicts women (mean score
+0.52 vs observed 0.454). Fairness at top-20% (FNR = missed support, M − F / B − W / <33 − 33+):
+gender −0.10 to −0.12 (women missed more, all significant), race within ±0.02 (TOST certifies
+equivalence within ±5 pts for logistic and XGBoost), **age −0.23 to −0.25: 97% of re-arrested
+people aged 48+ get no support vs ~50% at 18–22.** FPDP candidate variables for the gender gap:
+`Gang_Affiliated` (never recorded for women) and `Age_at_Release`; dropping gang affiliation
+removes the gender FNR gap for logistic (p 0.00 → 0.99) at −0.014 AUC.
+
+## How to re-run (for whoever has the GPU)
+
+`python -m pip install -r requirements.txt` (scikit-learn is pinned to 1.7.2 so saved models
+load for everyone), then `python scripts/run_all.py`. It runs every step in order and prints
+how to resume if one fails. Push the regenerated `artifacts/`, notebook and deck afterwards.
+
 ## To-do order (validated 23 Sep against the course slides, the brief, and the data)
 
 Priority = what the brief grades and what the jury will ask. Details under each dimension below.
-1. **Fairness, course-aligned** — FNR primary; course test table + TOST; FPDP/candidate variables
+1. **Fairness, course-aligned** [CODE DONE — `fairness_audit.py`, `fairness_interpretability.py`; numbers from the GPU re-run] — FNR primary; course test table + TOST; FPDP/candidate variables
    (gender first); X/D vs X/Y scatter (= proxy answer); course mitigation; **age audit**.
 2. **Notebook data-preparation section** (brief: "from data preparation to model evaluation").
 3. **Interpretability** — logistic coefficient table; per-person explanations for all three models;
    XPER vs PI vs SHAP.
 4. **Stability** — course distances; disjoint halves; TabICL seed-only variability.
 5. Paired model tests saved as an artifact.
-6. **Full re-run** with the leak fix, then **app update** (FNR, TabICL per-person explanation).
+6. **Full re-run** with the leak fix (`python scripts/run_all.py`, GPU teammate), then **app update** (FNR, TabICL per-person explanation).
 7. Team decision on the recommendation → deck, report, notes, README, JOURNEY.md.
 8. Q&A rehearsal.
 

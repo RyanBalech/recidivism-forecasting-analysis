@@ -134,7 +134,7 @@ women. This explains why gender gaps exceed race gaps."""),
     md("### Mitigation frontier (race and gender)\n"
        "Group-specific thresholds trace the fairness/utility frontier. They are an **analytic device**, "
        "not a shipping option — a per-race/gender threshold is disparate treatment (Ricci v. DeStefano)."),
-    code("A('fairness_frontier.csv').query(\"method=='group_thresholds_equal_fpr'\").round(4)"),
+    code("A('fairness_frontier.csv').query(\"method=='group_thresholds_equal_fnr'\").round(4)"),
     fig("fairness_frontier.png", 1100),
     md("Group thresholds drive both gaps to ~0 keeping nearly all captured events — but equalizing "
        "*gender* decalibrates women (base-rate gap 0.137), the trade-off the theorem forces."),

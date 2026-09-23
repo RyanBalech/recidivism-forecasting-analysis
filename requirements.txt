@@ -1,6 +1,6 @@
 pandas>=2.3,<3
 numpy>=2.3,<3
-scikit-learn>=1.7,<2
+scikit-learn==1.7.2  # pinned: saved .joblib models only load with the same version
 xgboost>=3.0,<4
 lightgbm>=4.5,<5
 catboost>=1.2,<2

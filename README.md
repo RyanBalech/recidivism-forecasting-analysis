@@ -43,27 +43,22 @@ Python 3.10+ is required. A CUDA GPU is recommended for TabICLv2.
 
 ```powershell
 python -m venv .venv
-.venv\Scripts\Activate.ps1
+.venv\Scripts\Activate.ps1              # macOS/Linux: source .venv/bin/activate
 python -m pip install -r requirements.txt
-$env:PYTHONPATH = "src"
 
-# 1. Train all three models; predictions, metrics, baseline audit
-python scripts/train_evaluate.py
-# 2. Four-dimension analyses (read the models/predictions from step 1)
-python scripts/interpretability.py       # SHAP, LIME, surrogate, PDP/ICE
-python scripts/xper_attribution.py       # XPER on AUC
-python scripts/stability_structural.py   # refits on bootstrap resamples
-python scripts/fairness_audit.py         # operating point, CIs, impossibility, frontier
-python scripts/incumbent_benchmark.py    # vs Georgia's existing score
-python scripts/learning_curve.py
-python scripts/race_ab_test.py
-python scripts/tradeoff_matrix.py        # 3 models x 4 dimensions
-# 3. Deliverables
-python scripts/build_notebook.py
-python scripts/build_slides.py
-python scripts/build_prevalidation_pdf.py
+python scripts/run_all.py               # every analysis + notebook + slides, in order
 streamlit run app.py
 ```
+
+`run_all.py` runs the steps below in dependency order, stops at the first failure, and prints how
+to resume (`--from <step>`); `--only <step> ...` runs a subset. It checks the scikit-learn version
+first: saved `.joblib` models only load with the exact version pinned in `requirements.txt`.
+
+1. `train_evaluate` — train the three models; predictions, metrics, saved models
+2. `interpretability` · `xper_attribution` · `stability_structural`
+3. `fairness_audit` · `fairness_interpretability` — gaps, tests, age audit, FPDP, mitigation
+4. `incumbent_benchmark` · `learning_curve` · `race_ab_test`
+5. `tradeoff_matrix` · `improvement_journey` · `build_notebook` · `build_slides`
 
 TabICLv2 takes about a minute per fit on CPU, so the full run takes 30–60 minutes without a GPU.
 `python scripts/train_evaluate.py --skip-tabicl` is a **smoke test only**: it overwrites
@@ -91,7 +86,9 @@ scripts/train_evaluate.py       Train the three models; baseline audit
 scripts/interpretability.py     SHAP, LIME, global surrogate, PDP/ICE
 scripts/xper_attribution.py     XPER decomposition of AUC
 scripts/stability_structural.py Structural stability across refits
-scripts/fairness_audit.py       Fairness gaps, CIs, impossibility, mitigation frontier
+scripts/run_all.py              One command: every step below, in order
+scripts/fairness_audit.py       FNR/selection gaps, CIs, TOST, course tests, age audit, frontier
+scripts/fairness_interpretability.py  FPDP, candidate variables, proxy scatter, mitigation
 scripts/incumbent_benchmark.py  Comparison with Georgia's existing risk score
 scripts/learning_curve.py       Performance vs training size (agency size)
 scripts/race_ab_test.py         Race as input vs not; counterfactual twins
