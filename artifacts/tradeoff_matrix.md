@@ -11,10 +11,9 @@
 | Score drift across refits | 0.032 | 0.035 | 0.036 |
 | Top-20% overlap | 77% | 75% | 77% |
 | **FAIRNESS (top-20%)** | | | |
-| Race FNR gap | -0.005 | -0.017 | -0.023 |
-| Gender FNR gap | -0.096 | -0.112 | -0.124 |
-| Race FPR gap | 0.019 | 0.023 | 0.024 |
-| Gender FPR gap | 0.041 | 0.039 | 0.041 |
+| Race FNR gap (B − W) | -0.005 | -0.017 | -0.023 |
+| Gender FNR gap (M − F) | -0.096 | -0.112 | -0.124 |
+| Age FNR gap (<33 − 33+) | -0.245 | -0.228 | -0.237 |
 | **COST** | | | |
 | Train+predict (s) | 1.0 | 8.7 | 41.8 |
 | Auditability | high | medium | low |

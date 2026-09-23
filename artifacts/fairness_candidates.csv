@@ -1,0 +1,5 @@
+model,attribute,feature,max_p,rejected
+logistic,Gender,Gang_Affiliated,0.528284787342111,True
+logistic,Gender,Age_at_Release,0.1406739114971411,True
+xgboost,Gender,Gang_Affiliated,0.9743643742601303,True
+xgboost,Gender,Age_at_Release,0.7525809572234725,True
