@@ -106,15 +106,17 @@ def main() -> None:
     fig, axes = plt.subplots(1, 3, figsize=(20, 5.8))
 
     d = disc.set_index("ranker").loc[order].reset_index()
-    axes[0].bar(d.ranker, d.roc_auc, color=[PALETTE[r] for r in d.ranker])
+    x = np.arange(len(d))
+    axes[0].bar(x, d.roc_auc, color=[PALETTE[r] for r in d.ranker])
     axes[0].axhline(0.5, ls="--", color="grey", lw=1)
     axes[0].set(title="Discrimination (ROC AUC)", ylabel="AUC", ylim=(0.5, 0.76))
-    axes[0].set_xticklabels([DISPLAY[r] for r in d.ranker], rotation=25, ha="right", fontsize=10)
+    axes[0].set_xticks(x, [DISPLAY[r] for r in d.ranker], rotation=25, ha="right", fontsize=10)
 
     e = econ.set_index("ranker").loc[order].reset_index()
-    axes[1].bar(e.ranker, e.assumed_net_value / 1e6, color=[PALETTE[r] for r in e.ranker])
+    x = np.arange(len(e))
+    axes[1].bar(x, e.assumed_net_value / 1e6, color=[PALETTE[r] for r in e.ranker])
     axes[1].set(title="Net value at 20% capacity", ylabel="Assumed net value ($M)")
-    axes[1].set_xticklabels([DISPLAY[r] for r in e.ranker], rotation=25, ha="right", fontsize=10)
+    axes[1].set_xticks(x, [DISPLAY[r] for r in e.ranker], rotation=25, ha="right", fontsize=10)
 
     for name in order:
         g = cap[cap.ranker.eq(name)]

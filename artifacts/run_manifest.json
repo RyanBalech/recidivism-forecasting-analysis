@@ -39,6 +39,6 @@
     "Gender",
     "Race"
   ],
-  "tabicl_estimators": 2,
+  "tabicl_estimators": 16,
   "tabicl_device": "cuda"
 }

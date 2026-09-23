@@ -21,7 +21,7 @@
   },
   "sha256": {
     "nij-challenge2021_full_dataset.csv": "2df247209bea3ad2d861ef1624461ef73b5b792f01593da0b6f18e3de1b72f5c",
-    "test_predictions.csv": "ead63d6392ff14751ac28054e2c8f9682a8fa228bde858162a0f656d0b942c13",
+    "test_predictions.csv": "21e7e6508ec42ad44241ad46da536e6c1729d845530182e7d4f845f57bb7b63e",
     "logistic.joblib": "a3d1d67429d3251ff334a0ebc6a359bc8fa37034d2e0debccbf9a3d95fc905c1",
     "xgboost.joblib": "609cc8cc53a7937c84c822d10fef70bc41adaa71f8af9f10c0d9fe3a02e90e19"
   },
@@ -31,6 +31,6 @@
   },
   "official_ids_verified": true,
   "annual_target_consistency_verified": true,
-  "cv_scope": "Fixed conventional configurations; not nested search evaluation; no new TabICL CV",
+  "cv_scope": "Fixed conventional configurations; not nested search evaluation. TabICL ensemble sensitivity uses one training-only development split, not CV",
   "holdout_status": "Repeatedly inspected during historical development; exploratory comparisons"
 }

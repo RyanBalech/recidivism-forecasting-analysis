@@ -17,11 +17,11 @@ Models achieve approximately **0.73 ROC AUC and 0.20 Brier loss**, compared with
 <!-- RESULTS:START -->
 | Model | ROC AUC | Brier ↓ | ECE (10 bins) ↓ | Fit + prediction |
 |---|---:|---:|---:|---:|
-| Logistic regression (tuned L1) | 0.7298 | 0.2054 | 0.0129 | 0.81 s |
-| XGBoost | 0.7324 | 0.2045 | 0.0112 | 4.55 s |
-| TabICLv2 | 0.7315 | 0.2048 | 0.0216 | 9.14 s |
+| Logistic regression (tuned L1) | 0.7298 | 0.2054 | 0.0129 | 0.99 s |
+| XGBoost | 0.7324 | 0.2045 | 0.0112 | 8.65 s |
+| TabICLv2 | 0.7328 | 0.2044 | 0.0199 | 41.82 s |
 
-Current run: TabICLv2 on **NVIDIA GeForce RTX 4050 Laptop GPU**, conventional models on CPU. Timings are hardware-specific. XGBoost minus TabICLv2 AUC is 0.00087, with paired 95% interval [-0.00122, 0.00297]; this does not establish superiority or equivalence. XGBoost reduces Brier loss by 16.4% relative to training-prevalence probabilities.
+Current run: TabICLv2 on **NVIDIA GeForce RTX 4050 Laptop GPU**, conventional models on CPU. Timings are hardware-specific. XGBoost minus TabICLv2 AUC is -0.00044, with paired 95% interval [-0.00230, 0.00127]; this does not establish superiority or equivalence. XGBoost reduces Brier loss by 16.4% relative to training-prevalence probabilities.
 <!-- RESULTS:END -->
 
 **Recommend XGBoost for a prospective shadow pilot, with logistic regression as the transparent challenger.** Model choice weighs explanation cost, subgroup errors, runtime and refit sensitivity. Small-sample TabICLv2 results do not establish transferability to smaller agencies elsewhere. Economic values are scenarios, not measured savings.

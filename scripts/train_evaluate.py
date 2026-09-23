@@ -232,7 +232,7 @@ def make_figures(y: pd.Series, predictions: dict[str, np.ndarray], metrics: pd.D
     plot_data = metrics.melt(id_vars="model", value_vars=["brier", "roc_auc", "average_precision"], var_name="metric", value_name="value")
     fig, ax = plt.subplots(figsize=(10, 5.5))
     sns.barplot(data=plot_data, x="metric", y="value", hue="model", palette=palette, ax=ax)
-    ax.set(title="Held-out model comparison", xlabel="", ylabel="Score")
+    ax.set(title="Evaluation-partition model comparison", xlabel="", ylabel="Score")
     ax.legend(title="")
     fig.tight_layout()
     fig.savefig(FIGURE_DIR / "model_comparison.png", dpi=180, bbox_inches="tight")

@@ -13,13 +13,13 @@ xgboost,Age_at_Release,33-37,0.5573656558990479
 xgboost,Age_at_Release,38-42,0.5221664309501648
 xgboost,Age_at_Release,43-47,0.4854372441768646
 xgboost,Age_at_Release,48 or older,0.4328295886516571
-tabicl,Age_at_Release,18-22,0.8077574372291565
-tabicl,Age_at_Release,23-27,0.7164695858955383
-tabicl,Age_at_Release,28-32,0.6296244859695435
-tabicl,Age_at_Release,33-37,0.5736488699913025
-tabicl,Age_at_Release,38-42,0.5233026742935181
-tabicl,Age_at_Release,43-47,0.4913824498653412
-tabicl,Age_at_Release,48 or older,0.4360305070877075
+tabicl,Age_at_Release,18-22,0.8013328313827515
+tabicl,Age_at_Release,23-27,0.718437910079956
+tabicl,Age_at_Release,28-32,0.6384932994842529
+tabicl,Age_at_Release,33-37,0.5725895166397095
+tabicl,Age_at_Release,38-42,0.522445797920227
+tabicl,Age_at_Release,43-47,0.4831779897212982
+tabicl,Age_at_Release,48 or older,0.42719000577926636
 logistic,Prior_Arrest_Episodes_Felony,0,0.6642238973592582
 logistic,Prior_Arrest_Episodes_Felony,1,0.48612156565732845
 logistic,Prior_Arrest_Episodes_Felony,2,0.5352057470011785
@@ -42,17 +42,17 @@ xgboost,Prior_Arrest_Episodes_Felony,7,0.5833418965339661
 xgboost,Prior_Arrest_Episodes_Felony,8,0.6084379553794861
 xgboost,Prior_Arrest_Episodes_Felony,9,0.618169903755188
 xgboost,Prior_Arrest_Episodes_Felony,10 or more,0.6480752825737
-tabicl,Prior_Arrest_Episodes_Felony,0,0.5319001078605652
-tabicl,Prior_Arrest_Episodes_Felony,1,0.5132825374603271
-tabicl,Prior_Arrest_Episodes_Felony,2,0.5352646112442017
-tabicl,Prior_Arrest_Episodes_Felony,3,0.5691120624542236
-tabicl,Prior_Arrest_Episodes_Felony,4,0.5790665149688721
-tabicl,Prior_Arrest_Episodes_Felony,5,0.5899062156677246
-tabicl,Prior_Arrest_Episodes_Felony,6,0.604972779750824
-tabicl,Prior_Arrest_Episodes_Felony,7,0.5905469655990601
-tabicl,Prior_Arrest_Episodes_Felony,8,0.6237754821777344
-tabicl,Prior_Arrest_Episodes_Felony,9,0.6191494464874268
-tabicl,Prior_Arrest_Episodes_Felony,10 or more,0.6739833950996399
+tabicl,Prior_Arrest_Episodes_Felony,0,0.5444598197937012
+tabicl,Prior_Arrest_Episodes_Felony,1,0.5046491026878357
+tabicl,Prior_Arrest_Episodes_Felony,2,0.5422016978263855
+tabicl,Prior_Arrest_Episodes_Felony,3,0.5710986852645874
+tabicl,Prior_Arrest_Episodes_Felony,4,0.585212767124176
+tabicl,Prior_Arrest_Episodes_Felony,5,0.5926002860069275
+tabicl,Prior_Arrest_Episodes_Felony,6,0.6110829710960388
+tabicl,Prior_Arrest_Episodes_Felony,7,0.5810696482658386
+tabicl,Prior_Arrest_Episodes_Felony,8,0.6195769309997559
+tabicl,Prior_Arrest_Episodes_Felony,9,0.6193341016769409
+tabicl,Prior_Arrest_Episodes_Felony,10 or more,0.6747218370437622
 logistic,Supervision_Risk_Score_First,1.0,0.5541994839237432
 logistic,Supervision_Risk_Score_First,2.0,0.5618345691852131
 logistic,Supervision_Risk_Score_First,3.0,0.5694427412822696
@@ -73,13 +73,13 @@ xgboost,Supervision_Risk_Score_First,7.0,0.6030955910682678
 xgboost,Supervision_Risk_Score_First,8.0,0.6120860576629639
 xgboost,Supervision_Risk_Score_First,9.0,0.6140193343162537
 xgboost,Supervision_Risk_Score_First,10.0,0.6240691542625427
-tabicl,Supervision_Risk_Score_First,1.0,0.5921630263328552
-tabicl,Supervision_Risk_Score_First,2.0,0.5711718797683716
-tabicl,Supervision_Risk_Score_First,3.0,0.5734256505966187
-tabicl,Supervision_Risk_Score_First,4.0,0.5784532427787781
-tabicl,Supervision_Risk_Score_First,5.0,0.5859065055847168
-tabicl,Supervision_Risk_Score_First,6.0,0.5993926525115967
-tabicl,Supervision_Risk_Score_First,7.0,0.6018168926239014
-tabicl,Supervision_Risk_Score_First,8.0,0.6170539259910583
-tabicl,Supervision_Risk_Score_First,9.0,0.6290603876113892
-tabicl,Supervision_Risk_Score_First,10.0,0.6390661597251892
+tabicl,Supervision_Risk_Score_First,1.0,0.5976134538650513
+tabicl,Supervision_Risk_Score_First,2.0,0.5729209184646606
+tabicl,Supervision_Risk_Score_First,3.0,0.5744819045066833
+tabicl,Supervision_Risk_Score_First,4.0,0.5835994482040405
+tabicl,Supervision_Risk_Score_First,5.0,0.5919276475906372
+tabicl,Supervision_Risk_Score_First,6.0,0.6000176072120667
+tabicl,Supervision_Risk_Score_First,7.0,0.6035948395729065
+tabicl,Supervision_Risk_Score_First,8.0,0.6180083155632019
+tabicl,Supervision_Risk_Score_First,9.0,0.6247729659080505
+tabicl,Supervision_Risk_Score_First,10.0,0.6379626989364624

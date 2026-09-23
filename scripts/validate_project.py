@@ -117,7 +117,8 @@ def main():
                    [DATA_PATH, ARTIFACT_DIR / "test_predictions.csv", *MODEL_DIR.glob("*.joblib")]},
         "saved_prediction_max_absolute_error": reproduction,
         "official_ids_verified": True, "annual_target_consistency_verified": True,
-        "cv_scope": "Fixed conventional configurations; not nested search evaluation; no new TabICL CV",
+        "cv_scope": ("Fixed conventional configurations; not nested search evaluation. "
+                     "TabICL ensemble sensitivity uses one training-only development split, not CV"),
         "holdout_status": "Repeatedly inspected during historical development; exploratory comparisons",
     }
     (ARTIFACT_DIR / "validation_manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")

@@ -35,7 +35,7 @@ def main() -> None:
     # (label, {model: (text, colour)}) — one row per sub-metric, grouped by the four dimensions.
     rows = [
         ("PERFORMANCE", None),
-        ("ROC AUC (held-out)", {x: (f"{m.loc[x,'roc_auc']:.3f}", None) for x in MODELS}),
+        ("ROC AUC (evaluation)", {x: (f"{m.loc[x,'roc_auc']:.3f}", None) for x in MODELS}),
         ("Brier loss", {x: (f"{m.loc[x,'brier']:.3f}", None) for x in MODELS}),
         ("Net value @20% ($M)", {x: (f"{m.loc[x,'economic_assumed_net_value']/1e6:.2f}", None) for x in MODELS}),
         ("INTERPRETABILITY", None),
