@@ -109,5 +109,12 @@ def tabicl_frames(X_train: pd.DataFrame, X_test: pd.DataFrame) -> tuple[pd.DataF
     Unlike the two pipelines above, TabICLv2 expects the mixed-type table and
     performs its own encoding and learned normalization. Copies protect the
     original split from in-place changes inside third-party code.
+
+    Missing categorical values are filled with the training mode, exactly as the
+    other two pipelines do. TabICL would otherwise encode NaN as its own category,
+    and Gang_Affiliated is missing for every woman and no man in NIJ, so that
+    category would hand the model the excluded Gender attribute.
     """
-    return X_train.copy(), X_test.copy()
+    categorical = X_train.select_dtypes(exclude="number").columns
+    modes = X_train[categorical].mode().iloc[0]
+    return X_train.fillna(modes), X_test.fillna(modes)
