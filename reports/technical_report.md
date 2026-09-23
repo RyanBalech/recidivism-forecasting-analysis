@@ -62,6 +62,9 @@ representation-level leak a trustworthy-AI review must catch.
 - **XGBoost** — hyperparameters from a 5-fold cross-validated random search on the training set only
   (`scripts/tune_xgboost.py`, CV AUC 0.7343); ordinal-encoded counts.
 - **TabICLv2** — pretrained in-context tabular transformer, 16 ensemble members, run on GPU (RTX 4060).
+  A sweep of 1–64 members (`scripts/estimator_sweep.py`) shows AUC plateaus by ~8 (0.7326) and gains
+  only +0.0005 up to 64 for 9× the runtime, so 16 is a fair, near-maximal choice — the TFM is not
+  under-powered, and more members change no conclusion.
 
 ## Predictive performance
 
