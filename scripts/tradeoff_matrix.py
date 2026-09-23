@@ -26,8 +26,7 @@ def main() -> None:
     m = pd.read_csv(ARTIFACT_DIR / "model_metrics.csv").set_index("model")
     st = pd.read_csv(ARTIFACT_DIR / "stability_summary.csv").set_index("model")
     inf = pd.read_csv(ARTIFACT_DIR / "fairness_inference.csv")
-    fpr = inf[(inf.rule == "top_20pct") & (inf.metric == "fpr")].pivot_table(
-        index="model", columns="attribute", values="gap")
+    # FNR = missed support, the primary fairness metric (selection means being offered help).
     fnr = inf[(inf.rule == "top_20pct") & (inf.metric == "fnr")].pivot_table(
         index="model", columns="attribute", values="gap")
     surrogate = json.loads((ARTIFACT_DIR / "interpretability_summary.json").read_text())["surrogate_fidelity_r2_test"]
@@ -47,23 +46,24 @@ def main() -> None:
         ("Score drift across refits", {x: (f"{st.loc[x,'mean_abs_prob_diff']:.3f}", None) for x in MODELS}),
         ("Top-20% overlap", {x: (f"{st.loc[x,'top20_jaccard']:.0%}", None) for x in MODELS}),
         ("FAIRNESS (top-20%)", None),
-        ("Race FNR gap", {x: (f"{fnr.loc[x,'Race']:.3f}", None) for x in MODELS}),
-        ("Gender FNR gap", {x: (f"{fnr.loc[x,'Gender']:.3f}", None) for x in MODELS}),
-        ("Race FPR gap", {x: (f"{fpr.loc[x,'Race']:.3f}", None) for x in MODELS}),
-        ("Gender FPR gap", {x: (f"{fpr.loc[x,'Gender']:.3f}", None) for x in MODELS}),
+        ("Race FNR gap (B − W)", {x: (f"{fnr.loc[x,'Race']:+.3f}", None) for x in MODELS}),
+        ("Gender FNR gap (M − F)", {x: (f"{fnr.loc[x,'Gender']:+.3f}", None) for x in MODELS}),
+        ("Age FNR gap (<33 − 33+)", {x: (f"{fnr.loc[x,'Age']:+.3f}", None) for x in MODELS}),
         ("COST", None),
         ("Train+predict (s)", {x: (f"{m.loc[x,'fit_predict_seconds']:.1f}", None) for x in MODELS}),
         ("Auditability", {"logistic": ("high", GREEN), "xgboost": ("medium", AMBER), "tabicl": ("low", RED)}),
     ]
 
     # Auto-colour numeric rows: best = green, worst = red, middle = amber.
-    lower_better = {"Brier loss", "Score drift across refits", "Race FPR gap",
-                    "Gender FPR gap", "Race FNR gap", "Gender FNR gap", "Train+predict (s)"}
+    lower_better = {"Brier loss", "Score drift across refits", "Race FNR gap (B − W)",
+                    "Gender FNR gap (M − F)", "Age FNR gap (<33 − 33+)", "Train+predict (s)"}
+    # Gaps are signed; the size of the gap is what matters.
+    by_size = {"Race FNR gap (B − W)", "Gender FNR gap (M − F)", "Age FNR gap (<33 − 33+)"}
     for label, cells in rows:
         if cells is None or any(c[1] for c in cells.values()):
             continue
         vals = {x: float(cells[x][0].replace("%", "").replace(",", "")) for x in MODELS}
-        if label.endswith(" gap"):
+        if label in by_size:
             vals = {x: abs(v) for x, v in vals.items()}
         order = sorted(vals, key=vals.get, reverse=label not in lower_better)
         colour = {order[0]: GREEN, order[1]: AMBER, order[2]: RED}

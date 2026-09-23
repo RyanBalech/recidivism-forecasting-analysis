@@ -45,7 +45,7 @@ Use Python **3.11–3.13** (verified on 3.13). Version ranges are not a complete
 
 ```powershell
 python -m venv .venv
-.venv\Scripts\Activate.ps1
+.venv\Scripts\Activate.ps1              # macOS/Linux: source .venv/bin/activate
 python -m pip install -r requirements.txt
 python -m pytest -q
 python scripts/reproduce.py
@@ -53,6 +53,8 @@ streamlit run app.py
 ```
 
 The complete run regenerates dependent analyses, validates saved-model/prediction agreement, and builds notebook/slides. Allow tens of minutes or longer depending on hardware. It runs a leakage gate and a training-only [TabICLv2 ensemble sensitivity check](scripts/estimator_sweep.py); the shared 16-member configuration is then fitted on all training rows. It does not repeat historical hyperparameter search. The merged team additions include [logistic tuning](scripts/tune_logistic.py), [six-candidate ML comparison](scripts/compare_ml_models.py), and readable feature labels; their historical search artifacts are retained. Run `scripts/tune_xgboost.py` separately to explore new configurations; its output is not automatically adopted.
+
+`reproduce.py` first checks that scikit-learn matches the version pinned in `requirements.txt` (saved `.joblib` models only load with that version). It stops at the first failed step and prints how to resume (`--from-step <step>`); `--only <step> ...` reruns a subset whose inputs already exist. The fairness steps are [`fairness_audit.py`](scripts/fairness_audit.py) (FNR/selection gaps, bootstrap CIs, TOST equivalence at ±5 points, course test table, age audit, frontier) and [`fairness_interpretability.py`](scripts/fairness_interpretability.py) (FPDP, proxy dependence, candidate-variable removal and re-estimation; logistic and XGBoost only).
 
 `python scripts/train_evaluate.py --skip-tabicl` writes a conventional-model smoke run to `artifacts/smoke/`, preserving published three-model artifacts. `--output-dir PATH` supports isolated training outputs. The app reads `artifacts/`; live TabICLv2 inference is opt-in. `python scripts/validate_project.py` audits existing predictions and runs conventional-model CV.
 
