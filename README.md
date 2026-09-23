@@ -6,6 +6,11 @@ The decision is framed as estimating three-year arrest risk at the start of paro
 
 ## Results
 
+> ⚠️ **Re-run pending.** The TabICLv2 figures below predate the gender-leak fix (PR #1:
+> `Gang_Affiliated` is missing for every woman, and TabICL treated that as a category). Logistic
+> figures predate its CV tuning (difference < 0.001 AUC). The recommendation is under review — see
+> [`PLAN.md`](PLAN.md).
+
 The official NIJ `Training_Sample` indicator creates an untouched 18,028/7,807 train/test split. Race, gender, and residence geography are excluded from model inputs and retained for subgroup audits. Only baseline variables available at supervision start are used.
 
 **The client's real question — better than the tool agencies use today?** `Supervision_Risk_Score_First`, Georgia's existing 1–10 actuarial score, reaches only **0.60 ROC AUC**. Every candidate model reaches ~0.73 and roughly doubles the net value of a capacity-limited support programme (~$2.75M → ~$5.1–5.3M).
@@ -41,14 +46,34 @@ python -m venv .venv
 .venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
 $env:PYTHONPATH = "src"
+
+# 1. Train all three models; predictions, metrics, baseline audit
 python scripts/train_evaluate.py
+# 2. Four-dimension analyses (read the models/predictions from step 1)
+python scripts/interpretability.py       # SHAP, LIME, surrogate, PDP/ICE
+python scripts/xper_attribution.py       # XPER on AUC
+python scripts/stability_structural.py   # refits on bootstrap resamples
+python scripts/fairness_audit.py         # operating point, CIs, impossibility, frontier
+python scripts/incumbent_benchmark.py    # vs Georgia's existing score
+python scripts/learning_curve.py
+python scripts/race_ab_test.py
+python scripts/tradeoff_matrix.py        # 3 models x 4 dimensions
+# 3. Deliverables
 python scripts/build_notebook.py
 python scripts/build_slides.py
 python scripts/build_prevalidation_pdf.py
 streamlit run app.py
 ```
 
-Use `python scripts/train_evaluate.py --skip-tabicl` for a CPU-only smoke run. The app expects the saved audit artifacts from a full run. Tests run with:
+TabICLv2 takes about a minute per fit on CPU, so the full run takes 30–60 minutes without a GPU.
+`python scripts/train_evaluate.py --skip-tabicl` is a **smoke test only**: it overwrites
+`test_predictions.csv` and `model_metrics.csv` without the TabICL column, which breaks the step-2
+scripts and the app until a full run restores it.
+
+Model-selection scripts (run once; results are baked into `src/recidivism/modeling.py`):
+`tune_xgboost.py`, `tune_logistic.py`, `compare_ml_models.py`.
+
+Tests run with:
 
 ```powershell
 $env:PYTHONPATH = "src"
@@ -58,14 +83,26 @@ python -m pytest -q
 ## Repository map
 
 ```text
-app.py                         Streamlit client prototype
-artifacts/                     Held-out predictions, metrics, figures
-notebooks/                     Executable analysis notebook
-reports/                       Slides, report, pre-validation brief
-scripts/train_evaluate.py      Training and four-dimension audit
-scripts/build_deliverables.py  Notebook and slide generation
-src/recidivism/                Data, model, and metric modules
-tests/                         Data-integrity and metric tests
+app.py                          Streamlit client prototype
+artifacts/                      Held-out predictions, metrics, figures, saved models
+notebooks/                      Executable analysis notebook
+reports/                        Slides, report, notes, pre-validation brief
+scripts/train_evaluate.py       Train the three models; baseline audit
+scripts/interpretability.py     SHAP, LIME, global surrogate, PDP/ICE
+scripts/xper_attribution.py     XPER decomposition of AUC
+scripts/stability_structural.py Structural stability across refits
+scripts/fairness_audit.py       Fairness gaps, CIs, impossibility, mitigation frontier
+scripts/incumbent_benchmark.py  Comparison with Georgia's existing risk score
+scripts/learning_curve.py       Performance vs training size (agency size)
+scripts/race_ab_test.py         Race as input vs not; counterfactual twins
+scripts/tradeoff_matrix.py      3 models x 4 dimensions table
+scripts/tune_*.py               CV hyperparameter searches (XGBoost, logistic)
+scripts/compare_ml_models.py    CV comparison of six ML candidates
+scripts/build_*.py              Notebook, slides, pre-validation PDF
+scripts/improvement_journey.py  Figure for JOURNEY.md
+src/recidivism/                 Config (features, labels), data, models, metrics
+tests/                          Data-integrity, encoding, leak and metric tests
+PLAN.md / JOURNEY.md            Work plan / process log
 ```
 
 ## Responsible-use boundary

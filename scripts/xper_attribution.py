@@ -20,7 +20,7 @@ import seaborn as sns
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from recidivism.config import ARTIFACT_DIR, FIGURE_DIR, MODEL_DIR, RANDOM_SEED
+from recidivism.config import ARTIFACT_DIR, FIGURE_DIR, MODEL_DIR, RANDOM_SEED, pretty
 from recidivism.data import load_official_split
 
 SAMPLE_SIZE = 150
@@ -55,7 +55,7 @@ def main() -> None:
     for ax, name in zip(axes, ["logistic", "xgboost"]):
         part = result[(result.model == name) & ~result.feature.str.startswith("benchmark")]
         top = part.reindex(part.xper.abs().sort_values(ascending=False).index).head(10)[::-1]
-        ax.barh(top.feature.str.replace("_", " "), top.xper, color=PALETTE[name])
+        ax.barh(top.feature.map(pretty), top.xper, color=PALETTE[name])
         bench = result[(result.model == name) & result.feature.str.startswith("benchmark")].xper.iloc[0]
         ax.set(title=f"{DISPLAY[name]}: XPER, AUC points per feature\n(benchmark {bench:.3f} + features = AUC)",
                xlabel="Contribution to AUC")
