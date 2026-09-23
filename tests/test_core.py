@@ -55,3 +55,13 @@ def test_single_row_scores_like_a_batch():
     batch = model.predict_proba(split.X_test.head(20))[:, 1]
     single = [model.predict_proba(split.X_test.iloc[[i]])[:, 1][0] for i in range(20)]
     assert np.allclose(batch, single)
+
+
+def test_tabicl_frames_do_not_expose_gender_through_missingness():
+    """Regression: Gang_Affiliated is NaN for exactly the women, and TabICL encodes NaN as its own category."""
+    from recidivism.modeling import tabicl_frames
+
+    split = load_official_split()
+    assert split.X_train.Gang_Affiliated.isna().any(), "source data changed; revisit this test"
+    for frame in tabicl_frames(split.X_train, split.X_test):
+        assert not frame.select_dtypes(exclude="number").isna().any().any()

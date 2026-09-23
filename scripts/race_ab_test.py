@@ -21,7 +21,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from recidivism.config import ARTIFACT_DIR, RANDOM_SEED
 from recidivism.data import load_official_split
 from recidivism.metrics import classification_metrics
-from recidivism.modeling import logistic_model, xgboost_model
+from recidivism.modeling import logistic_model, tabicl_frames, xgboost_model
 
 CAPACITY = 0.20
 
@@ -30,7 +30,8 @@ def fit_predict(name, X_train, y_train, X_eval_list):
     if name == "tabicl":
         from tabicl import TabICLClassifier
         m = TabICLClassifier(n_estimators=2, random_state=RANDOM_SEED, n_jobs=-1)
-        m.fit(X_train, y_train.to_numpy())
+        m.fit(tabicl_frames(X_train, X_train)[0], y_train.to_numpy())
+        return [m.predict_proba(tabicl_frames(X_train, X)[1])[:, 1] for X in X_eval_list]
     else:
         m = logistic_model(X_train) if name == "logistic" else xgboost_model(X_train)
         m.fit(X_train, y_train)
