@@ -1,3 +1,12 @@
+"""Train all three models once and generate every quantitative audit artifact.
+
+Run from the project root with:
+    python scripts/train_evaluate.py
+
+The script intentionally keeps the official test labels out of fitting. It uses
+them only after prediction to compare performance, fairness, and stability.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -15,6 +24,7 @@ import seaborn as sns
 from sklearn.inspection import permutation_importance
 from sklearn.metrics import brier_score_loss, roc_curve
 
+# Add src/ to Python's import path when this file is run as a standalone script.
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
@@ -39,29 +49,39 @@ DISPLAY_NAMES = {
 
 
 def save_json(value, path: Path) -> None:
+    """Write readable, deterministic metadata and interval files."""
     path.write_text(json.dumps(value, indent=2, allow_nan=False), encoding="utf-8")
 
 
 def fit_models(include_tabicl: bool = True) -> tuple[dict, dict[str, np.ndarray], dict]:
+    """Fit the models and return held-out probabilities, never hard labels."""
     split = load_official_split()
     models, predictions, timings = {}, {}, {}
 
+    # Logistic regression and XGBoost share a scikit-learn preprocessing API,
+    # so they can be trained, predicted, and saved in the same loop.
     for name, model in [
         ("logistic", logistic_model(split.X_train)),
         ("xgboost", xgboost_model(split.X_train)),
     ]:
         start = time.perf_counter()
         model.fit(split.X_train, split.y_train)
+        # Column 1 is P(recidivism=1), the quantity needed for Brier score,
+        # ranking, calibration plots, and resource-allocation scenarios.
         predictions[name] = model.predict_proba(split.X_test)[:, 1]
         timings[name] = time.perf_counter() - start
         models[name] = model
         joblib.dump(model, MODEL_DIR / f"{name}.joblib", compress=3)
 
     if include_tabicl:
+        # Imported here so a quick --skip-tabicl CPU run does not load PyTorch
+        # or require the foundation-model checkpoint.
         from tabicl import TabICLClassifier
 
         train_num, test_num = tabicl_frames(split.X_train, split.X_test)
         model = TabICLClassifier(
+            # Two ensemble views balance quality with the available 6 GB GPU.
+            # The representation cache speeds up repeated permutation audits.
             n_estimators=2,
             batch_size=1,
             kv_cache="repr",
@@ -79,21 +99,28 @@ def fit_models(include_tabicl: bool = True) -> tuple[dict, dict[str, np.ndarray]
 
 
 def audit(models: dict, predictions: dict[str, np.ndarray], context: dict) -> None:
+    """Compare models on the four course dimensions and save the results."""
     split, timings = context["split"], context["timings"]
     pred_frame = split.audit_test.copy()
     pred_frame["actual"] = split.y_test
     metrics_rows, fairness_frames, gap_rows, importance_rows = [], [], [], []
     intervals, stability = {}, {}
 
+    # Explanation calculations are repeated many times. A fixed 1,000-person
+    # subsample keeps them practical while remaining identical across models.
     rng = np.random.default_rng(RANDOM_SEED)
     sample_idx = rng.choice(len(split.X_test), size=min(1_000, len(split.X_test)), replace=False)
     X_sample = split.X_test.iloc[sample_idx].reset_index(drop=True)
     y_sample = split.y_test.iloc[sample_idx].reset_index(drop=True)
+    # This deliberately destroys all feature/row relationships. The change in
+    # predictions is a stress test, not a realistic deployment simulation.
     shuffled = X_sample.copy()
     for col in shuffled.columns:
         shuffled[col] = rng.permutation(shuffled[col].to_numpy())
 
     for name, p in predictions.items():
+        # Keep one row per held-out person so reviewers can compare all models
+        # against the same observed outcome and demographic audit attributes.
         pred_frame[f"p_{name}"] = p
         row = classification_metrics(split.y_test, p)
         row.update({"model": name, "fit_predict_seconds": timings[name]})
@@ -101,6 +128,8 @@ def audit(models: dict, predictions: dict[str, np.ndarray], context: dict) -> No
         metrics_rows.append(row)
         intervals[name] = bootstrap_intervals(split.y_test, p, repeats=400)
 
+        # Protected attributes were excluded from model inputs; they re-enter
+        # only here, after predictions exist, to expose group differences.
         for attribute in ["Gender", "Race"]:
             table = fairness_table(split.y_test, p, split.audit_test[attribute], attribute)
             table.insert(0, "model", name)
@@ -108,6 +137,8 @@ def audit(models: dict, predictions: dict[str, np.ndarray], context: dict) -> No
             gap_rows.append({"model": name, "attribute": attribute, **fairness_gaps(table)})
 
         if name != "tabicl":
+            # Permutation importance asks: how much worse is Brier performance
+            # when one raw field is shuffled and all other fields stay intact?
             result = permutation_importance(
                 models[name], X_sample, y_sample, scoring="neg_brier_score",
                 n_repeats=5, random_state=RANDOM_SEED, n_jobs=-1,
@@ -122,6 +153,8 @@ def audit(models: dict, predictions: dict[str, np.ndarray], context: dict) -> No
             p_original = models[name].predict_proba(sample_num)[:, 1]
             p_perturbed = models[name].predict_proba(shuffled_num)[:, 1]
 
+            # Foundation-model inference is more expensive, so we audit ten
+            # prespecified fields instead of repeating inference for all 29.
             candidate_features = [
                 "Supervision_Risk_Score_First", "Age_at_Release", "Gang_Affiliated",
                 "Prior_Arrest_Episodes_Felony", "Prior_Arrest_Episodes_Misd",
@@ -141,6 +174,8 @@ def audit(models: dict, predictions: dict[str, np.ndarray], context: dict) -> No
                     "std": np.nan,
                 })
 
+        # Bootstrap widths describe sampling uncertainty. The shuffled-feature
+        # measures describe sensitivity when the input signal is destroyed.
         stability[name] = {
             "all_features_shuffled_mae": float(np.mean(np.abs(p_original - p_perturbed))),
             "all_features_shuffled_rank_correlation": float(pd.Series(p_original).corr(pd.Series(p_perturbed), method="spearman")),
@@ -153,6 +188,8 @@ def audit(models: dict, predictions: dict[str, np.ndarray], context: dict) -> No
     gaps = pd.DataFrame(gap_rows)
     importance = pd.DataFrame(importance_rows).sort_values(["model", "importance"], ascending=[True, False])
 
+    # These files are the single source of truth for the notebook, slides, app,
+    # and written report. Regenerating here keeps every deliverable consistent.
     pred_frame.to_csv(ARTIFACT_DIR / "test_predictions.csv", index=False)
     metrics.to_csv(ARTIFACT_DIR / "model_metrics.csv", index=False)
     fairness.to_csv(ARTIFACT_DIR / "fairness_by_group.csv", index=False)
@@ -175,9 +212,11 @@ def audit(models: dict, predictions: dict[str, np.ndarray], context: dict) -> No
 
 def make_figures(y: pd.Series, predictions: dict[str, np.ndarray], metrics: pd.DataFrame,
                  fairness: pd.DataFrame, importance: pd.DataFrame) -> None:
+    """Create presentation-ready plots directly from saved audit results."""
     sns.set_theme(style="whitegrid", context="talk")
     palette = {"logistic": "#234E70", "xgboost": "#FB8500", "tabicl": "#7B2CBF"}
 
+    # Left: ranking quality (ROC). Right: whether probabilities mean what they say.
     fig, axes = plt.subplots(1, 2, figsize=(14, 5.5))
     for name, p in predictions.items():
         fpr, tpr, _ = roc_curve(y, p)
@@ -203,6 +242,8 @@ def make_figures(y: pd.Series, predictions: dict[str, np.ndarray], metrics: pd.D
     fig.savefig(FIGURE_DIR / "model_comparison.png", dpi=180, bbox_inches="tight")
     plt.close(fig)
 
+    # FPR matters here because a false high-risk flag could misallocate a scarce
+    # service or cause harm if the tool were used outside its intended purpose.
     race = fairness[fairness.attribute.eq("Race")].copy()
     fig, axes = plt.subplots(1, 2, figsize=(14, 5.5))
     sns.barplot(data=race, x="group", y="fpr", hue="model", palette=palette, ax=axes[0])
@@ -228,6 +269,7 @@ def make_figures(y: pd.Series, predictions: dict[str, np.ndarray], metrics: pd.D
 
 
 def main() -> None:
+    """Command-line entry point: create folders, train, audit, and print results."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--skip-tabicl", action="store_true", help="Train only the two conventional models.")
     args = parser.parse_args()
