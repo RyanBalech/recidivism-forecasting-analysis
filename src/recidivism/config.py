@@ -50,6 +50,60 @@ BASELINE_COLUMNS = [
 EXCLUDED_FROM_MODEL = {"Gender", "Race", "Residence_PUMA"}
 FEATURE_COLUMNS = [c for c in BASELINE_COLUMNS if c not in EXCLUDED_FROM_MODEL]
 
+# Human-readable names for every figure, table, and app screen. Raw NIJ names
+# (especially _v1 to _v4) are unreadable to a client or a jury.
+FEATURE_LABELS = {
+    "Age_at_Release": "Age at release",
+    "Gang_Affiliated": "Gang affiliated",
+    "Supervision_Risk_Score_First": "Georgia risk score (1-10)",
+    "Supervision_Level_First": "Initial supervision level",
+    "Education_Level": "Education level",
+    "Dependents": "Dependents",
+    "Prison_Offense": "Prison offense type",
+    "Prison_Years": "Years in prison",
+    "Prior_Arrest_Episodes_Felony": "Prior felony arrests",
+    "Prior_Arrest_Episodes_Misd": "Prior misdemeanor arrests",
+    "Prior_Arrest_Episodes_Violent": "Prior violent arrests",
+    "Prior_Arrest_Episodes_Property": "Prior property arrests",
+    "Prior_Arrest_Episodes_Drug": "Prior drug arrests",
+    "_v1": "Prior parole/probation-violation arrests",
+    "Prior_Arrest_Episodes_DVCharges": "Prior domestic-violence arrests",
+    "Prior_Arrest_Episodes_GunCharges": "Prior gun-charge arrests",
+    "Prior_Conviction_Episodes_Felony": "Prior felony convictions",
+    "Prior_Conviction_Episodes_Misd": "Prior misdemeanor convictions",
+    "Prior_Conviction_Episodes_Viol": "Prior violent convictions",
+    "Prior_Conviction_Episodes_Prop": "Prior property convictions",
+    "Prior_Conviction_Episodes_Drug": "Prior drug convictions",
+    "_v2": "Prior parole/probation-violation convictions",
+    "_v3": "Prior domestic-violence convictions",
+    "_v4": "Prior gun-charge convictions",
+    "Prior_Revocations_Parole": "Prior parole revocations",
+    "Prior_Revocations_Probation": "Prior probation revocations",
+    "Condition_MH_SA": "Condition: mental health / substance abuse",
+    "Condition_Cog_Ed": "Condition: cognitive / education",
+    "Condition_Other": "Condition: other",
+}
+
+
+def pretty(name: str) -> str:
+    """Readable label for a raw feature, a transformed column, or free text.
+
+    Handles one-hot columns ("Prison_Offense_Drug" -> "Prison offense type = Drug"),
+    missing indicators, and text that merely contains feature names (LIME rules).
+    """
+    name = str(name)
+    if name.startswith("missingindicator_"):
+        return "Missing: " + pretty(name.removeprefix("missingindicator_"))
+    if name in FEATURE_LABELS:
+        return FEATURE_LABELS[name]
+    for raw in sorted(FEATURE_LABELS, key=len, reverse=True):
+        if name.startswith(raw + "_"):
+            return f"{FEATURE_LABELS[raw]} = {name[len(raw) + 1:]}"
+    for raw in sorted(FEATURE_LABELS, key=len, reverse=True):
+        name = name.replace(raw, FEATURE_LABELS[raw])
+    return name
+
+
 # A fixed seed makes sampling, model fitting, and audits repeatable.
 RANDOM_SEED = 42
 # Threshold metrics such as TPR and FPR need probabilities converted to 0/1.

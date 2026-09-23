@@ -50,7 +50,7 @@ python scripts/reproduce.py
 streamlit run app.py
 ```
 
-The complete run regenerates dependent analyses, validates saved-model/prediction agreement, and builds notebook/slides. Allow tens of minutes or longer depending on hardware. It does not repeat historical hyperparameter search. Run `scripts/tune_xgboost.py` separately to explore new configurations; its output is not automatically adopted.
+The complete run regenerates dependent analyses, validates saved-model/prediction agreement, and builds notebook/slides. Allow tens of minutes or longer depending on hardware. It does not repeat historical hyperparameter search. The merged team additions include [logistic tuning](scripts/tune_logistic.py), [six-candidate ML comparison](scripts/compare_ml_models.py), and readable feature labels; their historical search artifacts are retained. Run `scripts/tune_xgboost.py` separately to explore new configurations; its output is not automatically adopted.
 
 `python scripts/train_evaluate.py --skip-tabicl` writes a conventional-model smoke run to `artifacts/smoke/`, preserving published three-model artifacts. `--output-dir PATH` supports isolated training outputs. The app reads `artifacts/`; live TabICLv2 inference is opt-in. `python scripts/validate_project.py` audits existing predictions and runs conventional-model CV.
 

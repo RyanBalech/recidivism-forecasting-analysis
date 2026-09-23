@@ -25,7 +25,7 @@ from sklearn.tree import DecisionTreeRegressor, export_text, plot_tree
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from recidivism.config import ARTIFACT_DIR, FIGURE_DIR, MODEL_DIR, RANDOM_SEED
+from recidivism.config import ARTIFACT_DIR, FIGURE_DIR, MODEL_DIR, RANDOM_SEED, pretty
 from recidivism.data import load_official_split
 from recidivism.modeling import ordinal_encode, tabicl_frames
 
@@ -86,12 +86,12 @@ def main() -> None:
         for feat, v in importance.items():
             shap_rows.append({"model": name, "feature": feat, "mean_abs_shap": v})
         top = importance.head(10)[::-1]
-        ax_g.barh(top.index.str.replace("_", " "), top.values, color=PALETTE[name])
+        ax_g.barh(top.index.map(pretty), top.values, color=PALETTE[name])
         ax_g.set(title=f"{DISPLAY[name]}: global SHAP", xlabel="Mean |SHAP| (log-odds)")
 
         contrib = values.iloc[person_idx].sort_values(key=np.abs, ascending=False).head(10)[::-1]
         colors = ["#C1121F" if v > 0 else "#2A9D8F" for v in contrib.values]
-        ax_w.barh(contrib.index.str.replace("_", " "), contrib.values, color=colors)
+        ax_w.barh(contrib.index.map(pretty), contrib.values, color=colors)
         ax_w.axvline(0, color="grey", lw=1)
         logit = base + values.iloc[person_idx].sum()
         ax_w.set(title=f"{DISPLAY[name]}: why this person? p={1 / (1 + np.exp(-logit)):.2f}",
@@ -115,7 +115,7 @@ def main() -> None:
     summary["surrogate_fidelity_r2_test"] = float(fidelity)
     (ARTIFACT_DIR / "surrogate_tree.txt").write_text(export_text(surrogate, feature_names=list(Xs_train.columns)), encoding="utf-8")
     fig, ax = plt.subplots(figsize=(22, 9))
-    plot_tree(surrogate, feature_names=[c.replace("_", " ") for c in Xs_train.columns], filled=True,
+    plot_tree(surrogate, feature_names=[pretty(c) for c in Xs_train.columns], filled=True,
               rounded=True, fontsize=10, impurity=False, precision=2, ax=ax)
     ax.set_title(f"Global surrogate of XGBoost (depth 3, test fidelity R² = {fidelity:.2f})")
     fig.savefig(FIGURE_DIR / "global_surrogate.png", dpi=150, bbox_inches="tight")
@@ -137,7 +137,7 @@ def main() -> None:
         lime_rows.to_csv(ARTIFACT_DIR / "lime_individual.csv", index=False)
         fig, ax = plt.subplots(figsize=(11, 6))
         lr = lime_rows[::-1]
-        ax.barh(lr.condition, lr.weight, color=["#C1121F" if w > 0 else "#2A9D8F" for w in lr.weight])
+        ax.barh(lr.condition.map(pretty), lr.weight, color=["#C1121F" if w > 0 else "#2A9D8F" for w in lr.weight])
         ax.set(title="LIME (XGBoost), same individual: local linear surrogate", xlabel="Weight")
         fig.tight_layout()
         fig.savefig(FIGURE_DIR / "lime_individual.png", dpi=180, bbox_inches="tight")
@@ -181,7 +181,7 @@ def main() -> None:
             ax.plot(range(len(values)), probs, color=PALETTE[name], alpha=0.07, lw=1)
             ax.plot(range(len(values)), probs.mean(axis=1), color="black", lw=3, label="PDP (average)")
             ax.set_xticks(range(len(values)), [str(v) for v in values], rotation=40, fontsize=9)
-            ax.set(title=f"{DISPLAY[name]}: {feat.replace('_', ' ')}", ylabel="Predicted risk", ylim=(0, 1))
+            ax.set(title=f"{DISPLAY[name]}: {pretty(feat)}", ylabel="Predicted risk", ylim=(0, 1))
             for v, mean in zip(values, probs.mean(axis=1)):
                 pdp_records.append({"model": name, "feature": feat, "value": str(v), "pdp": mean})
     axes[0][0].legend(fontsize=10)

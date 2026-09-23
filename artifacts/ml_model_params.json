@@ -1,0 +1,31 @@
+{
+  "lightgbm": {
+    "colsample_bytree": 0.7806,
+    "learning_rate": 0.0157,
+    "min_child_samples": 184,
+    "n_estimators": 842,
+    "num_leaves": 4,
+    "reg_lambda": 1.4628,
+    "subsample": 0.6944,
+    "subsample_freq": 1
+  },
+  "catboost": {
+    "depth": 5,
+    "iterations": 784,
+    "l2_leaf_reg": 6.1721,
+    "learning_rate": 0.0148
+  },
+  "hist_gb": {
+    "l2_regularization": 8.5689,
+    "learning_rate": 0.0405,
+    "max_iter": 584,
+    "max_leaf_nodes": 10,
+    "min_samples_leaf": 30
+  },
+  "random_forest": {
+    "max_depth": 10,
+    "max_features": 0.3252,
+    "min_samples_leaf": 22,
+    "n_estimators": 687
+  }
+}

@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from recidivism.config import ARTIFACT_DIR, DATA_PATH, FEATURE_COLUMNS, FIGURE_DIR, RANDOM_SEED
+from recidivism.config import ARTIFACT_DIR, DATA_PATH, FEATURE_COLUMNS, FIGURE_DIR, RANDOM_SEED, pretty
 from recidivism.data import load_official_split
 from recidivism.metrics import economic_value
 from recidivism.modeling import tabicl_frames
@@ -105,7 +105,7 @@ with tab_ind:
         options = [None, *sorted(split.X_train[col].dropna().unique(), key=lambda x: str(x))]
         current = row.iloc[0][col]
         index = options.index(current) if pd.notna(current) and current in options else 0
-        value = cols[i % 4].selectbox(col.replace("_", " "), options, index=index,
+        value = cols[i % 4].selectbox(pretty(col), options, index=index,
                                      format_func=lambda v: "Missing" if v is None else str(v))
         row.loc[:, col] = np.nan if value is None else value
 
@@ -127,6 +127,7 @@ with tab_ind:
         values, _ = shap_for(models[explain_model], split.X_train.sample(300, random_state=0), row[FEATURE_COLUMNS], explain_model)
         contrib = values.iloc[0].sort_values(key=np.abs, ascending=False).head(10)[::-1].reset_index()
         contrib.columns = ["feature", "contribution"]
+        contrib["feature"] = contrib.feature.map(pretty)
         contrib["direction"] = np.where(contrib.contribution > 0, "raises risk", "lowers risk")
         fig = px.bar(contrib, x="contribution", y="feature", color="direction", orientation="h",
                      color_discrete_map={"raises risk": "#C1121F", "lowers risk": "#2A9D8F"},

@@ -10,3 +10,4 @@ artifacts/models/*.ckpt
 artifacts/slide_previews/
 *.log
 artifacts/smoke/
+catboost_info/
