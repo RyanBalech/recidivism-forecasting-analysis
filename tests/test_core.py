@@ -19,3 +19,39 @@ def test_perfect_predictions_have_expected_metrics():
     assert metrics["brier"] < 1e-12
     assert economic_value(y, y, capacity=0.5)["captured_events"] == 2
 
+
+
+def test_ordinal_encode_keeps_order_and_leaves_binaries():
+    import pandas as pd
+    from recidivism.modeling import ordinal_encode
+
+    frame = pd.DataFrame({
+        "Prior_Arrest_Episodes_Felony": ["0", "3", "10 or more"],
+        "Age_at_Release": ["18-22", "48 or older", "33-37"],
+        "Gang_Affiliated": ["Yes", "No", "Yes"],
+    })
+    out = ordinal_encode(frame)
+    assert out["Prior_Arrest_Episodes_Felony"].tolist() == [0, 3, 10]
+    assert out["Age_at_Release"].tolist() == [0, 6, 3]
+    assert out["Gang_Affiliated"].tolist() == ["Yes", "No", "Yes"]
+
+
+def test_xgboost_pipeline_scores_raw_rows():
+    from recidivism.modeling import xgboost_model
+
+    split = load_official_split()
+    model = xgboost_model(split.X_train, n_estimators=20).fit(split.X_train.head(2_000), split.y_train.head(2_000))
+    p = model.predict_proba(split.X_test.head(50))[:, 1]
+    assert p.shape == (50,) and ((p > 0) & (p < 1)).all()
+
+
+def test_single_row_scores_like_a_batch():
+    """Regression: encoding must not depend on how many rows are scored (app scores one row)."""
+    import joblib
+    from recidivism.config import MODEL_DIR
+
+    split = load_official_split()
+    model = joblib.load(MODEL_DIR / "xgboost.joblib")
+    batch = model.predict_proba(split.X_test.head(20))[:, 1]
+    single = [model.predict_proba(split.X_test.iloc[[i]])[:, 1][0] for i in range(20)]
+    assert np.allclose(batch, single)

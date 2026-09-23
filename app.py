@@ -12,126 +12,197 @@ import streamlit as st
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "scripts"))
 
-from recidivism.config import ARTIFACT_DIR, DATA_PATH, FEATURE_COLUMNS
+from recidivism.config import ARTIFACT_DIR, DATA_PATH, FEATURE_COLUMNS, FIGURE_DIR, RANDOM_SEED
 from recidivism.data import load_official_split
 from recidivism.metrics import economic_value
+from recidivism.modeling import tabicl_frames
 
+st.set_page_config(page_title="Re-entry Support Allocation Lab", page_icon="⚖️", layout="wide")
 
-st.set_page_config(page_title="Trustworthy Recidivism Model Lab", page_icon="⚖️", layout="wide")
+LABELS = {"logistic": "Logistic regression", "xgboost": "XGBoost", "tabicl": "TabICLv2"}
+CAPACITY = 0.20
+SCOPE = ("Decision support for allocating re-entry support services only — "
+         "not for detention, sentencing, surveillance, or sanctions.")
 
 
 @st.cache_data
 def load_results():
-    return (
-        pd.read_csv(ARTIFACT_DIR / "model_metrics.csv"),
-        pd.read_csv(ARTIFACT_DIR / "test_predictions.csv"),
-        pd.read_csv(ARTIFACT_DIR / "fairness_by_group.csv"),
-        pd.read_csv(ARTIFACT_DIR / "permutation_importance.csv"),
-    )
+    read = lambda name: pd.read_csv(ARTIFACT_DIR / name) if (ARTIFACT_DIR / name).exists() else None
+    return {name: read(f"{name}.csv") for name in [
+        "model_metrics", "test_predictions", "fairness_by_group", "fairness_inference",
+        "fairness_impossibility", "fairness_frontier", "incumbent_discrimination", "incumbent_economics",
+        "race_ab_test", "stability_summary", "learning_curve", "shap_importance", "permutation_importance",
+    ]}
 
 
 @st.cache_resource
-def load_deployable_models():
-    return {
-        "Logistic regression": joblib.load(ARTIFACT_DIR / "models" / "logistic.joblib"),
-        "XGBoost": joblib.load(ARTIFACT_DIR / "models" / "xgboost.joblib"),
-    }
+def load_split():
+    return load_official_split(DATA_PATH)
 
 
-st.title("Trustworthy Recidivism Model Lab")
-st.caption("Three-year risk at supervision start · NIJ Georgia cohort · Decision support prototype")
+@st.cache_resource
+def load_models():
+    split = load_split()
+    models = {name: joblib.load(ARTIFACT_DIR / "models" / f"{name}.joblib") for name in ["logistic", "xgboost"]}
+    from tabicl import TabICLClassifier
+    tab = TabICLClassifier(n_estimators=2, random_state=RANDOM_SEED, n_jobs=-1)
+    tab.fit(tabicl_frames(split.X_train, split.X_train)[0], split.y_train.to_numpy())
+    models["tabicl"] = tab
+    return models
 
-required = [ARTIFACT_DIR / "model_metrics.csv", ARTIFACT_DIR / "test_predictions.csv"]
-if not all(path.exists() for path in required):
+
+def predict(models, name, frame):
+    if name == "tabicl":
+        split = load_split()
+        return models[name].predict_proba(tabicl_frames(split.X_train, frame)[1])[:, 1]
+    return models[name].predict_proba(frame)[:, 1]
+
+
+def figure(name: str, caption: str | None = None):
+    path = FIGURE_DIR / name
+    if path.exists():
+        st.image(str(path), caption=caption, use_container_width=True)
+    else:
+        st.caption(f"Figure `{name}` not generated yet — run the matching script in `scripts/`.")
+
+
+st.title("Re-entry Support Allocation Lab")
+st.caption("Client: risk-assessment software vendor for US community-supervision agencies · NIJ Georgia cohort 2013–2015")
+st.info(SCOPE, icon="⚖️")
+
+data = load_results()
+if data["model_metrics"] is None or data["test_predictions"] is None:
     st.error("Run `python scripts/train_evaluate.py` first to create the audit artifacts.")
     st.stop()
+metrics, predictions = data["model_metrics"], data["test_predictions"]
+metrics["Model"] = metrics.model.map(LABELS)
+thresholds = {m: float(np.quantile(predictions[f"p_{m}"], 1 - CAPACITY)) for m in LABELS}
 
-metrics, predictions, fairness, importance = load_results()
-labels = {"logistic": "Logistic regression", "xgboost": "XGBoost", "tabicl": "TabICLv2"}
-metrics["Model"] = metrics.model.map(labels)
+tab_ind, tab_cmp, tab_fair, tab_stab, tab_econ, tab_gov = st.tabs([
+    "Individual assessment", "Model comparison", "Fairness audit", "Stability", "Economics", "Governance",
+])
 
-overview, cohort, individual, governance = st.tabs(["Model comparison", "Cohort & economics", "Individual sandbox", "Governance"])
-
-with overview:
-    st.subheader("Held-out performance")
-    display = metrics[["Model", "roc_auc", "average_precision", "brier", "ece_10", "fit_predict_seconds"]].copy()
-    display.columns = ["Model", "ROC AUC", "Average precision", "Brier ↓", "Calibration error ↓", "Runtime (s)"]
-    st.dataframe(display.style.format({c: "{:.3f}" for c in display.columns[1:]}), use_container_width=True, hide_index=True)
-    col1, col2 = st.columns(2)
-    with col1:
-        fig = px.bar(metrics, x="Model", y="brier", color="Model", title="Probability error (lower is better)")
-        st.plotly_chart(fig, use_container_width=True)
-    with col2:
-        metric = st.selectbox("Audit metric", ["roc_auc", "brier", "fpr", "tpr", "selection_rate"])
-        attribute = st.radio("Protected attribute", ["Race", "Gender"], horizontal=True)
-        view = fairness[fairness.attribute.eq(attribute)].copy()
-        view["Model"] = view.model.map(labels)
-        fig = px.bar(view, x="group", y=metric, color="Model", barmode="group", title=f"{metric.replace('_', ' ').title()} by {attribute.lower()}")
-        st.plotly_chart(fig, use_container_width=True)
-
-    st.subheader("What drives predictions?")
-    selected_model = st.selectbox("Model explanation", list(labels), format_func=labels.get)
-    imp = importance[importance.model.eq(selected_model)].nlargest(12, "importance").sort_values("importance")
-    fig = px.bar(imp, x="importance", y="feature", orientation="h", title="Held-out permutation importance")
-    st.plotly_chart(fig, use_container_width=True)
-    st.caption("Importance is the increase in Brier loss after shuffling a feature. It describes association, not causation.")
-
-with cohort:
-    st.subheader("Test a resource-allocation scenario")
-    c1, c2, c3, c4 = st.columns(4)
-    capacity = c1.slider("Share offered support", 0.05, 0.50, 0.20, 0.05)
-    intervention_cost = c2.number_input("Cost per person ($)", 0, 100_000, 5_000, 500)
-    event_cost = c3.number_input("Cost per event ($)", 0, 500_000, 50_000, 5_000)
-    effectiveness = c4.slider("Assumed effectiveness", 0.0, 1.0, 0.20, 0.05)
-    rows = []
-    for model in labels:
-        result = economic_value(
-            predictions.actual, predictions[f"p_{model}"], capacity,
-            intervention_cost, event_cost, effectiveness,
-        )
-        rows.append({"Model": labels[model], **result})
-    economics = pd.DataFrame(rows)
-    st.dataframe(economics[["Model", "selected", "captured_events", "recall_at_capacity", "precision_at_capacity", "assumed_net_value"]].style.format({
-        "recall_at_capacity": "{:.1%}", "precision_at_capacity": "{:.1%}", "assumed_net_value": "${:,.0f}"
-    }), use_container_width=True, hide_index=True)
-    st.info("This is a transparent scenario calculator. Effectiveness and costs are user assumptions; the observational dataset cannot estimate causal program impact.")
-
-    st.subheader("Inspect held-out people")
-    model_filter = st.selectbox("Rank by", list(labels), format_func=labels.get, key="rank")
-    group_filter = st.multiselect("Race", sorted(predictions.Race.dropna().unique()), default=sorted(predictions.Race.dropna().unique()))
-    view = predictions[predictions.Race.isin(group_filter)].nlargest(100, f"p_{model_filter}")
-    shown = ["ID", "Gender", "Race", "actual", "p_logistic", "p_xgboost", "p_tabicl"]
-    shown = [c for c in shown if c in view]
-    st.dataframe(view[shown], use_container_width=True, hide_index=True)
-
-with individual:
-    st.subheader("Counterfactual scoring sandbox")
-    st.warning("For classroom demonstration only. A score must never trigger punishment or reduced services, and human review cannot repair an invalid deployment context.")
-    split = load_official_split(DATA_PATH)
-    models = load_deployable_models()
-    model_name = st.selectbox("Scoring model", list(models))
-    source_row = st.selectbox("Start from held-out record", range(min(250, len(split.X_test))), format_func=lambda i: f"Record {int(split.audit_test.iloc[i].ID)}")
+with tab_ind:
+    st.subheader("Score one person with all three models")
+    split = load_split()
+    with st.spinner("Loading models (the foundation model needs about a minute on CPU the first time)…"):
+        models = load_models()
+    source_row = st.selectbox("Start from a held-out record", range(min(250, len(split.X_test))),
+                              format_func=lambda i: f"Record {int(split.audit_test.iloc[i].ID)}")
     row = split.X_test.iloc[[source_row]].copy()
-    editable = ["Age_at_Release", "Supervision_Risk_Score_First", "Gang_Affiliated", "Education_Level", "Prison_Years"]
-    cols = st.columns(len(editable))
-    for col, container in zip(editable, cols):
+    editable = ["Age_at_Release", "Supervision_Risk_Score_First", "Gang_Affiliated", "Education_Level",
+                "Prison_Years", "Prior_Arrest_Episodes_Felony", "Prior_Revocations_Parole"]
+    cols = st.columns(4)
+    for i, col in enumerate(editable):
         options = sorted(split.X_train[col].dropna().unique(), key=lambda x: str(x))
         current = row.iloc[0][col]
         index = options.index(current) if current in options else 0
-        row.loc[:, col] = container.selectbox(col.replace("_", " "), options, index=index)
-    probability = float(models[model_name].predict_proba(row[FEATURE_COLUMNS])[:, 1][0])
-    st.metric("Estimated three-year recidivism probability", f"{probability:.1%}")
-    st.caption("Race, gender, and geography are not model inputs. The foundation model is available for held-out cohort comparison; it is not loaded into this low-latency sandbox.")
+        row.loc[:, col] = cols[i % 4].selectbox(col.replace("_", " "), options, index=index)
 
-with governance:
+    scores = {m: float(predict(models, m, row[FEATURE_COLUMNS])[0]) for m in LABELS}
+    cols = st.columns(3)
+    for col, (m, p) in zip(cols, scores.items()):
+        priority = p >= thresholds[m]
+        col.metric(LABELS[m], f"{p:.1%}", "Priority for support (top 20%)" if priority else "Standard support",
+                   delta_color="off")
+    st.caption("Priority = score in the top 20% of the held-out cohort for that model, i.e. the service capacity used in the business case.")
+
+    st.markdown("**Why this score? Local explanation**")
+    explain_model = st.radio("Explain with", ["xgboost", "logistic", "tabicl"], format_func=LABELS.get, horizontal=True)
+    if explain_model == "tabicl":
+        st.warning("The foundation model has no native attribution method, and model-agnostic SHAP is too slow for "
+                   "interactive use. This is a real deployment cost: a caseworker cannot be told *why* TabICL scored "
+                   "this person. See the PDP/ICE figure in the comparison tab for its global behaviour.")
+    else:
+        from interpretability import shap_for
+        values, _ = shap_for(models[explain_model], split.X_train.sample(300, random_state=0), row[FEATURE_COLUMNS], explain_model)
+        contrib = values.iloc[0].sort_values(key=np.abs, ascending=False).head(10)[::-1].reset_index()
+        contrib.columns = ["feature", "contribution"]
+        contrib["direction"] = np.where(contrib.contribution > 0, "raises risk", "lowers risk")
+        fig = px.bar(contrib, x="contribution", y="feature", color="direction", orientation="h",
+                     color_discrete_map={"raises risk": "#C1121F", "lowers risk": "#2A9D8F"},
+                     title=f"SHAP contributions (log-odds), {LABELS[explain_model]}")
+        st.plotly_chart(fig, use_container_width=True)
+
+    st.markdown("**Race twin test**")
+    st.caption("Race, gender and residence geography are not model inputs, so two people identical except for race "
+               "always receive the same score (difference = 0 by construction). The A/B test in the fairness tab shows "
+               "what happens if race is added as an input.")
+
+with tab_cmp:
+    st.subheader("Held-out performance (7,807 people never seen in training)")
+    display = metrics[["Model", "roc_auc", "average_precision", "brier", "ece_10", "fit_predict_seconds"]].copy()
+    display.columns = ["Model", "ROC AUC", "Average precision", "Brier ↓", "Calibration error ↓", "Runtime (s)"]
+    st.dataframe(display.style.format({c: "{:.3f}" for c in display.columns[1:]}), use_container_width=True, hide_index=True)
+    if data["incumbent_discrimination"] is not None:
+        st.markdown("**Against the tool agencies use today** (`Supervision_Risk_Score_First`, 1–10 actuarial score)")
+        st.dataframe(data["incumbent_discrimination"].round(3), use_container_width=True, hide_index=True)
+    figure("learning_curve.png", "Learning curve: the foundation model leads on small data; the gap closes as data grows.")
+    c1, c2 = st.columns(2)
+    with c1:
+        figure("shap_global.png", "Global drivers (SHAP)")
+    with c2:
+        figure("global_surrogate.png", "A depth-3 tree that mimics XGBoost")
+    figure("pdp_ice.png", "Partial dependence (black) and individual curves, all three models")
+
+with tab_fair:
+    st.subheader("Fairness audit by race and gender")
+    inf = data["fairness_inference"]
+    if inf is not None:
+        rule = st.radio("Operating point", ["top_20pct", "threshold_0.5"], horizontal=True,
+                        format_func={"top_20pct": "Deployed: top 20% by risk", "threshold_0.5": "Threshold 0.5"}.get)
+        attr = st.radio("Attribute", ["Race", "Gender"], horizontal=True)
+        view = inf[(inf.rule == rule) & (inf.attribute == attr)].copy()
+        view["Model"] = view.model.map(LABELS)
+        fig = px.scatter(view, x="metric", y="gap", color="Model", error_y=view.ci_high - view.gap,
+                         error_y_minus=view.gap - view.ci_low, title=f"{view.comparison.iloc[0]} gaps with 95% bootstrap CI")
+        fig.add_hline(y=0, line_color="grey")
+        st.plotly_chart(fig, use_container_width=True)
+        st.caption("A gap whose interval crosses 0 is not statistically distinguishable from no gap.")
+    if data["fairness_impossibility"] is not None:
+        st.markdown("**Base rates and within-group calibration (impossibility result)**")
+        st.dataframe(data["fairness_impossibility"].round(3), use_container_width=True, hide_index=True)
+    figure("fairness_frontier.png", "Race-blind operating points vs group thresholds (group thresholds are an analytic device, not a shipping option)")
+    if data["race_ab_test"] is not None:
+        st.markdown("**A/B test: model trained with race vs without race**")
+        st.dataframe(data["race_ab_test"].round(4), use_container_width=True, hide_index=True)
+
+with tab_stab:
+    st.subheader("Structural stability across refits on resampled training data")
+    if data["stability_summary"] is not None:
+        st.dataframe(data["stability_summary"].round(4), use_container_width=True, hide_index=True)
+    figure("structural_stability.png")
+
+with tab_econ:
+    st.subheader("Resource-allocation scenario")
+    c1, c2, c3, c4 = st.columns(4)
+    capacity = c1.slider("Share offered support", 0.05, 0.50, CAPACITY, 0.05)
+    intervention_cost = c2.number_input("Cost per person ($)", 0, 100_000, 5_000, 500)
+    event_cost = c3.number_input("Cost per event ($)", 0, 500_000, 50_000, 5_000)
+    effectiveness = c4.slider("Assumed effectiveness", 0.0, 1.0, 0.20, 0.05)
+    split = load_split()
+    incumbent = split.X_test["Supervision_Risk_Score_First"]
+    rankers = {"Incumbent score": incumbent.fillna(incumbent.median()).to_numpy(),
+               **{LABELS[m]: predictions[f"p_{m}"].to_numpy() for m in LABELS}}
+    rows = [{"Ranker": name, **economic_value(predictions.actual, s, capacity, intervention_cost, event_cost, effectiveness)}
+            for name, s in rankers.items()]
+    econ = pd.DataFrame(rows)
+    st.dataframe(econ[["Ranker", "selected", "captured_events", "recall_at_capacity", "assumed_net_value"]].style.format({
+        "recall_at_capacity": "{:.1%}", "assumed_net_value": "${:,.0f}"}), use_container_width=True, hide_index=True)
+    st.plotly_chart(px.bar(econ, x="Ranker", y="assumed_net_value", color="Ranker", title="Net value under your assumptions"),
+                    use_container_width=True)
+    st.info("Transparent scenario calculator. Costs and effectiveness are user assumptions; the observational data cannot estimate causal program impact.")
+
+with tab_gov:
     st.subheader("Recommended operating policy")
     st.markdown("""
     - Use scores only to offer beneficial, capacity-limited support; never to increase surveillance, sanctions, or detention.
-    - Keep race and gender out of the score and in the monitoring layer. Audit false-positive rates, calibration, and service allocation every quarter.
+    - Keep race and gender out of the score and in the monitoring layer. Audit error rates and calibration by group every quarter, at the deployed operating point.
     - Require documented overrides, an appeal route, data-quality checks, and automatic suspension when drift or subgroup gaps exceed agreed limits.
     - Pilot prospectively before deployment. Re-estimate program benefit with a randomized or strong quasi-experimental design.
     """)
     st.subheader("Known limits")
-    st.write("The cohort covers Georgia releases from 2013–2015. The outcome is a new arrest, which reflects both behavior and exposure to policing. External validity, construct validity, and causal value are therefore unproven.")
-
+    st.write("The cohort covers Georgia releases from 2013–2015. The outcome is a new arrest, which reflects both behavior "
+             "and exposure to policing. External validity, construct validity, and causal value are therefore unproven.")

@@ -1,0 +1,22 @@
+|--- _v1 <= 1.50
+|   |--- Age_at_Release <= 2.50
+|   |   |--- Gang_Affiliated_Yes <= 0.50
+|   |   |   |--- value: [0.52]
+|   |   |--- Gang_Affiliated_Yes >  0.50
+|   |   |   |--- value: [0.75]
+|   |--- Age_at_Release >  2.50
+|   |   |--- Prior_Arrest_Episodes_Felony <= 3.50
+|   |   |   |--- value: [0.24]
+|   |   |--- Prior_Arrest_Episodes_Felony >  3.50
+|   |   |   |--- value: [0.42]
+|--- _v1 >  1.50
+|   |--- Gang_Affiliated_Yes <= 0.50
+|   |   |--- _v1 <= 4.50
+|   |   |   |--- value: [0.59]
+|   |   |--- _v1 >  4.50
+|   |   |   |--- value: [0.70]
+|   |--- Gang_Affiliated_Yes >  0.50
+|   |   |--- Prior_Arrest_Episodes_Property <= 1.50
+|   |   |   |--- value: [0.80]
+|   |   |--- Prior_Arrest_Episodes_Property >  1.50
+|   |   |   |--- value: [0.85]

@@ -1,0 +1,8 @@
+{
+  "logistic_individual_probability": 0.9564731225907951,
+  "xgboost_individual_probability": 0.9354186654090881,
+  "surrogate_depth": 3,
+  "surrogate_fidelity_r2_test": 0.6084799808740456,
+  "lime": "ok (features shown in scaled, preprocessed space)",
+  "tabicl_native_attribution": "none: explained only through model-agnostic PDP/ICE and permutation importance"
+}

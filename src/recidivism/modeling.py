@@ -1,14 +1,46 @@
 from __future__ import annotations
 
+import re
+
 import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.preprocessing import FunctionTransformer, OneHotEncoder, StandardScaler
 from xgboost import XGBClassifier
 
 from .data import feature_types
+
+# Ordered categories whose order one-hot encoding would discard.
+_ORDERED = {
+    "Prison_Years": {"Less than 1 year": 0, "1-2 years": 1, "Greater than 2 to 3 years": 2, "More than 3 years": 3},
+    "Age_at_Release": {"18-22": 0, "23-27": 1, "28-32": 2, "33-37": 3, "38-42": 4, "43-47": 5, "48 or older": 6},
+}
+_COUNT = re.compile(r"\d+( or more)?")
+
+# From scripts/tune_xgboost.py (5-fold CV random search, 60 draws, CV AUC 0.7343).
+XGB_PARAMS = dict(
+    n_estimators=1196, max_depth=2, learning_rate=0.0188, min_child_weight=8,
+    subsample=0.8217, colsample_bytree=0.6233, gamma=0.4576,
+    reg_lambda=4.5603, reg_alpha=1.4192,
+)
+
+
+def ordinal_encode(frame: pd.DataFrame) -> pd.DataFrame:
+    """Turn ordered categories and 'N or more' counts into numbers; leave the rest as is."""
+    out = frame.copy()
+    for col in out.columns:
+        if pd.api.types.is_numeric_dtype(out[col]):
+            continue
+        if col in _ORDERED:
+            out[col] = out[col].map(_ORDERED[col]).astype(float)
+            continue
+        # Decide per value, not per batch size, so a single row encodes like the training set.
+        values = set(map(str, out[col].dropna().unique()))
+        if values and all(_COUNT.fullmatch(v) for v in values):
+            out[col] = out[col].astype(str).str.extract(r"(\d+)")[0].astype(float)
+    return out
 
 
 def preprocessor(frame: pd.DataFrame) -> ColumnTransformer:
@@ -35,23 +67,18 @@ def logistic_model(frame: pd.DataFrame) -> Pipeline:
     ])
 
 
-def xgboost_model(frame: pd.DataFrame) -> Pipeline:
+def xgboost_model(frame: pd.DataFrame, random_state: int = 42, **overrides) -> Pipeline:
+    params = {**XGB_PARAMS, **overrides}
     return Pipeline([
-        ("prepare", preprocessor(frame)),
+        ("ordinal", FunctionTransformer(ordinal_encode)),
+        ("prepare", preprocessor(ordinal_encode(frame))),
         ("model", XGBClassifier(
-            n_estimators=550,
-            max_depth=3,
-            learning_rate=0.035,
-            min_child_weight=8,
-            subsample=0.85,
-            colsample_bytree=0.85,
-            reg_lambda=3.0,
-            reg_alpha=0.1,
+            **params,
             objective="binary:logistic",
             eval_metric="logloss",
             tree_method="hist",
             n_jobs=-1,
-            random_state=42,
+            random_state=random_state,
         )),
     ])
 
