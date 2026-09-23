@@ -20,6 +20,7 @@ The official NIJ `Training_Sample` indicator creates an untouched 18,028/7,807 t
 
 ## Deliverables
 
+- [Plain-language data and feature guide](reports/data_guide.md)
 - [Analysis notebook](notebooks/recidivism_analysis.ipynb)
 - [Interactive Streamlit app](app.py)
 - [Presentation deck](reports/ISAF_Recidivism_Presentation.pptx)
