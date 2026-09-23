@@ -108,15 +108,15 @@ bullets(s, ["Client: a vendor selling risk-assessment tools to US state communit
 s = make_slide(prs); title(s, "Original split, with explicit validation limits", "02 · Data design")
 card(s, "TRAIN", "18,028", .8, 1.9); card(s, "EVALUATION", "7,807", 3.75, 1.9, PURPLE)
 card(s, "BASELINE FIELDS", "29", 6.7, 1.9); card(s, "TEST TARGET RATE", f"{pred.actual.mean():.1%}", 9.65, 1.9, PURPLE)
-bullets(s, ["Post-release violations, tests, programs and employment excluded to prevent leakage",
-            "Race, gender and residence geography excluded from scoring; kept only in the audit layer",
-            "Evaluation data were repeatedly inspected during development; fresh validation is still needed"], y=3.72, h=2.4, size=20); footer(s, 3)
+bullets(s, ["Post-release variables excluded; race, gender and geography retained only for audit",
+            "Found and fixed a representation leak: missing gang affiliation exactly marked women; mode-fill plus a regression audit now blocks it",
+            "Evaluation data were repeatedly inspected during development; fresh validation is still needed"], y=3.62, h=2.65, size=18); footer(s, 3)
 
 # 4 — Three models
 s = make_slide(prs); title(s, "Three model families, one comparison", "03 · Model design")
 panel(s, "LOGISTIC", "White-box anchor\n\nCV-tuned L1, C=0.2154\n\nSigned, inspectable effects", .7, 1.9, color=ORANGE)
 panel(s, "XGBOOST", "Nonlinear workhorse\n\nOrdinal counts + 5-fold CV tuning\n\nFast operational scoring", 4.8, 1.9, color=TEAL)
-panel(s, "TABICLv2", "Foundation model\n\nPretrained in-context transformer\n\nIn-context prediction; no native attribution implemented", 8.9, 1.9, color=PURPLE)
+panel(s, "TABICLv2", "Foundation model\n\n16-member GPU ensemble\n\nTraining-only size sweep; no native attribution implemented", 8.9, 1.9, color=PURPLE)
 textbox(s, "Same eligible fields · Same held-out people · Same metrics", 2.5, 6.22, 8.3, .4, 17, ORANGE, True, PP_ALIGN.CENTER); footer(s, 4)
 
 # 5 — Incumbent benchmark (the hook)

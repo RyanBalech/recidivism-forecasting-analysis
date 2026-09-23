@@ -38,7 +38,13 @@ from recidivism.metrics import (
     fairness_gaps,
     fairness_table,
 )
-from recidivism.modeling import logistic_model, tabicl_frames, tabicl_model, xgboost_model
+from recidivism.modeling import (
+    TABICL_ESTIMATORS,
+    logistic_model,
+    tabicl_frames,
+    tabicl_model,
+    xgboost_model,
+)
 
 
 DISPLAY_NAMES = {
@@ -194,7 +200,7 @@ def audit(models: dict, predictions: dict[str, np.ndarray], context: dict) -> No
         "test_rows": len(split.X_test),
         "features": list(split.X_train.columns),
         "protected_attributes_used_for_audit_only": ["Gender", "Race"],
-        "tabicl_estimators": 2 if "tabicl" in predictions else 0,
+        "tabicl_estimators": TABICL_ESTIMATORS if "tabicl" in predictions else 0,
         "tabicl_device": str(models["tabicl"].device_) if "tabicl" in predictions and hasattr(models["tabicl"], "device_") else "auto/not recorded",
     }, ARTIFACT_DIR / "run_manifest.json")
     make_figures(split.y_test, predictions, metrics, fairness, importance)

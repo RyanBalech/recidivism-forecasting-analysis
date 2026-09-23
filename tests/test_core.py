@@ -120,6 +120,15 @@ def test_tabicl_frames_do_not_expose_gender_through_missingness():
         assert not frame.select_dtypes(exclude="number").isna().any().any()
 
 
+def test_leakage_audit_passes():
+    """The standalone leakage audit is also suitable as a CI gate."""
+    import runpy
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    runpy.run_path(str(root / "scripts" / "leakage_audit.py"), run_name="__main__")
+
+
 def test_merged_logistic_configuration_and_override():
     from recidivism.modeling import logistic_model
     frame = pd.DataFrame({"score": [1, 2, 3]})

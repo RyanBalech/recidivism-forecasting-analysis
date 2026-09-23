@@ -6,6 +6,10 @@
 > review corrected threshold/calibration reasoning, Jaccard interpretation, and unsupported
 > claims about a data ceiling or present-day agency tools; see reports/research_review.md.
 
+## GPU ensemble and merge hardening (23 September 2026)
+
+Team work was merged without discarding the methodology audit. The shared TabICLv2 configuration now uses 16 ensemble members on CUDA, and all three model families receive eight bootstrap stability refits. The incoming ensemble sweep originally read the reused evaluation labels; it was moved to a fixed stratified development slice of the training partition before the final full-training fit. A systematic leakage audit and regression test also guard the gender-aligned `Gang_Affiliated` missingness fix. These changes improve compute depth and consistency without relabeling the evaluation set as untouched.
+
 This is the process log for the jury: the starting point of each dimension, every change we tried
 (including the ones we **rejected**), the measured result, and why. Every number here is reproducible
 from `scripts/` and `artifacts/`; git history has the commit-level trail. Figure:

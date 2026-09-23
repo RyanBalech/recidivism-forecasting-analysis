@@ -6,7 +6,8 @@ Between every pair of refits we measure, on the fixed test set:
 - decision stability: overlap (Jaccard) of the top-20% selected individuals;
 - slow variation in feature contributions (logistic, XGBoost): rank correlation of
   mean |SHAP| importance vectors across refits.
-TabICL refits cost ~70 s each on CPU, so it gets fewer resamples (stated, not hidden).
+All three models receive the same number of refits; CUDA makes the TabICL
+ensemble practical on supported hardware.
 """
 from __future__ import annotations
 
@@ -29,7 +30,7 @@ from recidivism.data import load_official_split
 from recidivism.metrics import capacity_selection
 from recidivism.modeling import logistic_model, tabicl_frames, xgboost_model
 
-REFITS = {"logistic": 8, "xgboost": 8, "tabicl": 4}
+REFITS = {"logistic": 8, "xgboost": 8, "tabicl": 8}
 CAPACITY = 0.20
 DISPLAY = {"logistic": "Logistic regression", "xgboost": "XGBoost", "tabicl": "TabICLv2"}
 PALETTE = {"logistic": "#234E70", "xgboost": "#FB8500", "tabicl": "#7B2CBF"}

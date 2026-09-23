@@ -14,9 +14,9 @@ Race, gender and PUMA are excluded from inputs; race and gender are audited. Pos
 
 Imputation/scaling are fitted within pipelines. Logistic uses one-hot categories; XGBoost first ordinal-encodes selected ordered categories/counts. They use the same eligible raw information, **not the same transformed matrix**. TabICLv2 uses mixed inputs with categorical missing values filled from training modes. Filling missing gang affiliation removes a direct gender missingness marker, not all proxy information.
 
-Logistic uses the merged team's L1 regularization with C=0.2154 and one-hot encoding, chosen by its five-fold grid. The team's six-candidate ML comparison and readable labels are retained. XGBoost's shallow-tree parameters come from a historical five-fold AUC search, not Brier optimization. TabICLv2 uses two ensemble members as a compute-budget choice.
+Logistic uses the merged team's L1 regularization with C=0.2154 and one-hot encoding, chosen by its five-fold grid. The team's six-candidate ML comparison and readable labels are retained. XGBoost's shallow-tree parameters come from a historical five-fold AUC search, not Brier optimization. TabICLv2 uses 16 ensemble members. Its 1–64 member sensitivity sweep uses only a fixed stratified development slice of the training partition; the final configuration is refitted on all training rows. This avoids another round of configuration choice on evaluation labels, but the single development split is still not an unbiased performance estimate.
 
-The fresh five-fold conventional-model CV in `validation_cv.csv` evaluates fixed configurations with fold-local preprocessing. Earlier tuning used the same training data, so this is **not nested validation of the search procedure**. No new TabICLv2 CV sweep is included.
+The fresh five-fold conventional-model CV in `validation_cv.csv` evaluates fixed configurations with fold-local preprocessing. Earlier tuning used the same training data, so this is **not nested validation of the search procedure**. The TabICLv2 ensemble sensitivity check is not a full cross-validation study.
 
 The original test set was repeatedly inspected for model variants, learning curves and audits. Historical choices in JOURNEY.md reference its results. It is therefore an evaluation set, **not an untouched final holdout**. New temporal/external data are required for confirmation; pipeline leakage control cannot undo adaptive evaluation reuse. See [scikit-learn's evaluation guidance](https://scikit-learn.org/stable/modules/cross_validation.html).
 
@@ -42,7 +42,7 @@ TabICLv2 has permutation importance, PDP/ICE and interactive feature edits for l
 
 ## Stability
 
-Bootstrap refits compare probability drift, rank correlation and top-capacity Jaccard overlap. Conventional models use eight refits, TabICLv2 four. Pairwise comparisons share refits and are not independent samples.
+Bootstrap refits compare probability drift, rank correlation and top-capacity Jaccard overlap. All three models use eight refits. Pairwise comparisons share refits and are not independent samples.
 
 Jaccard is intersection divided by union, **not the fraction of all people changing status**. For equal-size selected sets, Jaccard J implies a replaced fraction `(1-J)/(1+J)` of each selected set. Overlap around 0.73–0.77 implies about 13–15% replacement among selected people, not one quarter of the cohort changing status.
 

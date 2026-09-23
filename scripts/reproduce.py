@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def main():
-    steps = ["train_evaluate", "incumbent_benchmark", "fairness_audit",
+    steps = ["leakage_audit", "estimator_sweep", "train_evaluate", "incumbent_benchmark", "fairness_audit",
              "validate_project", "learning_curve", "interpretability",
              "stability_structural", "race_ab_test", "xper_attribution",
              "tradeoff_matrix", "improvement_journey", "refresh_readme", "build_notebook",

@@ -37,6 +37,11 @@ LOGIT_ENCODING = "onehot"
 warnings.filterwarnings("ignore", message="'penalty' was deprecated", category=FutureWarning)
 LOGIT_PARAMS = dict(C=0.2154, penalty="l1")  # CV AUC 0.7324; C in [0.05, 1] is flat within 0.0002
 
+# Selected as a practical point on the training-only development sweep in
+# scripts/estimator_sweep.py. Keep this in one place so the app, main fit and
+# all secondary audits use the same foundation-model ensemble.
+TABICL_ESTIMATORS = 16
+
 
 def ordinal_encode(frame: pd.DataFrame) -> pd.DataFrame:
     """Turn ordered categories and 'N or more' counts into numbers; leave the rest as is."""
@@ -144,5 +149,5 @@ def tabicl_frames(X_train: pd.DataFrame, X_test: pd.DataFrame) -> tuple[pd.DataF
 def tabicl_model(random_state=42):
     """One shared inference configuration for training, app and secondary audits."""
     from tabicl import TabICLClassifier
-    return TabICLClassifier(n_estimators=2, batch_size=1, kv_cache="repr",
+    return TabICLClassifier(n_estimators=TABICL_ESTIMATORS, batch_size=1, kv_cache="repr",
                             random_state=random_state, n_jobs=-1)
