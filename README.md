@@ -1,73 +1,61 @@
 # Trustworthy Recidivism Forecasting
 
-An end-to-end scoring analysis for the HEC Paris course **Interpretability, Stability, and Algorithmic Fairness**. The project compares a white-box model, a gradient-boosted model, and an open tabular foundation model on the [NIJ 2021 Recidivism Forecasting Challenge](https://nij.ojp.gov/funding/recidivism-forecasting-challenge).
+A scoring analysis for HEC Paris **Interpretability, Stability, and Algorithmic Fairness**, comparing logistic regression, XGBoost, and TabICLv2 for a hypothetical community-supervision software vendor.
 
-The decision is framed as estimating three-year arrest risk at the start of parole supervision so that scarce, beneficial re-entry services can be offered. The score is not suitable for sanctions, detention, or increased surveillance.
+The decision is prioritizing voluntary re-entry support using **three-year cumulative new-arrest risk at supervision start**. This is a retrospective course project, not a validated operational risk tool.
 
-## Results
+## Scope and findings
 
-The official NIJ `Training_Sample` indicator creates an untouched 18,028/7,807 train/test split. Race, gender, and residence geography are excluded from model inputs and retained for subgroup audits. Only baseline variables available at supervision start are used.
+We use NIJ's original 18,028 training / 7,807 evaluation partition and 29 baseline inputs. Race, gender, and geography are excluded from scoring; race and gender remain available for audits. Post-release measurements are excluded.
 
-**The client's real question — better than the tool agencies use today?** `Supervision_Risk_Score_First`, Georgia's existing 1–10 actuarial score, reaches only **0.60 ROC AUC**. Every candidate model reaches ~0.73 and roughly doubles the net value of a capacity-limited support programme (~$2.75M → ~$5.1–5.3M).
+The [2021 NIJ challenge](https://nij.ojp.gov/funding/recidivism-forecasting-challenge) evaluated separate annual forecasts, restricting later years to people not previously rearrested. **Our cumulative-target results are not comparable to its leaderboard.** The course brief permits this binary target.
 
-| Model | ROC AUC | Average precision | Brier ↓ | Calibration error ↓ | Runtime* |
-|---|---:|---:|---:|---:|---:|
-| Incumbent score | 0.600 | — | — | — | — |
-| Logistic regression | 0.7295 | 0.7691 | 0.2055 | 0.0132 | 1.2 s |
-| XGBoost | 0.7326 | 0.7722 | 0.2044 | **0.0109** | 2.9 s |
-| TabICLv2 | **0.7338** | **0.7723** | **0.2038** | 0.0191 | 103.7 s |
+The original evaluation set was repeatedly inspected during development ([JOURNEY.md](JOURNEY.md)). It is excluded from fitting but is no longer an untouched model-selection holdout. Results are exploratory.
 
-\*Training plus one full held-out prediction run. XGBoost hyperparameters come from a 5-fold CV search; TabICLv2 runs on CPU here (a CUDA GPU is much faster). Bootstrap 95% intervals across the three models overlap.
+Models achieve approximately **0.73 ROC AUC and 0.20 Brier loss**, compared with approximately **0.60 AUC** for the historical recorded supervision score. This supports improvement on this dataset, not superiority over tools agencies use today.
 
-**Recommendation:** deploy XGBoost for support allocation, with logistic regression as the transparent challenger; TabICLv2 only for very small agencies where its small-data edge is real (see the learning curve). XGBoost calibrates best, has the highest scenario net value and the smallest gender false-positive gap, runs ~35× faster than TabICLv2, and is SHAP-explainable (the foundation model has no native explanation path). Do not deploy before a prospective impact and fairness pilot. Full four-dimension comparison in [`artifacts/tradeoff_matrix.md`](artifacts/tradeoff_matrix.md) and the [technical report](reports/technical_report.md).
+| Model | ROC AUC | Brier ↓ | ECE (10 bins) ↓ | Fit + prediction |
+|---|---:|---:|---:|---:|
+| Logistic regression | 0.7295 | 0.2055 | 0.0132 | 0.83 s |
+| XGBoost | 0.7324 | 0.2045 | 0.0112 | 4.23 s |
+| TabICLv2 | 0.7315 | 0.2048 | 0.0216 | 10.47 s |
 
-## Deliverables
+Current local run: TabICLv2 uses an RTX 4050 GPU; conventional models use CPU. These timings are hardware-specific. XGBoost minus TabICLv2 AUC is 0.00087, with paired 95% interval [-0.00122, 0.00297]; this does not establish superiority or equivalence. XGBoost improves Brier loss about 16.4% relative to training-prevalence probabilities.
 
-- [Plain-language data and feature guide](reports/data_guide.md)
-- [Analysis notebook](notebooks/recidivism_analysis.ipynb)
-- [Interactive Streamlit app](app.py)
-- [Presentation deck](reports/ISAF_Recidivism_Presentation.pptx)
-- [Presentation notes and Q&A](reports/presentation_notes.md)
-- [Technical report and model card](reports/technical_report.md)
-- [Dataset pre-validation brief](reports/dataset_prevalidation.md)
-- Reproducible source code in [`src/recidivism`](src/recidivism)
+**Recommend XGBoost for a prospective shadow pilot, with logistic regression as the transparent challenger.** Model choice weighs explanation cost, subgroup errors, runtime and refit sensitivity. Small-sample TabICLv2 results do not establish transferability to smaller agencies elsewhere. Economic values are scenarios, not measured savings.
+
+## Results and deliverables
+
+- [Exact performance](artifacts/model_metrics.csv), [probability baselines and Brier skill](artifacts/validation_baselines.csv)
+- [Paired model differences with bootstrap intervals](artifacts/paired_comparisons.csv), [fixed-configuration training CV](artifacts/validation_cv.csv)
+- [Intersectional audit](artifacts/intersectional_audit.csv), [four-dimension trade-offs](artifacts/tradeoff_matrix.md)
+- [Technical report](reports/technical_report.md), [research and requirement review](reports/research_review.md)
+- [Executed notebook](notebooks/recidivism_analysis.ipynb), [interactive app](app.py)
+- [Slide deck](reports/ISAF_Recidivism_Presentation.pptx), [presentation and Q&A notes](reports/presentation_notes.md)
+- [Data guide](reports/data_guide.md), [pre-validation brief](reports/dataset_prevalidation.md)
+- [Package versions, input/model hashes and consistency checks](artifacts/validation_manifest.json)
+
+The supplied course brief requires dataset pre-validation by **24 September 2026, 09:40**, and deliverables by **28 September 2026, 09:40**; presentation: 15 minutes plus 10 minutes Q&A. Instructor submission remains the team's responsibility.
 
 ## Reproduce
 
-Python 3.10+ is required. A CUDA GPU is recommended for TabICLv2.
+Use Python **3.11–3.13** (verified on 3.13). Version ranges are not a complete environment lock; the validation manifest records the installed scientific stack. TabICLv2 may download its checkpoint on first use. Repeated explanations and refits take substantially longer than one training/prediction run.
 
 ```powershell
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
-$env:PYTHONPATH = "src"
-python scripts/train_evaluate.py
-python scripts/build_notebook.py
-python scripts/build_slides.py
-python scripts/build_prevalidation_pdf.py
+python -m pytest -q
+python scripts/reproduce.py
 streamlit run app.py
 ```
 
-Use `python scripts/train_evaluate.py --skip-tabicl` for a CPU-only smoke run. The app expects the saved audit artifacts from a full run. Tests run with:
+The complete run regenerates dependent analyses, validates saved-model/prediction agreement, and builds notebook/slides. Allow tens of minutes or longer depending on hardware. It does not repeat historical hyperparameter search. Run `scripts/tune_xgboost.py` separately to explore new configurations; its output is not automatically adopted.
 
-```powershell
-$env:PYTHONPATH = "src"
-python -m pytest -q
-```
+`python scripts/train_evaluate.py --skip-tabicl` writes a conventional-model smoke run to `artifacts/smoke/`, preserving published three-model artifacts. `--output-dir PATH` supports isolated training outputs. The app reads `artifacts/`; live TabICLv2 inference is opt-in. `python scripts/validate_project.py` audits existing predictions and runs conventional-model CV.
 
-## Repository map
+## Interpretation boundaries
 
-```text
-app.py                         Streamlit client prototype
-artifacts/                     Held-out predictions, metrics, figures
-notebooks/                     Executable analysis notebook
-reports/                       Slides, report, pre-validation brief
-scripts/train_evaluate.py      Training and four-dimension audit
-scripts/build_deliverables.py  Notebook and slide generation
-src/recidivism/                Data, model, and metric modules
-tests/                         Data-integrity and metric tests
-```
+Arrest reflects behavior, policing and reporting. Georgia releases from 2013–2015 cannot establish present-day or external validity. Removing protected columns does not remove proxies. Threshold changes alter decisions, not calibration of unchanged probabilities. The group-specific threshold frontier uses evaluation labels and is an in-sample illustration, not validated mitigation.
 
-## Responsible-use boundary
-
-The outcome is a new arrest, which combines behavior with policing and reporting processes. The cohort covers Georgia releases from 2013–2015 and cannot establish validity elsewhere or today. Dollar values in the app are transparent user-defined scenarios, not causal claims. Any real use needs prospective validation, an appeal process, benefit-only interventions, drift monitoring, and periodic subgroup audits.
+Capacity analyses select exactly `round(n × capacity)`, breaking ties by input row order. The discrete incumbent has many ties, so its scenario value depends on this convention. Real allocation requires a justified tie policy, prospective impact assessment, monitoring and appeals. This prototype must not drive sanctions, detention, sentencing or surveillance.

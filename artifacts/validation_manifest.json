@@ -1,0 +1,36 @@
+{
+  "python": "3.13.5",
+  "cuda_available": true,
+  "device": "NVIDIA GeForce RTX 4050 Laptop GPU",
+  "packages": {
+    "numpy": "2.3.2",
+    "pandas": "2.3.1",
+    "scikit-learn": "1.7.2",
+    "xgboost": "3.0.5",
+    "tabicl": "2.2.0",
+    "torch": "2.10.0+cu130",
+    "shap": "0.52.0",
+    "streamlit": "1.64.0",
+    "lime": "0.2.0.1",
+    "XPER": "0.0.92",
+    "scipy": "1.16.2",
+    "joblib": "1.5.2",
+    "python-pptx": "1.0.2",
+    "nbformat": "5.10.4",
+    "nbclient": "0.10.2"
+  },
+  "sha256": {
+    "nij-challenge2021_full_dataset.csv": "2df247209bea3ad2d861ef1624461ef73b5b792f01593da0b6f18e3de1b72f5c",
+    "test_predictions.csv": "659ee378ee28be3bb55ae78c06dff51f206964a71d4b56607935fcb8c8971476",
+    "logistic.joblib": "f787141b9fb6b8df51c9aa98bf357434fcc5499f97493f8792b59b6a01c7cb57",
+    "xgboost.joblib": "609cc8cc53a7937c84c822d10fef70bc41adaa71f8af9f10c0d9fe3a02e90e19"
+  },
+  "saved_prediction_max_absolute_error": {
+    "logistic": 1.1102230246251565e-16,
+    "xgboost": 2.9800415024539006e-08
+  },
+  "official_ids_verified": true,
+  "annual_target_consistency_verified": true,
+  "cv_scope": "Fixed conventional configurations; not nested search evaluation; no new TabICL CV",
+  "holdout_status": "Repeatedly inspected during historical development; exploratory comparisons"
+}

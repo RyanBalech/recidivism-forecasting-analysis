@@ -9,3 +9,4 @@ artifacts/models/*.pkl
 artifacts/models/*.ckpt
 artifacts/slide_previews/
 *.log
+artifacts/smoke/

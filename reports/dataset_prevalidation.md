@@ -6,7 +6,7 @@
 
 ## Proposed client question
 
-At the start of community supervision, which people are most likely to experience a new arrest within three years? A hypothetical Georgia re-entry agency would use the estimate only to prioritize voluntary, beneficial support such as employment, housing, or treatment services. It would not be used to increase surveillance, restrictions, detention, or punishment.
+At the start of community supervision, which people are most likely to experience a new arrest within three years? A hypothetical community-supervision software vendor would evaluate the estimate for prioritizing voluntary, beneficial support such as employment, housing, or treatment services. It would not be used to increase surveillance, restrictions, detention, or punishment.
 
 ## Why the dataset fits the project
 
@@ -20,9 +20,10 @@ It also contains race and gender, enabling explicit subgroup audits. Those attri
 
 ## Evaluation design
 
-Predictive performance will include ROC AUC, average precision, Brier score, log loss, calibration error, and bootstrap confidence intervals. Economic performance will be a transparent scenario analysis based on support capacity, intervention cost, avoided-event cost, and assumed effectiveness. Interpretability will combine logistic coefficients and model-agnostic held-out permutation importance. Stability will cover bootstrap uncertainty and sensitivity stress tests. Fairness will compare selection, false-positive and true-positive rates, calibration/Brier error, and gaps across race and gender.
+Predictive performance includes probability baselines, ROC AUC, average precision, Brier score, log loss, calibration error, paired bootstrap differences and training-only fixed-configuration CV. Economic value is a scenario based on assumed capacity, costs and effectiveness. Interpretability includes SHAP, LIME, XPER, a surrogate and PDP/ICE. Stability compares bootstrap refits; fairness covers race/gender and descriptive intersections. The evaluation partition was repeatedly inspected during development, so independent validation remains necessary.
+
+The cumulative three-year target is a course-project adaptation. NIJ evaluated annual conditional forecasts on changing cohorts; our performance is not comparable to its leaderboard.
 
 ## Key validity guardrail
 
 Variables describing violations, drug tests, employment, programs, and residence changes accrue after supervision begins. They will be excluded from the prediction because using them for a baseline score would leak post-decision information. The outcome is arrest rather than offending, so the report will discuss construct bias, exposure to policing, historical context, and limited transportability beyond Georgia releases from 2013–2015.
-

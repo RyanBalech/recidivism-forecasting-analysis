@@ -143,17 +143,19 @@ def main() -> None:
         fig.savefig(FIGURE_DIR / "lime_individual.png", dpi=180, bbox_inches="tight")
         plt.close(fig)
         summary["lime"] = "ok (features shown in scaled, preprocessed space)"
-    except Exception as exc:  # LIME is illustrative; never block the pipeline on it
-        summary["lime"] = f"failed: {exc!r}"
+        summary["lime_local_surrogate_r2"] = float(exp.score)
+    except Exception as exc:
+        raise RuntimeError("LIME failed; refusing to retain stale explanation artifacts") from exc
 
     # --- PDP + ICE for all three models ---
-    from tabicl import TabICLClassifier
-    tab = TabICLClassifier(n_estimators=2, random_state=RANDOM_SEED, n_jobs=-1)
+    from recidivism.modeling import tabicl_model
+    tab = tabicl_model(RANDOM_SEED)
     tab.fit(*tabicl_frames(X_train, X_train)[:1], split.y_train.to_numpy())
     predictors = {"logistic": models["logistic"].predict_proba, "xgboost": models["xgboost"].predict_proba,
                   "tabicl": lambda X: tab.predict_proba(tabicl_frames(X_train, X)[1])}
-    ice_rows = sample.iloc[:200].reset_index(drop=True)
-    pdp_records = []
+    # Include the SHAP/LIME person as the first ICE curve for all three models.
+    ice_rows = pd.concat([person, sample.drop(index=person_idx).iloc[:199]], ignore_index=True)
+    pdp_records, local_records = [], []
     fig, axes = plt.subplots(len(PDP_FEATURES), 3, figsize=(20, 5.2 * len(PDP_FEATURES)), squeeze=False)
     for r, feat in enumerate(PDP_FEATURES):
         values = X_train[feat].dropna().unique()
@@ -168,6 +170,13 @@ def main() -> None:
             batch = pd.concat([ice_rows.assign(**{feat: v}) for v in values], ignore_index=True)
             batch[feat] = batch[feat].astype(X_train[feat].dtype)
             probs = predict(batch)[:, 1].reshape(len(values), len(ice_rows))
+            baseline_p = float(predict(person)[:, 1][0])
+            for value, probability in zip(values, probs[:, 0]):
+                local_records.append({"model": name, "feature": feat, "value": str(value),
+                                      "original_value": str(person.iloc[0][feat]),
+                                      "baseline_probability": baseline_p,
+                                      "changed_probability": float(probability),
+                                      "change": float(probability - baseline_p)})
             ax = axes[r][c]
             ax.plot(range(len(values)), probs, color=PALETTE[name], alpha=0.07, lw=1)
             ax.plot(range(len(values)), probs.mean(axis=1), color="black", lw=3, label="PDP (average)")
@@ -180,6 +189,7 @@ def main() -> None:
     fig.savefig(FIGURE_DIR / "pdp_ice.png", dpi=150, bbox_inches="tight")
     plt.close(fig)
     pd.DataFrame(pdp_records).to_csv(ARTIFACT_DIR / "pdp_values.csv", index=False)
+    pd.DataFrame(local_records).to_csv(ARTIFACT_DIR / "local_sensitivity.csv", index=False)
 
     summary["tabicl_native_attribution"] = "none: explained only through model-agnostic PDP/ICE and permutation importance"
     (ARTIFACT_DIR / "interpretability_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")

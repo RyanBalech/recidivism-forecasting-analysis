@@ -38,7 +38,7 @@ from recidivism.metrics import (
     fairness_gaps,
     fairness_table,
 )
-from recidivism.modeling import logistic_model, tabicl_frames, xgboost_model
+from recidivism.modeling import logistic_model, tabicl_frames, tabicl_model, xgboost_model
 
 
 DISPLAY_NAMES = {
@@ -76,19 +76,8 @@ def fit_models(include_tabicl: bool = True) -> tuple[dict, dict[str, np.ndarray]
     if include_tabicl:
         # Imported here so a quick --skip-tabicl CPU run does not load PyTorch
         # or require the foundation-model checkpoint.
-        from tabicl import TabICLClassifier
-
         train_num, test_num = tabicl_frames(split.X_train, split.X_test)
-        model = TabICLClassifier(
-            # Two ensemble views balance quality with the available 6 GB GPU.
-            # The representation cache speeds up repeated permutation audits.
-            n_estimators=2,
-            batch_size=1,
-            kv_cache="repr",
-            random_state=RANDOM_SEED,
-            n_jobs=-1,
-            verbose=True,
-        )
+        model = tabicl_model(RANDOM_SEED)
         start = time.perf_counter()
         model.fit(train_num, split.y_train.to_numpy())
         predictions["tabicl"] = model.predict_proba(test_num)[:, 1]
@@ -141,7 +130,7 @@ def audit(models: dict, predictions: dict[str, np.ndarray], context: dict) -> No
             # when one raw field is shuffled and all other fields stay intact?
             result = permutation_importance(
                 models[name], X_sample, y_sample, scoring="neg_brier_score",
-                n_repeats=5, random_state=RANDOM_SEED, n_jobs=-1,
+                n_repeats=5, random_state=RANDOM_SEED, n_jobs=1,
             )
             for feature, mean, std in zip(X_sample.columns, result.importances_mean, result.importances_std):
                 importance_rows.append({"model": name, "feature": feature, "importance": mean, "std": std})
@@ -206,6 +195,7 @@ def audit(models: dict, predictions: dict[str, np.ndarray], context: dict) -> No
         "features": list(split.X_train.columns),
         "protected_attributes_used_for_audit_only": ["Gender", "Race"],
         "tabicl_estimators": 2 if "tabicl" in predictions else 0,
+        "tabicl_device": str(models["tabicl"].device_) if "tabicl" in predictions and hasattr(models["tabicl"], "device_") else "auto/not recorded",
     }, ARTIFACT_DIR / "run_manifest.json")
     make_figures(split.y_test, predictions, metrics, fairness, importance)
 
@@ -270,9 +260,16 @@ def make_figures(y: pd.Series, predictions: dict[str, np.ndarray], metrics: pd.D
 
 def main() -> None:
     """Command-line entry point: create folders, train, audit, and print results."""
+    global ARTIFACT_DIR, MODEL_DIR, FIGURE_DIR
     parser = argparse.ArgumentParser()
     parser.add_argument("--skip-tabicl", action="store_true", help="Train only the two conventional models.")
+    parser.add_argument("--output-dir", type=Path, help="Write a separate run without replacing published artifacts.")
     args = parser.parse_args()
+    if args.output_dir is not None:
+        ARTIFACT_DIR = args.output_dir.resolve()
+    elif args.skip_tabicl:
+        ARTIFACT_DIR = ARTIFACT_DIR / "smoke"
+    MODEL_DIR, FIGURE_DIR = ARTIFACT_DIR / "models", ARTIFACT_DIR / "figures"
     for directory in [ARTIFACT_DIR, MODEL_DIR, FIGURE_DIR]:
         directory.mkdir(parents=True, exist_ok=True)
     models, predictions, context = fit_models(include_tabicl=not args.skip_tabicl)

@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from recidivism.config import ARTIFACT_DIR, FIGURE_DIR, RANDOM_SEED
-from recidivism.metrics import expected_calibration_error
+from recidivism.metrics import expected_calibration_error, capacity_selection
 
 MODELS = ["logistic", "xgboost", "tabicl"]
 DISPLAY = {"logistic": "Logistic regression", "xgboost": "XGBoost", "tabicl": "TabICLv2"}
@@ -41,8 +41,7 @@ def rates(y: np.ndarray, sel: np.ndarray) -> dict[str, float]:
 
 
 def gaps(y, p, group, a, b, rule):
-    thr = 0.5 if rule == "threshold_0.5" else np.quantile(p, 1 - CAPACITY)
-    sel = p >= thr
+    sel = p >= 0.5 if rule == "threshold_0.5" else capacity_selection(p, CAPACITY)
     ra, rb = rates(y[group == a], sel[group == a]), rates(y[group == b], sel[group == b])
     return {k: ra[k] - rb[k] for k in ra}
 
@@ -87,9 +86,9 @@ def frontier(pred: pd.DataFrame) -> pd.DataFrame:
     """For race AND gender: group-blind capacity sweep, plus group thresholds equalizing FPR.
 
     Group thresholds are an analytic device to trace the fairness/utility frontier, not a
-    shipping recommendation (applying a different decision threshold by race or gender is
-    disparate treatment). We also record the calibration cost of equalizing, since forcing
-    equal error rates when base rates differ decalibrates the minority group.
+    shipping recommendation. This search uses evaluation labels, so its result is an
+    optimistic, in-sample illustration, not validated mitigation. Threshold changes leave
+    probabilities (and their calibration) unchanged.
     """
     y = pred["actual"].to_numpy()
     rows = []
@@ -99,7 +98,7 @@ def frontier(pred: pd.DataFrame) -> pd.DataFrame:
         for model in MODELS:
             p = pred[f"p_{model}"].to_numpy()
             for cap in np.round(np.arange(0.05, 0.51, 0.05), 2):
-                sel = p >= np.quantile(p, 1 - cap)
+                sel = capacity_selection(p, cap)
                 fa, fb = rates(y[g == a], sel[g == a]), rates(y[g == b], sel[g == b])
                 rows.append({"model": model, "attribute": attr, "method": "group_blind_single_threshold",
                              "capacity": cap, "fpr_gap": fa["fpr"] - fb["fpr"], "captured_events": int(y[sel].sum())})

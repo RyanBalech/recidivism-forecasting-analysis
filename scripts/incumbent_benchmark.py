@@ -35,9 +35,10 @@ def build_scores() -> tuple[pd.Series, dict[str, np.ndarray]]:
     preds = pd.read_csv(ARTIFACT_DIR / "test_predictions.csv")
     y = split.y_test.to_numpy()
     assert (preds["actual"].to_numpy() == y).all(), "prediction file is out of sync with the split"
+    assert np.array_equal(preds.ID, split.audit_test.ID), "prediction IDs are out of order"
 
     incumbent = split.X_test["Supervision_Risk_Score_First"]
-    incumbent = incumbent.fillna(incumbent.median()).to_numpy(dtype=float)
+    incumbent = incumbent.fillna(split.X_train["Supervision_Risk_Score_First"].median()).to_numpy(dtype=float)
     rng = np.random.default_rng(RANDOM_SEED)
 
     scores = {"random": rng.random(len(y)), "incumbent": incumbent}

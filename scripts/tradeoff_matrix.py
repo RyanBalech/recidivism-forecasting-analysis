@@ -34,7 +34,7 @@ def main() -> None:
     rows = [
         ("PERFORMANCE", None),
         ("ROC AUC (held-out)", {x: (f"{m.loc[x,'roc_auc']:.3f}", None) for x in MODELS}),
-        ("Brier / calibration", {x: (f"{m.loc[x,'brier']:.3f}", None) for x in MODELS}),
+        ("Brier loss", {x: (f"{m.loc[x,'brier']:.3f}", None) for x in MODELS}),
         ("Net value @20% ($M)", {x: (f"{m.loc[x,'economic_assumed_net_value']/1e6:.2f}", None) for x in MODELS}),
         ("INTERPRETABILITY", None),
         ("Local explanation", {"logistic": ("coefficients", GREEN), "xgboost": ("SHAP + surrogate", AMBER),
@@ -53,12 +53,14 @@ def main() -> None:
     ]
 
     # Auto-colour numeric rows: best = green, worst = red, middle = amber.
-    lower_better = {"Brier / calibration", "Score drift across refits", "Race FPR gap",
+    lower_better = {"Brier loss", "Score drift across refits", "Race FPR gap",
                     "Gender FPR gap", "Train+predict (s)"}
     for label, cells in rows:
         if cells is None or any(c[1] for c in cells.values()):
             continue
         vals = {x: float(cells[x][0].replace("%", "").replace(",", "")) for x in MODELS}
+        if label in {"Race FPR gap", "Gender FPR gap"}:
+            vals = {x: abs(v) for x, v in vals.items()}
         order = sorted(vals, key=vals.get, reverse=label not in lower_better)
         colour = {order[0]: GREEN, order[1]: AMBER, order[2]: RED}
         for x in MODELS:

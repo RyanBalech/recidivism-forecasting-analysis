@@ -26,6 +26,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from recidivism.config import ARTIFACT_DIR, FIGURE_DIR
 from recidivism.data import load_official_split
+from recidivism.metrics import capacity_selection
 from recidivism.modeling import logistic_model, tabicl_frames, xgboost_model
 
 REFITS = {"logistic": 8, "xgboost": 8, "tabicl": 4}
@@ -36,8 +37,8 @@ PALETTE = {"logistic": "#234E70", "xgboost": "#FB8500", "tabicl": "#7B2CBF"}
 
 def refit(name: str, X: pd.DataFrame, y: pd.Series, X_test: pd.DataFrame, seed: int):
     if name == "tabicl":
-        from tabicl import TabICLClassifier
-        m = TabICLClassifier(n_estimators=2, random_state=seed, n_jobs=-1)
+        from recidivism.modeling import tabicl_model
+        m = tabicl_model(seed)
         train, test = tabicl_frames(X, X_test)
         m.fit(train, y.to_numpy())
         return m.predict_proba(test)[:, 1], None
@@ -71,8 +72,8 @@ def main() -> None:
                 importances.append(shap_importance(model, X_sample, name))
             print(f"{name} refit {seed + 1}/{n_refits} ({time.perf_counter() - start:.0f}s)", flush=True)
         for i, j in itertools.combinations(range(n_refits), 2):
-            top_i = set(np.argsort(-preds[i])[:k])
-            top_j = set(np.argsort(-preds[j])[:k])
+            top_i = set(np.flatnonzero(capacity_selection(preds[i], CAPACITY)))
+            top_j = set(np.flatnonzero(capacity_selection(preds[j], CAPACITY)))
             pair_rows.append({
                 "model": name,
                 "mean_abs_prob_diff": float(np.mean(np.abs(preds[i] - preds[j]))),

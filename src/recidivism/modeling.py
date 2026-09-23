@@ -88,7 +88,7 @@ def xgboost_model(frame: pd.DataFrame, random_state: int = 42, **overrides) -> P
     Hyperparameters come from XGB_PARAMS (5-fold CV search in scripts/tune_xgboost.py);
     pass overrides for smaller/faster fits (e.g. learning curves, stability refits).
     """
-    params = {**XGB_PARAMS, **overrides}
+    params = {**XGB_PARAMS, "n_jobs": -1, **overrides}
     return Pipeline([
         ("ordinal", FunctionTransformer(ordinal_encode)),
         ("prepare", preprocessor(ordinal_encode(frame))),
@@ -97,7 +97,6 @@ def xgboost_model(frame: pd.DataFrame, random_state: int = 42, **overrides) -> P
             objective="binary:logistic",
             eval_metric="logloss",
             tree_method="hist",
-            n_jobs=-1,
             random_state=random_state,
         )),
     ])
@@ -118,3 +117,10 @@ def tabicl_frames(X_train: pd.DataFrame, X_test: pd.DataFrame) -> tuple[pd.DataF
     categorical = X_train.select_dtypes(exclude="number").columns
     modes = X_train[categorical].mode().iloc[0]
     return X_train.fillna(modes), X_test.fillna(modes)
+
+
+def tabicl_model(random_state=42):
+    """One shared inference configuration for training, app and secondary audits."""
+    from tabicl import TabICLClassifier
+    return TabICLClassifier(n_estimators=2, batch_size=1, kv_cache="repr",
+                            random_state=random_state, n_jobs=-1)

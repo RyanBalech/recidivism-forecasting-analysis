@@ -35,7 +35,7 @@ def main() -> None:
 
     fig, (axf, axa) = plt.subplots(1, 2, figsize=(17, 6.2))
 
-    stages = ["Audit @0.5\n(naive)", "Audit @ top-20%\n(deployed point)", "Group-threshold\nmitigation"]
+    stages = ["Audit @0.5\n(reference)", "Audit @ top-20%\n(deployed point)", "Group thresholds\n(in-sample)"]
     x = range(len(stages))
     for model, colour in zip(models, [NAVY, ORANGE, "#7B2CBF"]):
         axf.plot(x, [at05[model], at20[model], mit[model]], marker="o", ms=11, lw=3,
@@ -45,7 +45,7 @@ def main() -> None:
     axf.set_title("Fairness journey: gender false-positive gap", fontweight="bold")
     axf.axhline(0, color="grey", lw=1)
     axf.legend(fontsize=10)
-    axf.annotate("Same model — the naive 0.5\naudit overstated the gap 2–4×",
+    axf.annotate("Different decisions produce\ndifferent group error rates",
                  xy=(1, at20["tabicl"]), xytext=(0.35, 0.20), fontsize=9,
                  arrowprops=dict(arrowstyle="->", color=GREY))
 
@@ -56,14 +56,14 @@ def main() -> None:
     bars = axa.bar(stages_a, auc, color=colours)
     axa.set_ylim(0.724, 0.734)
     axa.set_ylabel("XGBoost held-out ROC AUC")
-    axa.set_title("Accuracy journey: XGBoost (near the data ceiling)", fontweight="bold")
+    axa.set_title("Historical XGBoost development (reused evaluation set)", fontweight="bold")
     axa.axhline(0.7338, ls="--", color="#7B2CBF", lw=1.5)
     axa.text(3.4, 0.7339, "TabICL 0.734", color="#7B2CBF", fontsize=9, ha="right")
     for bar, v in zip(bars, auc):
         axa.text(bar.get_x() + bar.get_width() / 2, v + 0.0002, f"{v:.4f}", ha="center", fontsize=10)
     axa.tick_params(axis="x", labelsize=10)
 
-    fig.suptitle("Where we started and where we landed (measured)", fontsize=15, fontweight="bold")
+    fig.suptitle("Historical experiments and operating-point comparisons", fontsize=15, fontweight="bold")
     fig.tight_layout(rect=[0, 0, 1, 0.96])
     fig.savefig(FIGURE_DIR / "improvement_journey.png", dpi=180, bbox_inches="tight")
     plt.close(fig)
