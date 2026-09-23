@@ -37,11 +37,11 @@ def _binary_target(series: pd.Series) -> pd.Series:
 
 
 def load_official_split(path: str | Path = DATA_PATH) -> DatasetSplit:
-    """Load the post-challenge data and recreate NIJ's untouched 70/30 split.
+    """Load the post-challenge data and recreate NIJ's original 70/30 split.
 
     We do not make a new random split. ``Training_Sample`` identifies the exact
     rows NIJ originally released for training, leaving the other 7,807 people as
-    a genuinely held-out evaluation cohort.
+    an evaluation cohort excluded from fitting (not an unused research holdout).
     """
     data = pd.read_csv(path)
 
@@ -51,8 +51,12 @@ def load_official_split(path: str | Path = DATA_PATH) -> DatasetSplit:
     missing = required.difference(data.columns)
     if missing:
         raise ValueError(f"Dataset is missing required columns: {sorted(missing)}")
-    if data[ID_COLUMN].duplicated().any():
-        raise ValueError("ID must be unique")
+    if data[ID_COLUMN].isna().any() or data[ID_COLUMN].duplicated().any():
+        raise ValueError("ID must be nonmissing and unique")
+    if not data[SPLIT_COLUMN].isin([0, 1]).all():
+        raise ValueError("Training_Sample must contain only 0 and 1")
+    if set(data[SPLIT_COLUMN].unique()) != {0, 1}:
+        raise ValueError("Both training and test partitions must be nonempty")
 
     y = _binary_target(data[TARGET])
     train_mask = data[SPLIT_COLUMN].eq(1)

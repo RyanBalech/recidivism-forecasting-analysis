@@ -12,7 +12,7 @@ This guide separates the original NIJ variables from the transformations created
 | `nij-challenge2021_test_dataset_2.csv` | 5,460 × 49 | People remaining after Year 1, with supervision-activity fields added. | No |
 | `nij-challenge2021_test_dataset_3.csv` | 4,146 × 49 | People remaining after Year 2. | No |
 
-The project uses the full file only because it now contains the outcomes and the official `Training_Sample` flag. Records with `Training_Sample = 1` form the 18,028-row training set; records with `0` form the untouched 7,807-row test set.
+The project uses the full file only because it now contains the outcomes and the official `Training_Sample` flag. Records with `Training_Sample = 1` form the 18,028-row training set; records with `0` form the 7,807-row evaluation set (subsequently reused during development).
 
 ## Representative raw rows
 
@@ -120,9 +120,9 @@ The phrase “created features” refers to machine-readable transformations of 
 4. Missing categorical values are filled with the training-set mode.
 5. Each categorical value becomes a binary one-hot column. Examples include `Age_at_Release_18-22`, `Gang_Affiliated_Yes`, and `Prison_Offense_Drug`.
 
-This converts 29 raw model inputs into **108 transformed columns** for logistic regression and XGBoost. TabICLv2 instead receives the 29-column mixed-type table and uses its own categorical encoder and learned normalization.
+Logistic regression uses this one-hot representation. XGBoost first converts ordered age/prison bands and capped counts into numeric ranks, so its transformed matrix differs. The models share 29 raw inputs, not an identical number of transformed columns. TabICLv2 receives the mixed-type table after training-mode categorical imputation and uses its own encoder/normalization.
 
-No interaction terms, synthetic people, aggregate risk index, external census fields, race proxies, or post-release variables were added.
+No synthetic people, external census fields or post-release variables were added. Existing baseline inputs may nevertheless carry proxy information about protected attributes.
 
 ## Features created for evaluation, not prediction
 
@@ -140,7 +140,7 @@ The pipeline also creates outputs used to understand the models:
 | Bootstrap intervals | Sampling uncertainty across 400 resamples |
 | Economic scenario fields | Results under editable capacity, cost, and effectiveness assumptions |
 
-These evaluation fields are never fed back into the models.
+These fields are not model inputs. Historical research decisions did inspect evaluation results, so the evaluation cohort is not an untouched model-selection holdout.
 
 ## Where this is implemented
 
@@ -149,4 +149,3 @@ These evaluation fields are never fed back into the models.
 - Preprocessing and model definitions: [`src/recidivism/modeling.py`](../src/recidivism/modeling.py)
 - Metrics and economic scenario: [`src/recidivism/metrics.py`](../src/recidivism/metrics.py)
 - Saved held-out predictions: [`artifacts/test_predictions.csv`](../artifacts/test_predictions.csv)
-

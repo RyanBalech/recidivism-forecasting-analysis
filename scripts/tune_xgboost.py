@@ -35,9 +35,9 @@ SPACE = {
 def main() -> None:
     split = load_official_split()
     search = RandomizedSearchCV(
-        xgboost_model(split.X_train), SPACE, n_iter=60, scoring="roc_auc",
+        xgboost_model(split.X_train, n_jobs=1), SPACE, n_iter=60, scoring="roc_auc",
         cv=StratifiedKFold(5, shuffle=True, random_state=RANDOM_SEED),
-        n_jobs=-1, random_state=RANDOM_SEED,
+        n_jobs=2, random_state=RANDOM_SEED,
     )
     search.fit(split.X_train, split.y_train)
     best = {k.removeprefix("model__"): (round(float(v), 4) if isinstance(v, float) else int(v))

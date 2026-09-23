@@ -34,8 +34,8 @@ def main() -> None:
     # (label, {model: (text, colour)}) — one row per sub-metric, grouped by the four dimensions.
     rows = [
         ("PERFORMANCE", None),
-        ("ROC AUC (held-out)", {x: (f"{m.loc[x,'roc_auc']:.3f}", None) for x in MODELS}),
-        ("Brier / calibration", {x: (f"{m.loc[x,'brier']:.3f}", None) for x in MODELS}),
+        ("ROC AUC (evaluation)", {x: (f"{m.loc[x,'roc_auc']:.3f}", None) for x in MODELS}),
+        ("Brier loss", {x: (f"{m.loc[x,'brier']:.3f}", None) for x in MODELS}),
         ("Net value @20% ($M)", {x: (f"{m.loc[x,'economic_assumed_net_value']/1e6:.2f}", None) for x in MODELS}),
         ("INTERPRETABILITY", None),
         ("Local explanation", {"logistic": ("coefficients", GREEN), "xgboost": ("SHAP + surrogate", AMBER),
@@ -55,7 +55,7 @@ def main() -> None:
     ]
 
     # Auto-colour numeric rows: best = green, worst = red, middle = amber.
-    lower_better = {"Brier / calibration", "Score drift across refits", "Race FNR gap (B − W)",
+    lower_better = {"Brier loss", "Score drift across refits", "Race FNR gap (B − W)",
                     "Gender FNR gap (M − F)", "Age FNR gap (<33 − 33+)", "Train+predict (s)"}
     # Gaps are signed; the size of the gap is what matters.
     by_size = {"Race FNR gap (B − W)", "Gender FNR gap (M − F)", "Age FNR gap (<33 − 33+)"}

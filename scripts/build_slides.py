@@ -6,6 +6,7 @@ from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
 from pptx.util import Inches, Pt
+from PIL import Image
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -61,6 +62,12 @@ def card(slide, label, value, x, y, color=ORANGE, note=""):
 
 
 def picture(slide, path, x, y, w):
+    # Keep tall figures inside the content area rather than clipping the footer.
+    with Image.open(path) as img:
+        ratio = img.height / img.width
+    fitted_width = min(w, (6.85 - y) / ratio)
+    x += (w - fitted_width) / 2
+    w = fitted_width
     slide.shapes.add_picture(str(path), Inches(x), Inches(y), width=Inches(w))
 
 
@@ -77,6 +84,7 @@ inc_econ = pd.read_csv(ART / "incumbent_economics.csv").set_index("ranker")["ass
 inf = pd.read_csv(ART / "fairness_inference.csv")
 fpr20 = inf[(inf.rule == "top_20pct") & (inf.metric == "fpr")].pivot_table(index="model", columns="attribute", values="gap")
 pred = pd.read_csv(ART / "test_predictions.csv")
+stability = pd.read_csv(ART / "stability_summary.csv").set_index("model")
 
 prs = Presentation()
 prs.slide_width, prs.slide_height = Inches(13.333), Inches(7.5)
@@ -84,7 +92,7 @@ prs.slide_width, prs.slide_height = Inches(13.333), Inches(7.5)
 # 1 — Title
 s = make_slide(prs)
 textbox(s, "TRUSTWORTHY AI / RECIDIVISM", .72, .58, 8, .3, 12, ORANGE, True)
-textbox(s, "Better than the tool\nagencies already use", .72, 1.42, 8, 1.65, 36, WHITE, True)
+textbox(s, "Forecasting risk,\nexamining trade-offs", .72, 1.42, 8, 1.65, 36, WHITE, True)
 textbox(s, "For a risk-assessment software vendor: which three-year re-arrest model to ship, judged on performance, interpretability, stability and fairness", .76, 3.35, 6.6, 1.4, 17, PALE)
 textbox(s, "Team 11 · HEC Paris · Fall 2026", .76, 6.62, 7, .3, 11, GREY)
 panel(s, "0.60 → 0.73", "Incumbent score vs our models (ROC AUC)\n\n3 model families\n\n1 deployment recommendation", 8.55, .9, 3.65, 5.75, PURPLE)
@@ -97,40 +105,40 @@ bullets(s, ["Client: a vendor selling risk-assessment tools to US state communit
             "Judged as a trustworthy AI system, not on accuracy alone"], y=1.85, size=22); footer(s, 2)
 
 # 3 — Data design
-s = make_slide(prs); title(s, "A clean test set and a strict time boundary", "02 · Data design")
-card(s, "TRAIN", "18,028", .8, 1.9); card(s, "UNTOUCHED TEST", "7,807", 3.75, 1.9, PURPLE)
+s = make_slide(prs); title(s, "Original split, with explicit validation limits", "02 · Data design")
+card(s, "TRAIN", "18,028", .8, 1.9); card(s, "EVALUATION", "7,807", 3.75, 1.9, PURPLE)
 card(s, "BASELINE FIELDS", "29", 6.7, 1.9); card(s, "TEST TARGET RATE", f"{pred.actual.mean():.1%}", 9.65, 1.9, PURPLE)
-bullets(s, ["Post-release violations, tests, programs and employment excluded to prevent leakage",
-            "Race, gender and residence geography excluded from scoring; kept only in the audit layer",
-            "Balanced outcome (57.8%), so no resampling; official NIJ split preserves an honest evaluation"], y=3.72, h=2.4, size=20); footer(s, 3)
+bullets(s, ["Post-release variables excluded; race, gender and geography retained only for audit",
+            "Found and fixed a representation leak: missing gang affiliation exactly marked women; mode-fill plus a regression audit now blocks it",
+            "Evaluation data were repeatedly inspected during development; fresh validation is still needed"], y=3.62, h=2.65, size=18); footer(s, 3)
 
 # 4 — Three models
 s = make_slide(prs); title(s, "Three model families, one comparison", "03 · Model design")
-panel(s, "LOGISTIC", "White-box anchor\n\nRegularized linear score\n\nSigned, inspectable effects", .7, 1.9, color=ORANGE)
+panel(s, "LOGISTIC", "White-box anchor\n\nCV-tuned L1, C=0.2154\n\nSigned, inspectable effects", .7, 1.9, color=ORANGE)
 panel(s, "XGBOOST", "Nonlinear workhorse\n\nOrdinal counts + 5-fold CV tuning\n\nFast operational scoring", 4.8, 1.9, color=TEAL)
-panel(s, "TABICLv2", "Foundation model\n\nPretrained in-context transformer\n\nNo training, no native explanation", 8.9, 1.9, color=PURPLE)
+panel(s, "TABICLv2", "Foundation model\n\n16-member GPU ensemble\n\nTraining-only size sweep; no native attribution implemented", 8.9, 1.9, color=PURPLE)
 textbox(s, "Same eligible fields · Same held-out people · Same metrics", 2.5, 6.22, 8.3, .4, 17, ORANGE, True, PP_ALIGN.CENTER); footer(s, 4)
 
 # 5 — Incumbent benchmark (the hook)
-s = make_slide(prs); title(s, "Is any of this better than today's tool?", "04 · The client's real question")
+s = make_slide(prs); title(s, "Comparison with the historical recorded score", "04 · The client's real question")
 picture(s, FIG / "incumbent_benchmark.png", .35, 1.7, 9.1)
 card(s, "INCUMBENT AUC", f"{inc_auc['incumbent']:.2f}", 9.75, 1.9, RED)
 card(s, "OUR MODELS AUC", "0.73", 9.75, 3.5, TEAL)
 card(s, "NET VALUE GAIN", f"+${(inc_econ['xgboost']-inc_econ['incumbent'])/1e6:.1f}M", 9.75, 5.1, ORANGE)
-textbox(s, "The existing 1–10 actuarial score is barely better than a coin flip at ranking. Any model nearly doubles net value.", 1.0, 6.85, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 5)
+textbox(s, "This historical comparison does not establish superiority to current agency products. Dollar gains are scenarios.", 1.0, 6.85, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 5)
 
 # 6 — Predictive performance
-s = make_slide(prs); title(s, "Among the three: a near-tie, XGBoost calibrates best", "05 · Predictive performance")
+s = make_slide(prs); title(s, "Compare ranking, probability loss and calibration", "05 · Predictive performance")
 picture(s, FIG / "performance_calibration.png", .45, 1.72, 8.05)
-card(s, "BEST AUC · TABICL", f"{metrics.loc['tabicl','roc_auc']:.4f}", 9.25, 1.9, PURPLE)
-card(s, "BEST BRIER · TABICL", f"{metrics.loc['tabicl','brier']:.4f}", 9.25, 3.5, PURPLE)
-card(s, "BEST ECE · XGBOOST", f"{metrics.loc['xgboost','ece_10']:.4f}", 9.25, 5.1, ORANGE)
-textbox(s, "Bootstrap 95% intervals overlap — the ranking among the three is not decisive.", 1.0, 6.85, 11, .3, 11, GREY, True, PP_ALIGN.CENTER); footer(s, 6)
+card(s, "AUC · TABICL", f"{metrics.loc['tabicl','roc_auc']:.4f}", 9.25, 1.9, PURPLE)
+card(s, "BRIER · TABICL", f"{metrics.loc['tabicl','brier']:.4f}", 9.25, 3.5, PURPLE)
+card(s, "ECE · XGBOOST", f"{metrics.loc['xgboost','ece_10']:.4f}", 9.25, 5.1, ORANGE)
+textbox(s, "Paired bootstrap compares differences directly; see paired_comparisons.csv. Results remain exploratory.", 1.0, 6.85, 11, .3, 11, GREY, True, PP_ALIGN.CENTER); footer(s, 6)
 
 # 7 — Learning curve
 s = make_slide(prs); title(s, "Which model for which agency size?", "06 · Learning curve")
 picture(s, FIG / "learning_curve.png", .8, 1.8, 11.7)
-textbox(s, "TabICLv2 leads on small data (small county); XGBoost catches up as data grows (large state). No crossover — but the gap closes to +0.004 at full data.", 1.0, 6.7, 11, .5, 13, ORANGE, True, PP_ALIGN.CENTER); footer(s, 7)
+textbox(s, "Subsamples of one Georgia cohort test sample-size sensitivity; they do not validate transfer to other agencies.", 1.0, 6.7, 11, .5, 13, ORANGE, True, PP_ALIGN.CENTER); footer(s, 7)
 
 # 8 — Economic performance
 s = make_slide(prs); title(s, "Model value is a scenario, stress-tested", "07 · Economic performance")
@@ -141,30 +149,30 @@ bullets(s, ["$5,000 support cost · $50,000 event cost · 20% assumed effectiven
             "A randomized or quasi-experimental pilot must estimate real intervention impact"], y=3.72, size=20); footer(s, 8)
 
 # 9 — Interpretability
-s = make_slide(prs); title(s, "Every prediction, and the performance, explained", "08 · Interpretability")
+s = make_slide(prs); title(s, "Prediction explanations and their limits", "08 · Interpretability")
 picture(s, FIG / "shap_individual.png", .4, 1.7, 8.3)
-panel(s, "METHODS", "SHAP + LIME (local)\n\nXPER on AUC (Pérignon)\n\nGlobal surrogate R²=0.61\n\nPDP/ICE for all three", 9.0, 1.7, 3.9, 4.9, PURPLE)
+panel(s, "METHODS", "SHAP + LIME (local)\n\nXPER on AUC (Pérignon)\n\nGlobal surrogate: imperfect fidelity\n\nPDP/ICE for all three", 9.0, 1.7, 3.9, 4.9, PURPLE)
 textbox(s, "TabICLv2 has no native explanation path — a real deployment cost, covered only by model-agnostic PDP/ICE.", 1.0, 6.75, 11, .3, 11, RED, True, PP_ALIGN.CENTER); footer(s, 9)
 
 # 10 — Stability
 s = make_slide(prs); title(s, "Structural stability across refits on resampled data", "09 · Stability")
 picture(s, FIG / "structural_stability.png", .5, 1.75, 8.3)
-card(s, "SCORE DRIFT · TABICL", "0.045", 9.35, 1.9, RED)
-card(s, "TOP-20% OVERLAP", "73–77%", 9.35, 3.5, ORANGE)
-textbox(s, "~1 person in 4 changes priority status across refits — scores need governance. TabICLv2 is least stable (4 refits vs 8, a stated cost trade-off).", 1.0, 6.75, 11, .4, 11, GREY, True, PP_ALIGN.CENTER); footer(s, 10)
+card(s, "SCORE DRIFT · TABICL", f"{stability.loc['tabicl','mean_abs_prob_diff']:.3f}", 9.35, 1.9, RED)
+card(s, "TABICL JACCARD", f"{stability.loc['tabicl','top20_jaccard']:.1%}", 9.35, 3.5, ORANGE)
+textbox(s, "Jaccard is intersection / union, not the share of people switching. Refit sensitivity is not temporal validation.", 1.0, 6.75, 11, .4, 11, GREY, True, PP_ALIGN.CENTER); footer(s, 10)
 
 # 11 — Fairness at the deployed point
-s = make_slide(prs); title(s, "Fairness, audited where we actually deploy", "10 · Subgroup audit")
-picture(s, FIG / "fairness_operating_point.png", .4, 1.7, 8.5)
+s = make_slide(prs); title(s, "Fairness at the proposed allocation rule", "10 · Subgroup audit")
+picture(s, FIG / "fairness_support_access.png", .4, 1.7, 8.5)
 card(s, "GENDER FPR · XGB", f"{fpr20.loc['xgboost','Gender']:.3f}", 9.35, 1.9, TEAL)
 card(s, "GENDER FPR · TABICL", f"{fpr20.loc['tabicl','Gender']:.3f}", 9.35, 3.5, RED)
 card(s, "RACE FPR · XGB", f"{fpr20.loc['xgboost','Race']:.3f}", 9.35, 5.1, ORANGE)
-textbox(s, "At the top-20% deployment point, gaps are 2–4× smaller than at 0.5 — audit the point you ship.", 1.0, 6.8, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 11)
+textbox(s, "Different operating points produce different allocations and errors. Audit the proposed policy.", 1.0, 6.8, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 11)
 
 # 12 — Impossibility result
-s = make_slide(prs); title(s, "Our data shows both sides of the impossibility theorem", "11 · Fairness, sharpened")
-panel(s, "RACE — FIXABLE", "Base rates near-equal\n(0.582 vs 0.564)\n\nCalibration + equal error jointly achievable\n\nFPR gap is a model property → group thresholds drive it to ~0", .7, 1.85, 5.75, 4.7, TEAL)
-panel(s, "GENDER — BINDS", "Base rates differ 13.7 pts\n(0.591 vs 0.454)\n\nTheorem binds: cannot equalize both\n\nEqualizing gender FPR decalibrates women — a choice we surface, not hide", 6.85, 1.85, 5.75, 4.7, RED)
+s = make_slide(prs); title(s, "Fairness: probability scores and allocation rules", "11 · Fairness, sharpened")
+panel(s, "SCORE CALIBRATION", "Do probabilities match observed rates?\n\nReport group calibration and uncertainty\n\nChanging decision thresholds leaves probabilities unchanged", .7, 1.85, 5.75, 4.7, TEAL)
+panel(s, "ALLOCATION ERRORS", "FPR, TPR and selection rates depend on policy\n\nEqual FPR alone is not equalized odds\n\nOur threshold frontier uses evaluation labels: illustrative, not validated", 6.85, 1.85, 5.75, 4.7, RED)
 footer(s, 12)
 
 # 13 — Improvement journey (process)
@@ -177,8 +185,8 @@ s = make_slide(prs); title(s, "Which model should the client deploy?", "13 · Tr
 picture(s, FIG / "tradeoff_matrix.png", 2.2, 1.62, 8.9); footer(s, 14)
 
 # 15 — Recommendation
-s = make_slide(prs); title(s, "Deploy XGBoost; challenger logistic; TabICL for small agencies", "14 · Recommendation")
-panel(s, "WHY XGBOOST", "Best calibration + net value\n\nSmallest gender FPR gap\n\nSHAP-explainable\n\n35× faster than the TFM", .8, 1.8, 5.75, 4.65, TEAL)
+s = make_slide(prs); title(s, "Pilot XGBoost; retain logistic as a transparent challenger", "14 · Recommendation")
+panel(s, "WHY XGBOOST", "Competitive probability loss\n\nAudit subgroup errors\n\nSHAP explanations available\n\nLow inference cost", .8, 1.8, 5.75, 4.65, TEAL)
 panel(s, "CONDITIONS", "Benefit-only allocation\n\nLogistic as transparent challenger\n\nProspective shadow validation\n\nAppeal route, logs, quarterly audits, stop rules", 6.8, 1.8, 5.75, 4.65, PURPLE); footer(s, 15)
 
 # 15 — App + roadmap

@@ -4,6 +4,24 @@ Course: HEC Paris — *Interpretability, Stability, and Algorithmic Fairness* (P
 Deliverables due **Mon 28 Sep, 9:40 AM**: slide deck, notebook (data prep → evaluation), client app.
 Presentation 15 min + Q&A 10 min. Every member must defend any section.
 
+## Integration status — research review
+
+The review preserves this team's pending course-aligned work list. Updated code includes the
+merged L1 logistic configuration, ML comparison scripts and readable labels. All dependent
+artifacts are being regenerated using that combined code. See reports/research_review.md.
+
+Methodological corrections take precedence over historical claims below: no proven data ceiling;
+NIJ annual challenge scores are not comparable to our cumulative target; repeated evaluation
+inspection means no untouched holdout; thresholds do not change calibration of unchanged scores;
+Jaccard is not a person-level switching rate. Intersectional results are descriptive with sample
+sizes, not claims that small-cell gaps are reliably estimated. Group-specific policies require
+independent validation and policy review, not a blanket legal conclusion.
+
+Completed by this review: paired model intervals, conventional fixed-configuration CV, calibrated
+incumbent/prevalence baselines, intersectional denominators, model/prediction consistency checks,
+isolated smoke outputs, ordered full reproduction, missing-value-safe app, and corrected
+report/notebook/slides. The original course-method TODOs below remain visible for team ownership.
+
 ## Client and framing
 
 **Client (fictional):** a software vendor that sells risk-assessment tools to US state
@@ -33,7 +51,7 @@ Dynamic supervision variables are excluded to prevent leakage.
   XGBoost is already wired into every audit.
 - **TabICLv2** — Tabular Foundation Model.
 
-## ⚠️ Status 23 Sep, 16:00 — TabICL results are invalid until re-run
+## Historical pre-review status — superseded by integrated rerun
 
 `Gang_Affiliated` is missing for **all 3,167 women and no man**. TabICL encoded NaN as its own
 category, so it could read the excluded Gender attribute. Fixed in PR #1 (`tabicl_frames` now
@@ -86,9 +104,7 @@ Priority = what the brief grades and what the jury will ask. Details under each 
 ## Key findings so far
 
 - All three models plateau at ~0.73 AUC / ~0.20 Brier. Confirmed by CV search (best CV AUC
-  0.7343) and by six ML candidates all landing at 0.728–0.734 CV AUC. This is the data's signal
-  ceiling, matching NIJ challenge winners. **Accuracy is not a grading criterion — report the
-  ceiling in one slide and move on.**
+  0.7343) and by six ML candidates all landing at 0.728–0.734 CV AUC. This is not proof of a signal ceiling; NIJ's annual forecasts have a different target. Statistical performance is part of the brief.
 - **Paired bootstrap on the test set** (same people, 1,000 resamples): XGBoost beats logistic by
   +0.003 AUC and −0.001 Brier, both significant but small; TabICL vs XGBoost is **not** significant
   on AUC, Brier or ECE. **ECE differences are not significant for any pair**, so "calibrates best"
@@ -132,13 +148,10 @@ before the recommendation.
 4. Bootstrap confidence intervals on every gap (syllabus: "metrics and inference tests"). Female =
    950 test rows, so show interval width, not point estimates.
 5. **Impossibility result — split by attribute (corrected):**
-   - Race: base rates nearly equal (0.582 vs 0.564) → calibration and equal error rates are jointly
-     achievable → the observed FPR gap is a model property, therefore fixable.
-   - Gender: base rates differ 13.7 pts (0.591 M vs 0.454 F) → the theorem binds → cannot equalize
-     both, so we choose and justify. This explains why gender gaps exceed race gaps.
+   - Race: similar base rates do not prove joint attainability of fairness criteria or that the gap is fixable.
+   - Gender: differing base rates motivate examining trade-offs, but descriptive rates do not prove why a particular model has a gap. Thresholds leave score calibration unchanged.
 6. Mitigation + accuracy/fairness frontier. **Legal caveat (Q&A exposure):** group-specific
-   thresholds by race = disparate treatment (Ricci v. DeStefano) and contradict excluding race from
-   inputs. Present group thresholds as an *analytic device to trace the frontier*, then show a
+   group-aware policies need context-specific policy/legal review and independent validation. Present group thresholds as an *analytic device to trace the frontier*, then show a
    race-blind alternative (single threshold minimizing the gap, or pre/in-processing) and its cost.
    Note that scoping to service allocation (not sanctions) changes the legal calculus.
    **[TODO] Re-target the frontier to gender FNR**, and add the course's mitigation (below).
@@ -160,10 +173,10 @@ look for:
   at 18–22 vs 44% at 48+). Add an age-group audit (selection rate, FNR by age band) and a stated
   justification: age is a legitimate, validated risk factor, and in a support-allocation product a
   higher score means *more* help for younger people. Expect this question.
-- Intersectional cells are small (339 Black women in test): do not report race × gender gaps.
+- Intersectional cells are small (339 Black women in test): report descriptive counts/metrics with uncertainty caveats; avoid categorical fairness claims.
 - **Course-style mitigation:** neutralize candidate variables with and without re-estimation,
   report SP p-value + AUC (pp. 261–262), instead of relying only on group thresholds.
-- **Fairness equivalence (TOST, tolerance δ):** "not significant" ≠ "fair". Use TOST to *certify*
+- **Fairness equivalence (TOST, tolerance δ):** "not significant" ≠ "fair". Use a prespecified equivalence margin and TOST to assess whether
   that race gaps are within δ (e.g. 5 pts) — the only way to claim race fairness honestly.
 - Explain the gender gap with the impossibility result + within-group calibration (pre-fix: logistic
   and XGBoost over-predict women, 0.52 vs 0.454 observed; re-check TabICL after the fix).
@@ -211,9 +224,7 @@ for all three, XPER. Readable feature labels everywhere (`config.pretty`; no mor
 14. **[TODO] Full re-run after the leak fix**, in this order (TabICL on CPU ≈ 30–60 min total):
     `train_evaluate` → `interpretability` → `xper_attribution` → `stability_structural` →
     `fairness_audit` → `incumbent_benchmark` → `learning_curve` → `race_ab_test` → `tradeoff_matrix`
-    → `build_notebook` → `build_slides`. Never use `--skip-tabicl` for a real run: it overwrites
-    `test_predictions.csv` / `model_metrics.csv` without the TabICL column and breaks every
-    downstream script and the app.
+    → `build_notebook` → `build_slides`. The review makes `--skip-tabicl` write to `artifacts/smoke/`, preserving published artifacts.
 15. **[TODO] Refresh README, report, deck, notes and JOURNEY.md** with post-fix numbers; add the leak
     to JOURNEY.md as a fairness finding.
 16. **[TODO] Notebook data-preparation section.** The current notebook starts from saved artifacts.
@@ -239,7 +250,7 @@ for all three, XPER. Readable feature labels everywhere (`config.pretty`; no mor
 ## Explicitly not doing
 
 - No SMOTE / class-weighting (data is balanced; would hurt calibration).
-- No further accuracy optimization (proven at ceiling — one slide, one sentence).
+- No further tuning on the reused evaluation set; any new optimization requires training-only validation.
 - LIME as a single illustrative example only, not a full pass.
 
 ## Recommendation to the client (trustworthy-AI wording)

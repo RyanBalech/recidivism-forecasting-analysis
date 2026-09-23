@@ -1,11 +1,11 @@
 condition,weight
-Age_at_Release <= -1.02,0.17897677730383135
-Prior_Arrest_Episodes_Felony > 1.02,0.07925068479043856
-Prior_Arrest_Episodes_Property > 0.94,0.05143341706685573
-Gang_Affiliated_Yes > 0.00,0.04436859534129911
-_v1 > 0.86,0.04034489426019262
-Prison_Offense_Violent/Sex <= 0.00,0.03510330194991454
--0.14 < Prior_Arrest_Episodes_Misd <= 1.17,0.03272593109642812
-Education_Level_High School Diploma <= 0.00,-0.02547339883186354
-Prior_Conviction_Episodes_Misd > 0.80,0.023760377573848926
-0.00 < Condition_MH_SA_No <= 1.00,-0.022920062927086402
+Prior_Arrest_Episodes_Felony > 1.02,0.08233278584724459
+Prior_Arrest_Episodes_Property > 0.94,0.06033633031161336
+Gang_Affiliated_Yes > 0.00,0.04647440468116146
+_v1 > 0.86,0.04102268571055747
+Prison_Offense_Violent/Sex <= 0.00,0.040110770979211556
+Condition_MH_SA_No <= 0.00,0.03430079618824009
+Supervision_Risk_Score_First > 0.82,0.032033842902370824
+0.00 < Education_Level_High School Diploma <= 1.00,0.028345319930598436
+-0.14 < Prior_Arrest_Episodes_Misd <= 1.17,0.027983315292927514
+-1.02 < Age_at_Release <= 0.04,0.027519619659317707

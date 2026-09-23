@@ -1,5 +1,15 @@
 # Improvement journey — where we started, what we tried, where we landed
 
+> Historical development log, superseded where noted by the September research review.
+> Use current generated artifacts for numerical results. This log documents repeated
+> evaluation-set inspection, so it cannot support an untouched-holdout claim. The later
+> review corrected threshold/calibration reasoning, Jaccard interpretation, and unsupported
+> claims about a data ceiling or present-day agency tools; see reports/research_review.md.
+
+## GPU ensemble and merge hardening (23 September 2026)
+
+Team work was merged without discarding the methodology audit. The shared TabICLv2 configuration now uses 16 ensemble members on CUDA, and all three model families receive eight bootstrap stability refits. The incoming ensemble sweep originally read the reused evaluation labels; it was moved to a fixed stratified development slice of the training partition before the final full-training fit. A systematic leakage audit and regression test also guard the gender-aligned `Gang_Affiliated` missingness fix. These changes improve compute depth and consistency without relabeling the evaluation set as untouched.
+
 This is the process log for the jury: the starting point of each dimension, every change we tried
 (including the ones we **rejected**), the measured result, and why. Every number here is reproducible
 from `scripts/` and `artifacts/`; git history has the commit-level trail. Figure:
@@ -29,8 +39,8 @@ current `main`.
 
 - **Landed:** XGBoost 0.7326 AUC, best calibration of the three. CV best was 0.7343; held-out 0.7326.
 - **Key decision:** we then **stopped optimizing accuracy.** All three models (and the NIJ challenge
-  winners) sit at ~0.73–0.74 — the data's signal ceiling. Chasing more is not gradeable and not the
-  point of the course. Proven, not asserted (three model classes + a CV search all converge).
+  historical runs) sit at similar AUC values. This is not proof of a data ceiling; NIJ's annual
+  challenge scores concern a different target and are not directly comparable.
 - Logistic stayed 0.7295; TabICLv2 0.7338. The tuning closed the XGBoost–TabICL gap from 0.0037 to
   0.0012 but did **not** overtake it — we say so plainly.
 
@@ -66,12 +76,12 @@ current `main`.
 | Fix 2 | **Bootstrap 95% CIs** on every gap (inference test) | e.g. logistic race gap at top-20% is **not** significant |
 | Fix 3 | **Impossibility result, split by attribute** | race base rates ≈equal (0.582/0.564) → gap **fixable**; gender differ 13.7 pts (0.591/0.454) → theorem **binds** |
 | Fix 4 | **Mitigation frontier**, first race-only | group thresholds drive race gap → ~0 keeping ~all events |
-| Fix 5 | **Extended mitigation to gender** (reviewer caught race-only) | gender gap 0.072 → **0.002**, keeps 1,287/1,295 events — **but decalibrates women** (base-rate gap 0.137) |
+| Fix 5 | **Extended exploratory threshold search to gender** | Historical gap 0.072 → 0.002 on the same labels used to optimize; unchanged probabilities retain unchanged calibration |
 | Fix 6 | **Race A/B + twin test** | adding race changes AUC ≤0.0007 but makes twins differ up to 4.8 pts; removing it is free + fairer, though TabICL shows proxy leakage |
 
 - **Landed:** fairness is the centerpiece, audited at the right operating point, with inference tests,
   a per-attribute theorem story, mitigation for both attributes, and a documented legal caveat
-  (per-group thresholds = disparate treatment, *Ricci v. DeStefano* — shown as an analytic device,
+  (group-specific policy needs independent validation and policy/legal review — shown as an analytic device,
   not a shipping option).
 - Figure: `artifacts/figures/improvement_journey.png` (left panel) shows the gender-gap path.
 

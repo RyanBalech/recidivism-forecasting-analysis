@@ -1,7 +1,7 @@
 """Learning curve: how each model's held-out performance grows with training size.
 
 Trains logistic, XGBoost, and TabICLv2 on stratified subsamples of the official
-training set and scores every run on the same untouched test set.
+training set and scores every run on the same repeatedly inspected evaluation set.
 """
 from __future__ import annotations
 
@@ -37,10 +37,10 @@ def subsample(X: pd.DataFrame, y: pd.Series, n: int, seed: int):
 
 def fit_predict(name: str, X: pd.DataFrame, y: pd.Series, X_test: pd.DataFrame):
     if name == "tabicl":
-        from tabicl import TabICLClassifier
+        from recidivism.modeling import tabicl_model
 
         train, test = tabicl_frames(X, X_test)
-        model = TabICLClassifier(n_estimators=2, random_state=RANDOM_SEED, n_jobs=-1)
+        model = tabicl_model(RANDOM_SEED)
         model.fit(train, y.to_numpy())
         return model.predict_proba(test)[:, 1]
     model = logistic_model(X) if name == "logistic" else xgboost_model(X)
@@ -80,7 +80,7 @@ def main() -> None:
             ax.fill_between(mean.index, mean - std, mean + std, color=PALETTE[name], alpha=0.15)
         ax.set(xscale="log", xlabel="Training rows", ylabel=label)
     axes[0].set_title("Learning curve: discrimination")
-    axes[1].set_title("Learning curve: calibration")
+    axes[1].set_title("Learning curve: probability loss")
     axes[0].legend(fontsize=10)
     fig.tight_layout()
     fig.savefig(FIGURE_DIR / "learning_curve.png", dpi=180, bbox_inches="tight")

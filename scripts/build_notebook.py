@@ -1,157 +1,67 @@
+"""Build and execute the evidence notebook from canonical artifacts."""
 from pathlib import Path
-
 import nbformat as nbf
 from nbclient import NotebookClient
 
-
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "notebooks" / "recidivism_analysis.ipynb"
-
-
-def md(text):
-    return nbf.v4.new_markdown_cell(text)
-
-
-def code(text):
-    return nbf.v4.new_code_cell(text)
-
-
-def fig(name, width=1000):
-    return code(f"display(Image(filename=str(FIG / '{name}'), width={width}))")
-
-
+md = nbf.v4.new_markdown_cell
+code = nbf.v4.new_code_cell
 nb = nbf.v4.new_notebook()
-nb["metadata"]["kernelspec"] = {"display_name": "Python 3", "language": "python", "name": "python3"}
-nb["cells"] = [
-    md("""# Trustworthy recidivism forecasting
-
-**Client:** a software vendor selling risk-assessment tools to US state community-supervision
-agencies. **Task:** pick and justify a three-year re-arrest score to embed in its product, judged on
-predictive performance (statistical + economic), interpretability, stability, and fairness — a
-trustworthy AI system, not a leaderboard.
-
-Models compared: logistic regression (white-box), XGBoost (ML), TabICLv2 (tabular foundation model).
-The outcome is *arrest*, not inherent criminality; this analysis is unsuitable for adverse decisions,
-and the score is scoped to allocating voluntary support only."""),
+nb.metadata.kernelspec = {"display_name": "Python 3", "language": "python", "name": "python3"}
+nb.cells = [
+    md("# Trustworthy recidivism forecasting\n\nClient: a community-supervision software vendor. Compare logistic regression, XGBoost and TabICLv2 for voluntary support prioritization. Target: three-year cumulative new arrest. This differs from NIJ annual conditional forecasting; challenge leaderboard comparisons are invalid."),
     code("""from pathlib import Path
 import json, sys
 import pandas as pd
 from IPython.display import Image, display
-
 ROOT = Path.cwd()
 if not (ROOT / 'artifacts').exists(): ROOT = ROOT.parent
-FIG = ROOT / 'artifacts' / 'figures'
 sys.path.insert(0, str(ROOT / 'src'))
 from recidivism.data import load_official_split
-
-split = load_official_split(ROOT / 'nij-challenge2021_full_dataset.csv')
+split = load_official_split()
 A = lambda name: pd.read_csv(ROOT / 'artifacts' / name)
-metrics = A('model_metrics.csv')
-predictions = A('test_predictions.csv')
-print(f'Train: {len(split.X_train):,} | Test: {len(split.X_test):,} | Features: {split.X_train.shape[1]}')
-print(f'Base recidivism rate (test): {predictions.actual.mean():.1%}')"""),
-    md("""## Design and leakage control
-
-The official `Training_Sample` flag defines the untouched 18,028 / 7,807 split. Only fields available
-at supervision start are eligible; post-release variables are excluded because they accrue after the
-scoring moment. Race, gender and Residence PUMA (a race proxy) are excluded from inputs and kept for
-audit only. Ordered counts are ordinal-encoded; XGBoost hyperparameters come from a 5-fold CV search
-(`scripts/tune_xgboost.py`). Full pipeline in `scripts/train_evaluate.py`.
-
-Set `RUN_TRAINING = True` to rebuild every artifact (TabICLv2 runs on CPU here, ~2 min)."""),
-    code("""RUN_TRAINING = False
-if RUN_TRAINING:
-    import subprocess
-    for s in ['train_evaluate','incumbent_benchmark','learning_curve','fairness_audit',
-              'interpretability','stability_structural','race_ab_test','tradeoff_matrix']:
-        subprocess.run([sys.executable, str(ROOT / f'scripts/{s}.py')], cwd=ROOT, check=True)"""),
-    md("""## 1. The client's real question: better than the incumbent?
-
-`Supervision_Risk_Score_First` is Georgia's existing 1–10 actuarial tool, already in the data. We
-benchmark it against our models and random allocation. (145 test rows miss the score; imputed at the
-median.)"""),
-    code("pd.merge(A('incumbent_discrimination.csv'), A('incumbent_economics.csv')[['ranker','assumed_net_value']], on='ranker').round(3)"),
-    fig("incumbent_benchmark.png", 1100),
-    md("The incumbent reaches only ~0.60 AUC; every model reaches ~0.73 and roughly doubles net value. "
-       "This is the headline for the client — the choice among our three models is secondary."),
-    md("## 2. Predictive performance (statistical)"),
-    code("metrics[['model','roc_auc','average_precision','brier','log_loss','ece_10','fit_predict_seconds']].round(4).sort_values('brier')"),
-    fig("performance_calibration.png"),
-    code("""intervals = json.loads((ROOT / 'artifacts/bootstrap_intervals.json').read_text())
-pd.concat({m: pd.DataFrame(v).T for m, v in intervals.items()}, names=['model','metric']).round(4)"""),
-    md("TabICLv2 has marginally the best discrimination and Brier; XGBoost the best calibration (ECE). "
-       "Bootstrap 95% intervals overlap, so the ranking among the three is not decisive."),
-    md("""### Learning curve: which model for which agency size?
-
-Train sizes 1,500 / 5,000 / 10,000 (3 seeds each) plus the full 18,028 (single seed), all scored on
-the fixed test set."""),
-    code("A('learning_curve.csv').groupby(['model','n_train']).roc_auc.agg(['mean','std']).round(4)"),
-    fig("learning_curve.png", 1100),
-    md("TabICLv2's few-shot advantage is real on small data (a small county) and shrinks to +0.004 AUC "
-       "at full data (a large state). No crossover — but at scale the cheaper, explainable model suffices."),
-    md("## 3. Economic performance"),
-    code("""from recidivism.metrics import economic_value
-pd.DataFrame([{'model': m, **economic_value(predictions.actual, predictions[f'p_{m}'])}
-              for m in ['logistic','xgboost','tabicl']]).round(3)"""),
-    md("A transparent scenario ($5k support, $50k event, 20% effectiveness), not a causal estimate. The "
-       "app exposes a sensitivity sweep; models beat the incumbent at every capacity from 5% to 50%."),
-    md("## 4. Interpretability (all three models)"),
-    fig("shap_global.png"),
-    fig("shap_individual.png"),
-    md("SHAP: global drivers and an individual waterfall for logistic and XGBoost. Age at release, gang "
-       "affiliation, prior felony arrests and prison tenure recur. A LIME explanation of the same person "
-       "(`artifacts/lime_individual.csv`) tells a consistent local story via a different mechanism."),
-    md("**XPER** (Hué–Hurlin–Pérignon–Saurin) decomposes the model's *AUC* into feature contributions — "
-       "performance attribution, complementary to SHAP's prediction attribution."),
-    code("A('xper_values.csv').query(\"~feature.str.startswith('benchmark')\", engine='python').sort_values('xper', ascending=False).groupby('model').head(6).round(4)"),
-    fig("xper.png", 1100),
-    md("**Global surrogate**: a depth-3 tree mimics XGBoost (test fidelity R² below) — enough to narrate "
-       "the logic, not to replace the model. **PDP/ICE** cover all three models, including TabICLv2, which "
-       "has no native attribution path (a deployment cost, stated openly)."),
-    code("json.loads((ROOT / 'artifacts/interpretability_summary.json').read_text())"),
-    fig("global_surrogate.png", 1100),
-    fig("pdp_ice.png", 1100),
-    md("## 5. Stability (structural)"),
-    code("A('stability_summary.csv').round(4)"),
-    fig("structural_stability.png", 1100),
-    md("Each model refit on bootstrap resamples of the training data (logistic/XGBoost 8 refits, "
-       "TabICLv2 4 — a stated CPU cost trade-off). About one person in four changes priority status "
-       "across refits; TabICLv2 drifts most. Event dates are unavailable, so temporal stability is a "
-       "deployment gate on a later cohort."),
-    md("## 6. Fairness"),
-    md("### Gaps at the deployed operating point, with inference tests\n"
-       "The product allocates the top 20% by risk, so we audit there (and at 0.5) with bootstrap 95% CIs."),
-    code("""inf = A('fairness_inference.csv')
-inf[(inf.rule=='top_20pct') & inf.metric.isin(['fpr','tpr','selection_rate'])].round(3).sort_values(['attribute','metric','model'])"""),
-    fig("fairness_operating_point.png", 1100),
-    md("Auditing at 0.5 would overstate gaps 2–4× (TabICLv2 gender 0.272 at 0.5 vs 0.072 at top-20%)."),
-    md("### The impossibility result, split by attribute"),
-    code("A('fairness_impossibility.csv').round(3)"),
-    md("""Race base rates barely differ (0.582 vs 0.564) → calibration and equal error rates are
-near-jointly achievable, so the race FPR gap is a *model property*. Gender base rates differ by 13.7
-points (0.591 vs 0.454) → the theorem binds; because race is excluded, logistic/XGBoost over-predict
-women. This explains why gender gaps exceed race gaps."""),
-    md("### Mitigation frontier (race and gender)\n"
-       "Group-specific thresholds trace the fairness/utility frontier. They are an **analytic device**, "
-       "not a shipping option — a per-race/gender threshold is disparate treatment (Ricci v. DeStefano)."),
-    code("A('fairness_frontier.csv').query(\"method=='group_thresholds_equal_fnr'\").round(4)"),
-    fig("fairness_frontier.png", 1100),
-    md("Group thresholds drive both gaps to ~0 keeping nearly all captured events — but equalizing "
-       "*gender* decalibrates women (base-rate gap 0.137), the trade-off the theorem forces."),
-    md("### A/B test: does race add anything?"),
-    code("A('race_ab_test.csv').round(4)"),
-    md("Adding race changes AUC by ≤0.0007 for every model but makes identical twins score differently "
-       "(up to 4.8 pts for XGBoost). Removing race is free and guarantees identical twins — though "
-       "TabICLv2's race gap rises slightly, evidence of proxy leakage (the limit of unawareness)."),
-    md("## 7. Trade-offs and recommendation"),
-    fig("tradeoff_matrix.png", 1100),
-    md("""Performance is a near-tie, so the decision turns on interpretability, fairness, stability and
-cost. **Deploy XGBoost** (best calibration and net value, smallest gender gap, SHAP-explainable, 35×
-faster than the TFM), **logistic as transparent challenger**, **TabICLv2 only for very small
-agencies** where its few-shot edge is real. Any deployment is benefit-only, with a prospective pilot,
-an appeal route, quarterly subgroup audits at the deployed operating point, and stop rules."""),
+print(f'Training: {len(split.X_train):,}; evaluation: {len(split.X_test):,}; features: {split.X_train.shape[1]}')
+"""),
+    md("## Reproduce\n\nRun scripts/reproduce.py for the complete pipeline. The evaluation partition is excluded from fitting, but was repeatedly inspected during development. It is not an untouched final holdout. This notebook executes the reporting layer; source scripts provide all fitting/audits."),
+    md("## Data preparation\n\nOnly baseline fields are eligible. Outcomes, IDs, split flags, protected attributes, geography and post-release supervision activities are excluded from model inputs. Imputation and scaling are learned within training pipelines. Logistic uses tuned L1 with one-hot categories; XGBoost ordinal-encodes ordered fields; TabICL mode-imputes categorical missingness before its mixed-data encoder. This neutralizes the gender-aligned `Gang_Affiliated` missingness channel; `scripts/leakage_audit.py` enforces the check."),
+    code("""from recidivism.config import FEATURE_COLUMNS, BASELINE_COLUMNS, DATA_PATH
+raw = pd.read_csv(DATA_PATH)
+display(pd.Series({'training_target_rate': split.y_train.mean(), 'evaluation_target_rate': split.y_test.mean()}))
+display(pd.DataFrame({'feature': raw.columns, 'used_for_scoring': [c in FEATURE_COLUMNS for c in raw.columns]}))
+display(raw.assign(gang_missing=raw.Gang_Affiliated.isna()).groupby('Gender').gang_missing.agg(['mean','sum','count']))
+display(split.X_train.isna().mean().sort_values(ascending=False).head(10))
+"""),
+    md("## Performance and baselines\n\nThe incumbent is a historical recorded score, not evidence about tools agencies use today. Constant prevalence and incumbent calibration are learned on training records."),
+    code("display(A('model_metrics.csv')); display(A('validation_baselines.csv'))"),
+    md("## Foundation-model compute sensitivity\n\nThe 16-member TabICLv2 configuration is checked on a fixed stratified development slice carved only from the training partition. This is a compute/robustness sensitivity check, not final validation."),
+    code("display(A('estimator_sweep.csv')); display(Image(filename=str(ROOT / 'artifacts/figures/estimator_sweep.png'), width=900))"),
+    md("## Paired uncertainty and training CV\n\nDifferences are A minus B: positive AUC favors A, negative Brier favors A. Paired bootstrap preserves the correlation between model errors. Marginal intervals are exploratory and unadjusted for development selection or multiple comparisons. Fixed-configuration CV is not nested evaluation of the earlier search."),
+    code("display(A('paired_comparisons.csv')); display(A('validation_cv.csv').groupby('model')[['roc_auc','brier']].agg(['mean','std']))"),
+    md("## Economic scenarios\n\nEffectiveness and costs are assumed, not estimated causal savings. Exact capacity uses stable row-order ties; this matters particularly for the discrete incumbent."),
+    code("display(A('incumbent_economics.csv'))"),
+    md("## Interpretability\n\nSHAP and LIME explain conventional models; XPER approximates performance attribution on a small sample. Surrogate fidelity is imperfect. TabICLv2 has PDP/ICE, permutation and interactive sensitivity, but no implemented native additive attribution. These are model-response explanations, not causal effects."),
+    code("display(A('shap_importance.csv').groupby('model').head(8)); display(A('xper_values.csv')); display(json.loads((ROOT/'artifacts/interpretability_summary.json').read_text()))"),
+    md("Logistic odds ratios below are per transformed unit (numeric inputs are standardized), not causal effects. Local sensitivity changes one field of the same explained person for all three models; it is not an additive attribution."),
+    code("display(A('logistic_coefficients.csv')); display(A('local_sensitivity.csv'))"),
+    md("## Stability\n\nJaccard is intersection/union, not the fraction of people retaining status. At equal selected-set size, replaced fraction is (1-J)/(1+J). Refits do not measure temporal stability; pairwise comparisons share refits."),
+    code("stability = A('stability_summary.csv'); stability['selected_set_replacement'] = (1-stability.top20_jaccard)/(1+stability.top20_jaccard); display(stability)"),
+    md("## Fairness\n\nThresholds change decisions, not calibration of unchanged probabilities. Equal FPR alone is not equalized odds. The group-threshold frontier optimizes using evaluation labels: an optimistic in-sample illustration, not validated mitigation. Removing race does not remove proxies or prove counterfactual fairness."),
+    code("display(A('fairness_inference.csv')); display(A('intersectional_audit.csv')); display(A('race_ab_test.csv'))"),
+    md("### Equivalence tests and course test table\n\nFor a support programme the harm is a missed offer, so FNR (equal opportunity) and selection rate (statistical parity) are primary; FPR is secondary. A difference test that fails to reject does not show fairness: `equivalent_within_delta` is a TOST at a pre-set ±5-point tolerance, and an interval that is neither significant nor equivalent is inconclusive. The course table gives p-values at the top-20% rule; conditional statistical parity conditions on the historical supervision score."),
+    code("inf = A('fairness_inference.csv'); display(inf[(inf.rule == 'top_20pct') & inf.metric.isin(['fnr', 'selection_rate', 'fpr'])]); display(A('fairness_tests.csv')); display(A('fairness_age_bands.csv')); display(A('fairness_frontier.csv').query(\"method == 'group_thresholds_equal_fnr'\"))"),
+    md("### Fairness interpretability (FPDP) and mitigation\n\nFPDP varies one input and re-evaluates the equal-opportunity test for logistic and XGBoost (TabICLv2 is excluded for compute cost). Candidate variables are diagnostic associations, not causes; removal and re-estimation report the AUC cost alongside the fairness change."),
+    code("display(A('fairness_candidates.csv')); display(A('fairness_mitigation.csv'))"),
 ]
-
+for name in ["performance_calibration", "incumbent_benchmark", "learning_curve", "shap_individual",
+             "pdp_ice", "structural_stability", "fairness_support_access", "fairness_operating_point", "fairness_frontier", "fairness_dependence",
+             "tradeoff_matrix"]:
+    nb.cells.append(code(f"display(Image(filename=str(ROOT / 'artifacts/figures/{name}.png'), width=1000))"))
+nb.cells.extend([
+    md("## Recommendation\n\nPilot XGBoost prospectively with logistic as a transparent challenger. Weigh errors, explanation cost, refit stability and runtime together. Small-sample results do not establish suitability for smaller agencies elsewhere. Require independent validation, benefit evidence, corrections/appeals and monitoring before real allocation. No adverse use."),
+    code("display(json.loads((ROOT/'artifacts/validation_manifest.json').read_text()))"),
+    md("References and requirement coverage: reports/research_review.md. Detailed methodological limits: reports/technical_report.md."),
+])
 OUT.parent.mkdir(exist_ok=True)
 NotebookClient(nb, timeout=1200, kernel_name="python3", resources={"metadata": {"path": str(ROOT)}}).execute()
 nbf.write(nb, OUT)

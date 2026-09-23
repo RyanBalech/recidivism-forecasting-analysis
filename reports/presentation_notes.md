@@ -1,105 +1,48 @@
-# 15-minute presentation notes
+# Presentation and Q&A notes
 
-Timing target ~13 min talk + buffer. Every member must be able to defend any slide.
+Aim for 13 minutes plus a two-minute buffer. Every team member should rehearse every section. Use the rebuilt artifact values; historical JOURNEY.md numbers are not the current run.
 
-## 1 — Title / thesis (0:45)
-We are a consultancy for a vendor that sells risk-assessment tools to US community-supervision
-agencies. The headline: our models don't just work, they clearly beat the tool agencies use today.
-The talk judges three models on performance, interpretability, stability, fairness.
+## Talk sequence
 
-## 2 — Client and decision (0:45)
-The score ranks people for *voluntary* re-entry support at supervision start. Never sanctions or
-surveillance. Outcome is a recorded arrest — institutionally mediated — so we predict the recorded
-outcome, not inherent propensity.
+1. **Client and decision (1 minute):** a software vendor assessing models for voluntary re-entry support. Recorded arrest is the outcome, not inherent offending.
+2. **Data and validation (1.5 minutes):** original 18,028/7,807 partition; baseline-only features; cumulative target differs from NIJ annual forecasting. Explain that evaluation data were repeatedly inspected and how the gender-aligned missingness leak was removed.
+3. **Models and performance (2 minutes):** logistic, XGBoost, 16-member TabICLv2; historical score and prevalence baselines; Brier skill and paired differences. The ensemble sweep uses a training-only development split. Do not infer no difference from overlapping individual intervals.
+4. **Economic scenario (1 minute):** transparent assumed costs/effectiveness and exact capacity. Historical captured outcomes are not causal savings.
+5. **Interpretability (1.5 minutes):** explain one SHAP case, its log-odds scale, and surrogate fidelity. XPER attributes performance on a small sample. TabICL has model-response sensitivity but no implemented native additive attribution.
+6. **Stability (1 minute):** probability drift and Jaccard; different refit budgets. Jaccard is not the fraction of people switching.
+7. **Fairness (2 minutes):** actual proposed capacity rule versus 0.5; group and intersectional denominators. Changing thresholds leaves score calibration unchanged. The mitigation frontier uses evaluation labels.
+8. **Recommendation and app (2 minutes):** prospective XGBoost shadow pilot, logistic challenger, clear deployment gates. Demo missing-value preservation, optional TFM inference, explanations and editable economic assumptions.
 
-## 3 — Data design (1:00)
-18,028 / 7,807 official NIJ split. Post-release variables excluded (leakage — they accrue after the
-score). Race, gender, PUMA excluded from inputs, kept for audit. Balanced outcome (57.8%), no
-resampling.
+## Questions to rehearse
 
-## 4 — Three models (0:45)
-Logistic (white-box), XGBoost (ordinal counts + 5-fold CV tuning), TabICLv2 (foundation model, no
-training, no native explanation). Same fields, same test cohort.
+**Is this an NIJ competition reproduction?** No. Our cumulative three-year baseline task is a valid course adaptation. NIJ evaluated annual conditional forecasts on changing cohorts.
 
-## 5 — Incumbent benchmark — the hook (1:30)
-`Supervision_Risk_Score_First` is Georgia's existing 1–10 tool. Alone it scores **0.60 AUC** — barely
-better than a coin flip at ranking. Our models hit **0.73** and roughly double net value ($2.75M →
-$5.1–5.3M). That is the client's real question, answered. The choice among our three is secondary.
+**Is your test set untouched?** No. It is excluded from fitting, but historical model-development decisions inspected it. Our comparisons are exploratory; confirm on new data.
 
-## 6 — Predictive performance (1:00)
-Among the three: near-tie. TabICL best AUC/Brier by a hair; XGBoost best calibration. Bootstrap 95%
-CIs overlap — don't oversell the ranking.
+**Does your new CV fix that?** It adds training-only evidence with fold-local preprocessing. Fixed parameters were previously tuned on that training set, so this is not nested validation of selection.
 
-## 7 — Learning curve (1:15)
-Sizes 1.5k/5k/10k/full. TabICL leads on small data (small county); XGBoost catches up as data grows
-(large state). Gap closes to +0.004, no crossover. This is *why* model choice depends on agency size.
+**Did you use the GPU to improve the result?** Yes. CUDA makes a 16-member TabICLv2 ensemble and eight stability refits feasible. Ensemble size was checked on a training-only development split; XGBoost remains on its deterministic CPU histogram configuration because moving it to CUDA would mainly change runtime, not add independent evidence.
 
-## 8 — Economic performance (0:45)
-20% capacity, editable $5k/$50k/20% scenario. Models beat incumbent at every capacity 5–50%
-(sensitivity sweep). Scenario, not causal savings.
+**What leakage did you find?** `Gang_Affiliated` is missing for every woman in the training sample and no man. TabICL could treat that missing category as a direct gender marker, so categorical missingness is now filled from training modes and guarded by a standalone audit plus a regression test.
 
-## 9 — Interpretability (1:15)
-SHAP global + individual waterfall (logistic, XGBoost); LIME agrees via a different mechanism; XPER
-(Pérignon's method) attributes AUC — age at release is the top driver. Depth-3 surrogate R²=0.61.
-**TabICL has no native explanation path** — a real deployment cost, only PDP/ICE cover it.
+**Why did published numbers change?** The audit detected a saved-XGBoost/prediction mismatch. We rebuilt models and dependent results in one environment and added prediction-agreement checks. Hardware/software differences can also affect TFM outputs; current timings are for this run, not a universal speed ratio.
 
-## 10 — Stability (1:00)
-Refits on resampled data. ~1 person in 4 changes priority status across refits; TabICL least stable
-(and only 4 refits vs 8, a stated CPU cost). Scores need governance. No time split → temporal
-stability is a deployment gate.
+**Why XGBoost?** Competitive probability quality, fast inference, available local explanations and auditable trade-offs. Show current paired intervals and subgroup results; do not claim unqualified superiority.
 
-## 11 — Fairness at the deployed point (1:15)
-Audit at top-20% (what we ship), not 0.5 — gaps are 2–4× smaller there (TabICL gender 0.272→0.072).
-Bootstrap CIs on every gap. XGBoost has the smallest gender gap; TabICL the largest.
+**Did you beat current agency tools?** We compared a historical recorded supervision score in this dataset. We do not know the performance of today's products.
 
-## 12 — Impossibility result (1:15)
-Our data shows both sides. Race base rates near-equal (0.582 vs 0.564) → gap is fixable, group
-thresholds drive it to ~0. Gender differs 13.7 pts (0.591 vs 0.454) → theorem binds, equalizing
-gender FPR **decalibrates women**. We surface the trade-off, we don't hide it.
+**Does equalizing FPR decalibrate women?** No. Unchanged probability scores retain unchanged calibration. Thresholds change classifications, precision, recall and allocations. Equal FPR alone is not equalized odds.
 
-## 13 — Trade-off matrix (1:00)
-The required slide. Performance near-tie → decision driven by interpretability, fairness, cost.
-Walk the green/amber/red columns.
+**Is the threshold frontier valid mitigation?** It is an in-sample illustration optimized using evaluation labels. Real mitigation needs a separate validation protocol and policy review.
 
-## 14 — Recommendation (1:00)
-Deploy XGBoost (best calibration + net value, smallest gender gap, explainable, 35× faster). Logistic
-challenger. TabICL only for very small agencies. Benefit-only, prospective pilot, appeal route,
-quarterly audits, stop rules.
+**Does excluding race establish fairness?** It guarantees invariance to that direct input while fixing the other fields. Proxies and group disparities remain; this is not causal counterfactual fairness.
 
-## 15 — App + close (0:45)
-Demo: score one person across all 3 models + SHAP; fairness at deployed point; incumbent + sensitivity.
-Close on the rule: deploy only if benefit is shown without unacceptable subgroup harm.
+**What does Jaccard 0.75 mean?** Intersection/union is 0.75. For equally sized selected sets, about 14.3% of each selected set is replaced, not 25% of the whole cohort.
 
----
+**Can TabICL explain individuals?** Native additive attribution is not implemented. Feature edits and ICE examine local responses, with no causal interpretation. This limitation belongs in the trade-off assessment.
 
-# Likely Q&A
+**Are dollars savings forecasts?** No. Intervention effects are assumed. Risk ranking may differ from treatment-benefit ranking.
 
-**Did you actually beat the foundation model?** No — at full data it's a near-tie (0.7338 vs 0.7326).
-We don't claim to. Our finding is the crossover *shape* and that both crush the 0.60 incumbent. The
-recommendation rests on trust dimensions, where XGBoost wins.
+**What remains before production?** New-cohort validation, verified input timing, evidence of support benefit, justified tie/eligibility policy, appeals, monitoring and pre-agreed suspension rules.
 
-**Your impossibility claim — does it hold for gender?** No, and that's the point. Race base rates are
-near-equal so the gap is fixable; gender base rates differ 13.7 pts so the theorem binds. Same slide,
-both sides.
-
-**You excluded race, then used race-specific thresholds — explain.** We didn't ship those. Group
-thresholds are an *analytic device* to trace the frontier. A per-race threshold is disparate treatment
-(Ricci v. DeStefano) and contradicts excluding race. The deployment option is the group-blind single
-threshold; we show what a race-blind alternative costs.
-
-**Why audit at top-20% not 0.5?** The product allocates the top 20% by risk, so 0.5 describes an
-operating point we never deploy. Auditing at 0.5 overstates gaps 2–4×.
-
-**Why is TabICL's stability weaker with only 4 refits?** Cost — each TabICL refit is ~73s on CPU vs
-~3s for XGBoost. 4 refits still show it drifts most and has the lowest decision overlap. We disclose
-the asymmetry.
-
-**Why exclude the dynamic variables?** They accrue after the score is made — leakage, and they encode
-supervision intensity that's downstream of the outcome.
-
-**Is the economic number credible?** It's a scenario, not a savings forecast — every assumption is
-editable, and the ranking vs incumbent holds across the whole sensitivity sweep. Real impact needs a
-prospective randomized/quasi-experimental study.
-
-**What would make you stop the model?** Calibration drift, growing subgroup gaps at the deployed point,
-data-quality failure, evidence of adverse use, or no net benefit in the pilot.
+**What does the team still need to do?** Submit the dataset for pre-validation by 24 September 2026 at 09:40, rehearse the demo/Q&A, and submit deliverables by 28 September at 09:40. The supplied brief requires a 15-minute presentation and 10-minute Q&A.

@@ -1,6 +1,6 @@
 """Visualize the process: where each dimension started and where it landed.
 
-Two panels: (1) the fairness gender-FPR-gap journey (0.5 audit -> deployed-point audit ->
+Two panels: (1) the fairness gender-FNR-gap journey (0.5 audit -> deployed-point audit ->
 group-threshold mitigation), the clearest 'we improved this' story; (2) the XGBoost accuracy
 journey (baseline -> ordinal -> CV-tuned, with the rejected deeper-tree attempt marked).
 Numbers are measured in this project; see JOURNEY.md for the full log and sources.
@@ -36,7 +36,7 @@ def main() -> None:
 
     fig, (axf, axa) = plt.subplots(1, 2, figsize=(17, 6.2))
 
-    stages = ["Audit @0.5\n(naive)", "Audit @ top-20%\n(deployed point)", "Group-threshold\nmitigation"]
+    stages = ["Audit @0.5\n(reference)", "Audit @ top-20%\n(deployed point)", "Group thresholds\n(in-sample)"]
     x = range(len(stages))
     for model, colour in zip(models, [NAVY, ORANGE, "#7B2CBF"]):
         axf.plot(x, [at05[model], at20[model], mit[model]], marker="o", ms=11, lw=3,
@@ -57,7 +57,7 @@ def main() -> None:
     bars = axa.bar(stages_a, auc, color=colours)
     axa.set_ylim(0.724, 0.734)
     axa.set_ylabel("XGBoost held-out ROC AUC")
-    axa.set_title("Accuracy journey: XGBoost (near the data ceiling)", fontweight="bold")
+    axa.set_title("Historical XGBoost development (reused evaluation set)", fontweight="bold")
     tab_auc = float(pd.read_csv(ARTIFACT_DIR / "model_metrics.csv").set_index("model").loc["tabicl", "roc_auc"])
     axa.axhline(tab_auc, ls="--", color="#7B2CBF", lw=1.5)
     axa.text(3.4, tab_auc + 0.0001, f"TabICL {tab_auc:.4f}", color="#7B2CBF", fontsize=9, ha="right")
@@ -65,7 +65,7 @@ def main() -> None:
         axa.text(bar.get_x() + bar.get_width() / 2, v + 0.0002, f"{v:.4f}", ha="center", fontsize=10)
     axa.tick_params(axis="x", labelsize=10)
 
-    fig.suptitle("Where we started and where we landed (measured)", fontsize=15, fontweight="bold")
+    fig.suptitle("Historical experiments and operating-point comparisons", fontsize=15, fontweight="bold")
     fig.tight_layout(rect=[0, 0, 1, 0.96])
     fig.savefig(FIGURE_DIR / "improvement_journey.png", dpi=180, bbox_inches="tight")
     plt.close(fig)

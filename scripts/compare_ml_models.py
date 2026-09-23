@@ -58,7 +58,7 @@ def candidates(frame: pd.DataFrame) -> dict[str, tuple[Pipeline, dict | None]]:
 
     return {
         "logistic": (logistic_model(frame), None),
-        "xgboost": (xgboost_model(frame), None),
+        "xgboost": (xgboost_model(frame, n_jobs=1), None),
         "lightgbm": (_pipeline(frame, LGBMClassifier(random_state=RANDOM_SEED, verbose=-1, n_jobs=1)), {
             "model__n_estimators": randint(200, 1500),
             "model__learning_rate": loguniform(5e-3, 1e-1),
@@ -108,15 +108,16 @@ def main() -> None:
         start = time.perf_counter()
         if space:
             search = RandomizedSearchCV(pipe, space, n_iter=n_iter, scoring="roc_auc", cv=cv,
-                                        n_jobs=-1, random_state=RANDOM_SEED)
+                                        n_jobs=2, random_state=RANDOM_SEED)
             search.fit(split.X_train, split.y_train)
             pipe = search.best_estimator_
             params_out[name] = {k.removeprefix("model__"): (round(float(v), 4) if isinstance(v, float) else v)
                                 for k, v in search.best_params_.items()}
         search_seconds = time.perf_counter() - start
 
-        # Out-of-fold probabilities: every training row is scored by a model that never saw it.
-        oof = cross_val_predict(clone(pipe), split.X_train, split.y_train, cv=cv, method="predict_proba", n_jobs=-1)[:, 1]
+        # Each fold excludes its validation rows from fitting. Hyperparameters were
+        # selected on these same folds, so these are not nested, unbiased OOF estimates.
+        oof = cross_val_predict(clone(pipe), split.X_train, split.y_train, cv=cv, method="predict_proba", n_jobs=2)[:, 1]
         cv_m = classification_metrics(split.y_train, oof)
 
         start = time.perf_counter()

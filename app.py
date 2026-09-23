@@ -34,6 +34,7 @@ def load_results():
         "model_metrics", "test_predictions", "fairness_by_group", "fairness_inference",
         "fairness_impossibility", "fairness_frontier", "incumbent_discrimination", "incumbent_economics",
         "race_ab_test", "stability_summary", "learning_curve", "shap_importance", "permutation_importance",
+        "validation_baselines", "paired_comparisons", "intersectional_audit",
     ]}
 
 
@@ -43,11 +44,13 @@ def load_split():
 
 
 @st.cache_resource
-def load_models():
+def load_models(include_tabicl=False):
     split = load_split()
     models = {name: joblib.load(ARTIFACT_DIR / "models" / f"{name}.joblib") for name in ["logistic", "xgboost"]}
-    from tabicl import TabICLClassifier
-    tab = TabICLClassifier(n_estimators=2, random_state=RANDOM_SEED, n_jobs=-1)
+    if not include_tabicl:
+        return models
+    from recidivism.modeling import tabicl_model
+    tab = tabicl_model(RANDOM_SEED)
     tab.fit(tabicl_frames(split.X_train, split.X_train)[0], split.y_train.to_numpy())
     models["tabicl"] = tab
     return models
@@ -63,7 +66,7 @@ def predict(models, name, frame):
 def figure(name: str, caption: str | None = None):
     path = FIGURE_DIR / name
     if path.exists():
-        st.image(str(path), caption=caption, use_container_width=True)
+        st.image(str(path), caption=caption, width="stretch")
     else:
         st.caption(f"Figure `{name}` not generated yet — run the matching script in `scripts/`.")
 
@@ -77,6 +80,7 @@ if data["model_metrics"] is None or data["test_predictions"] is None:
     st.error("Run `python scripts/train_evaluate.py` first to create the audit artifacts.")
     st.stop()
 metrics, predictions = data["model_metrics"], data["test_predictions"]
+LABELS = {m: label for m, label in LABELS.items() if f"p_{m}" in predictions}
 metrics["Model"] = metrics.model.map(LABELS)
 thresholds = {m: float(np.quantile(predictions[f"p_{m}"], 1 - CAPACITY)) for m in LABELS}
 
@@ -87,8 +91,10 @@ tab_ind, tab_cmp, tab_fair, tab_stab, tab_econ, tab_gov = st.tabs([
 with tab_ind:
     st.subheader("Score one person with all three models")
     split = load_split()
-    with st.spinner("Loading models (the foundation model needs about a minute on CPU the first time)…"):
-        models = load_models()
+    include_tabicl = st.checkbox("Include TabICLv2 live inference (slower first load)", value=False,
+                                disabled="tabicl" not in LABELS)
+    with st.spinner("Loading selected models…"):
+        models = load_models(include_tabicl)
     source_row = st.selectbox("Start from a held-out record", range(min(250, len(split.X_test))),
                               format_func=lambda i: f"Record {int(split.audit_test.iloc[i].ID)}")
     row = split.X_test.iloc[[source_row]].copy()
@@ -96,25 +102,26 @@ with tab_ind:
                 "Prison_Years", "Prior_Arrest_Episodes_Felony", "Prior_Revocations_Parole"]
     cols = st.columns(4)
     for i, col in enumerate(editable):
-        options = sorted(split.X_train[col].dropna().unique(), key=lambda x: str(x))
+        options = [None, *sorted(split.X_train[col].dropna().unique(), key=lambda x: str(x))]
         current = row.iloc[0][col]
-        index = options.index(current) if current in options else 0
-        row.loc[:, col] = cols[i % 4].selectbox(pretty(col), options, index=index)
+        index = options.index(current) if pd.notna(current) and current in options else 0
+        value = cols[i % 4].selectbox(pretty(col), options, index=index,
+                                     format_func=lambda v: "Missing" if v is None else str(v))
+        row.loc[:, col] = np.nan if value is None else value
 
-    scores = {m: float(predict(models, m, row[FEATURE_COLUMNS])[0]) for m in LABELS}
+    scores = {m: float(predict(models, m, row[FEATURE_COLUMNS])[0]) for m in models if m in LABELS}
     cols = st.columns(3)
     for col, (m, p) in zip(cols, scores.items()):
         priority = p >= thresholds[m]
         col.metric(LABELS[m], f"{p:.1%}", "Priority for support (top 20%)" if priority else "Standard support",
                    delta_color="off")
-    st.caption("Priority = score in the top 20% of the held-out cohort for that model, i.e. the service capacity used in the business case.")
+    st.caption("Priority is a comparison to a historical cohort cutoff. Edited records are hypothetical; this is not a live allocation guarantee. Cohort audits allocate exactly round(n × capacity), breaking ties by row order.")
 
     st.markdown("**Why this score? Local explanation**")
     explain_model = st.radio("Explain with", ["xgboost", "logistic", "tabicl"], format_func=LABELS.get, horizontal=True)
     if explain_model == "tabicl":
-        st.warning("The foundation model has no native attribution method, and model-agnostic SHAP is too slow for "
-                   "interactive use. This is a real deployment cost: a caseworker cannot be told *why* TabICL scored "
-                   "this person. See the PDP/ICE figure in the comparison tab for its global behaviour.")
+        st.info("TabICLv2 has no native attribution method in this project. PDP/ICE describe model responses; "
+                "the feature edits above allow local sensitivity exploration. Neither identifies causal effects.")
     else:
         from interpretability import shap_for
         values, _ = shap_for(models[explain_model], split.X_train.sample(300, random_state=0), row[FEATURE_COLUMNS], explain_model)
@@ -125,7 +132,7 @@ with tab_ind:
         fig = px.bar(contrib, x="contribution", y="feature", color="direction", orientation="h",
                      color_discrete_map={"raises risk": "#C1121F", "lowers risk": "#2A9D8F"},
                      title=f"SHAP contributions (log-odds), {LABELS[explain_model]}")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     st.markdown("**Race twin test**")
     st.caption("Race, gender and residence geography are not model inputs, so two people identical except for race "
@@ -136,10 +143,16 @@ with tab_cmp:
     st.subheader("Held-out performance (7,807 people never seen in training)")
     display = metrics[["Model", "roc_auc", "average_precision", "brier", "ece_10", "fit_predict_seconds"]].copy()
     display.columns = ["Model", "ROC AUC", "Average precision", "Brier ↓", "Calibration error ↓", "Runtime (s)"]
-    st.dataframe(display.style.format({c: "{:.3f}" for c in display.columns[1:]}), use_container_width=True, hide_index=True)
+    st.dataframe(display.style.format({c: "{:.3f}" for c in display.columns[1:]}), width="stretch", hide_index=True)
+    st.caption("Original evaluation partition, repeatedly inspected during development. Results are exploratory; model fitting excludes these records.")
+    if data["paired_comparisons"] is not None:
+        with st.expander("Paired uncertainty and probability baselines"):
+            st.write("Differences are A minus B: positive AUC favors A; negative Brier favors A. Intervals are exploratory and unadjusted for multiple comparisons.")
+            st.dataframe(data["paired_comparisons"].round(5), width="stretch", hide_index=True)
+            st.dataframe(data["validation_baselines"].round(4), width="stretch", hide_index=True)
     if data["incumbent_discrimination"] is not None:
-        st.markdown("**Against the tool agencies use today** (`Supervision_Risk_Score_First`, 1–10 actuarial score)")
-        st.dataframe(data["incumbent_discrimination"].round(3), use_container_width=True, hide_index=True)
+        st.markdown("**Historical recorded-score benchmark** (`Supervision_Risk_Score_First`, 1–10 score)")
+        st.dataframe(data["incumbent_discrimination"].round(3), width="stretch", hide_index=True)
     figure("learning_curve.png", "Learning curve: the foundation model leads on small data; the gap closes as data grows.")
     c1, c2 = st.columns(2)
     with c1:
@@ -150,6 +163,8 @@ with tab_cmp:
 
 with tab_fair:
     st.subheader("Fairness audit by race, gender, and age")
+    st.write("For beneficial support, missed access matters: inspect FNR (1 − TPR) and selection rates first. Arrest is only a proxy for need; these errors do not identify treatment benefit.")
+    figure("fairness_support_access.png", "FNR and selection-rate gaps at the proposed capacity rule and at 0.5; signed group differences, dotted lines = ±5-point TOST tolerance.")
     inf = data["fairness_inference"]
     if inf is not None:
         rule = st.radio("Operating point", ["top_20pct", "threshold_0.5"], horizontal=True,
@@ -160,21 +175,28 @@ with tab_fair:
         fig = px.scatter(view, x="metric", y="gap", color="Model", error_y=view.ci_high - view.gap,
                          error_y_minus=view.gap - view.ci_low, title=f"{view.comparison.iloc[0]} gaps with 95% bootstrap CI")
         fig.add_hline(y=0, line_color="grey")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
         st.caption("FNR = share of people who were later re-arrested but not selected for support: the harm that matters for a support programme. A gap whose interval crosses 0 is not significant; TOST in `fairness_inference.csv` tests whether it is within ±5 points.")
     if data["fairness_impossibility"] is not None:
-        st.markdown("**Base rates and within-group calibration (impossibility result)**")
-        st.dataframe(data["fairness_impossibility"].round(3), use_container_width=True, hide_index=True)
-    figure("fairness_frontier.png", "Group-blind operating points vs group thresholds equalizing FNR (group thresholds are an analytic device, not a shipping option)")
-    figure("fairness_dependence.png", "Which features carry the protected attribute (proxy check)")
+        st.markdown("**Base rates and within-group calibration**")
+        st.dataframe(data["fairness_impossibility"].round(3), width="stretch", hide_index=True)
+    if data["intersectional_audit"] is not None:
+        with st.expander("Race × gender intersections (descriptive, threshold 0.5)"):
+            view = data["intersectional_audit"].query("attribute == 'Race x Gender'")
+            st.dataframe(view.round(4), width="stretch", hide_index=True)
+            st.caption("Inspect subgroup sample sizes; small intersections have greater uncertainty. These point estimates do not establish fairness.")
+        with st.expander("Age-group audit (descriptive, threshold 0.5)"):
+            st.dataframe(data["intersectional_audit"].query("attribute == 'Age at release'").round(4), width="stretch", hide_index=True)
+    figure("fairness_frontier.png", "Group-blind operating points vs group thresholds equalizing FNR. Group thresholds were optimized using these evaluation labels: exploratory illustration only, not a shipping option. Thresholds change decisions, not probability calibration.")
+    figure("fairness_dependence.png", "Which features carry the protected attribute (proxy check; association, not causation)")
     if data["race_ab_test"] is not None:
         st.markdown("**A/B test: model trained with race vs without race**")
-        st.dataframe(data["race_ab_test"].round(4), use_container_width=True, hide_index=True)
+        st.dataframe(data["race_ab_test"].round(4), width="stretch", hide_index=True)
 
 with tab_stab:
     st.subheader("Structural stability across refits on resampled training data")
     if data["stability_summary"] is not None:
-        st.dataframe(data["stability_summary"].round(4), use_container_width=True, hide_index=True)
+        st.dataframe(data["stability_summary"].round(4), width="stretch", hide_index=True)
     figure("structural_stability.png")
 
 with tab_econ:
@@ -186,15 +208,15 @@ with tab_econ:
     effectiveness = c4.slider("Assumed effectiveness", 0.0, 1.0, 0.20, 0.05)
     split = load_split()
     incumbent = split.X_test["Supervision_Risk_Score_First"]
-    rankers = {"Incumbent score": incumbent.fillna(incumbent.median()).to_numpy(),
+    rankers = {"Incumbent score": incumbent.fillna(split.X_train["Supervision_Risk_Score_First"].median()).to_numpy(),
                **{LABELS[m]: predictions[f"p_{m}"].to_numpy() for m in LABELS}}
     rows = [{"Ranker": name, **economic_value(predictions.actual, s, capacity, intervention_cost, event_cost, effectiveness)}
             for name, s in rankers.items()]
     econ = pd.DataFrame(rows)
     st.dataframe(econ[["Ranker", "selected", "captured_events", "recall_at_capacity", "assumed_net_value"]].style.format({
-        "recall_at_capacity": "{:.1%}", "assumed_net_value": "${:,.0f}"}), use_container_width=True, hide_index=True)
+        "recall_at_capacity": "{:.1%}", "assumed_net_value": "${:,.0f}"}), width="stretch", hide_index=True)
     st.plotly_chart(px.bar(econ, x="Ranker", y="assumed_net_value", color="Ranker", title="Net value under your assumptions"),
-                    use_container_width=True)
+                    width="stretch")
     st.info("Transparent scenario calculator. Costs and effectiveness are user assumptions; the observational data cannot estimate causal program impact.")
 
 with tab_gov:

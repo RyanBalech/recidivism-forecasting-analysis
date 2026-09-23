@@ -20,7 +20,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from recidivism.config import ARTIFACT_DIR, RANDOM_SEED
 from recidivism.data import load_official_split
-from recidivism.metrics import classification_metrics
+from recidivism.metrics import classification_metrics, capacity_selection
 from recidivism.modeling import logistic_model, tabicl_frames, xgboost_model
 
 CAPACITY = 0.20
@@ -28,8 +28,8 @@ CAPACITY = 0.20
 
 def fit_predict(name, X_train, y_train, X_eval_list):
     if name == "tabicl":
-        from tabicl import TabICLClassifier
-        m = TabICLClassifier(n_estimators=2, random_state=RANDOM_SEED, n_jobs=-1)
+        from recidivism.modeling import tabicl_model
+        m = tabicl_model(RANDOM_SEED)
         m.fit(tabicl_frames(X_train, X_train)[0], y_train.to_numpy())
         return [m.predict_proba(tabicl_frames(X_train, X)[1])[:, 1] for X in X_eval_list]
     else:
@@ -40,7 +40,7 @@ def fit_predict(name, X_train, y_train, X_eval_list):
 
 def race_gaps(p, y, race):
     """Gaps between Black and White at the deployed top-20% threshold."""
-    sel = p >= np.quantile(p, 1 - CAPACITY)
+    sel = capacity_selection(p, CAPACITY)
     out = {}
     for g in ["BLACK", "WHITE"]:
         m = race == g

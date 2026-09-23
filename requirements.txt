@@ -14,7 +14,7 @@ seaborn>=0.13,<1
 joblib>=1.5,<2
 scipy>=1.13,<2
 lime>=0.2,<1
-XPER>=0.0.9,<0.1
+XPER==0.0.92
 python-pptx>=1.0,<2
 nbformat>=5.10,<6
 nbclient>=0.10,<1

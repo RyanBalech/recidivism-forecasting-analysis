@@ -1,7 +1,47 @@
 import numpy as np
+import pandas as pd
+import pytest
 
 from recidivism.data import load_official_split
 from recidivism.metrics import classification_metrics, economic_value
+
+
+@pytest.mark.parametrize("p", [[-0.1, 0.9], [0.1, 1.1], [np.nan, 0.8], [0.5]])
+def test_invalid_probabilities_rejected(p):
+    with pytest.raises(ValueError):
+        classification_metrics([0, 1], p)
+
+
+def test_single_class_metrics_and_exact_endpoints():
+    m = classification_metrics([0, 0], [0, 0])
+    assert np.isnan(m["roc_auc"]) and m["brier"] == 0
+    assert classification_metrics([0, 1], [0, 1], threshold=1)["accuracy"] == 1
+
+
+def test_capacity_zero_and_ties():
+    from recidivism.metrics import capacity_selection
+    assert capacity_selection([1, 1, 1, 1], 0.5).tolist() == [True, True, False, False]
+    assert economic_value([0, 1], [2, 8], capacity=0)["selected"] == 0
+    assert economic_value([0, 1], [2, 8], capacity=1)["selected"] == 2
+    with pytest.raises(ValueError):
+        economic_value([0, 1], [2, 8], capacity=1.1)
+
+
+def test_group_metrics_use_position_not_series_index():
+    from recidivism.metrics import fairness_table
+    table = fairness_table(pd.Series([0, 1], index=[8, 9]), [0.1, 0.9], ["A", "B"], "group")
+    assert table.n.sum() == 2 and np.allclose(table.brier, 0.01)
+
+
+@pytest.mark.parametrize("column,value", [("Training_Sample", 2), ("Training_Sample", np.nan), ("ID", np.nan)])
+def test_invalid_dataset_rejected(tmp_path, column, value):
+    from recidivism.config import DATA_PATH
+    frame = pd.read_csv(DATA_PATH).head(20)
+    frame.loc[0, column] = value
+    path = tmp_path / "invalid.csv"
+    frame.to_csv(path, index=False)
+    with pytest.raises(ValueError):
+        load_official_split(path)
 
 
 def test_official_split_is_complete_and_disjoint():
@@ -57,6 +97,19 @@ def test_single_row_scores_like_a_batch():
     assert np.allclose(batch, single)
 
 
+def test_published_predictions_match_saved_models():
+    """Prevent app/report drift from stale models or changed preprocessing."""
+    import joblib
+    from recidivism.config import ARTIFACT_DIR, MODEL_DIR
+    split = load_official_split()
+    predictions = pd.read_csv(ARTIFACT_DIR / "test_predictions.csv")
+    assert np.array_equal(predictions.ID, split.audit_test.ID)
+    for name in ["logistic", "xgboost"]:
+        model = joblib.load(MODEL_DIR / f"{name}.joblib")
+        actual = model.predict_proba(split.X_test)[:, 1]
+        np.testing.assert_allclose(actual, predictions[f"p_{name}"], atol=1e-7)
+
+
 def test_tabicl_frames_do_not_expose_gender_through_missingness():
     """Regression: Gang_Affiliated is NaN for exactly the women, and TabICL encodes NaN as its own category."""
     from recidivism.modeling import tabicl_frames
@@ -65,3 +118,37 @@ def test_tabicl_frames_do_not_expose_gender_through_missingness():
     assert split.X_train.Gang_Affiliated.isna().any(), "source data changed; revisit this test"
     for frame in tabicl_frames(split.X_train, split.X_test):
         assert not frame.select_dtypes(exclude="number").isna().any().any()
+
+
+def test_leakage_audit_passes():
+    """The standalone leakage audit is also suitable as a CI gate."""
+    import runpy
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    runpy.run_path(str(root / "scripts" / "leakage_audit.py"), run_name="__main__")
+
+
+def test_merged_logistic_configuration_and_override():
+    from recidivism.modeling import logistic_model
+    frame = pd.DataFrame({"score": [1, 2, 3]})
+    model = logistic_model(frame)
+    assert model[-1].penalty == "l1" and model[-1].C == 0.2154
+    assert logistic_model(frame, penalty="l2", C=1)[-1].penalty == "l2"
+
+
+def test_shap_reconstructs_saved_model_probabilities():
+    import importlib.util
+    import joblib
+    from scipy.special import expit
+    from recidivism.config import ROOT, MODEL_DIR
+    spec = importlib.util.spec_from_file_location("interpretability", ROOT / "scripts/interpretability.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    split = load_official_split()
+    for name in ["logistic", "xgboost"]:
+        model = joblib.load(MODEL_DIR / f"{name}.joblib")
+        sample = split.X_test.head(5)
+        values, base = module.shap_for(model, split.X_train.head(100), sample, name)
+        np.testing.assert_allclose(expit(base + values.sum(axis=1)),
+                                   model.predict_proba(sample)[:, 1], atol=1e-6)

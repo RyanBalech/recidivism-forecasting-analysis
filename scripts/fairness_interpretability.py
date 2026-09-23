@@ -39,6 +39,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from fairness_audit import AGE_ORDER, CAPACITY, _chi2_p, with_audit_columns
 from recidivism.config import ARTIFACT_DIR, FEATURE_COLUMNS, FIGURE_DIR, MODEL_DIR, pretty
 from recidivism.data import load_official_split
+from recidivism.metrics import capacity_selection
 
 warnings.filterwarnings("ignore")
 MODELS = ["logistic", "xgboost"]
@@ -50,11 +51,8 @@ MAX_VALUES = 12
 
 
 def top_k(p: np.ndarray) -> np.ndarray:
-    """Deployed rule: the top 20% by score. Ties broken by order so capacity is exact."""
-    k = int(round(len(p) * CAPACITY))
-    sel = np.zeros(len(p), bool)
-    sel[np.argsort(-p, kind="stable")[:k]] = True
-    return sel
+    """Deployed rule: the top 20% by score, with the shared exact-capacity tie policy."""
+    return capacity_selection(p, CAPACITY)
 
 
 def fairness_p(y: np.ndarray, sel: np.ndarray, d: np.ndarray) -> dict[str, float]:

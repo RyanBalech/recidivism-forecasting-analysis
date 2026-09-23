@@ -33,7 +33,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from recidivism.config import ARTIFACT_DIR, FIGURE_DIR, RANDOM_SEED
 from recidivism.data import load_official_split
-from recidivism.metrics import expected_calibration_error
+from recidivism.metrics import expected_calibration_error, capacity_selection
 
 MODELS = ["logistic", "xgboost", "tabicl"]
 DISPLAY = {"logistic": "Logistic regression", "xgboost": "XGBoost", "tabicl": "TabICLv2"}
@@ -66,8 +66,7 @@ def denominators(y: np.ndarray, sel: np.ndarray) -> dict[str, int]:
 
 
 def selection(p: np.ndarray, rule: str) -> np.ndarray:
-    thr = 0.5 if rule == "threshold_0.5" else np.quantile(p, 1 - CAPACITY)
-    return p >= thr
+    return p >= 0.5 if rule == "threshold_0.5" else capacity_selection(p, CAPACITY)
 
 
 def gaps(y, p, group, a, b, rule):
@@ -215,7 +214,9 @@ def frontier(pred: pd.DataFrame) -> pd.DataFrame:
 
     Group thresholds are an analytic device to trace the fairness/utility frontier, not a
     shipping recommendation (a different decision threshold by race or gender is disparate
-    treatment). Equalizing error rates when base rates differ decalibrates the smaller group.
+    treatment). This search uses evaluation labels, so its result is an optimistic, in-sample
+    illustration, not validated mitigation. Threshold changes leave probabilities (and their
+    calibration) unchanged.
     """
     y = pred["actual"].to_numpy()
     rows = []
@@ -225,7 +226,7 @@ def frontier(pred: pd.DataFrame) -> pd.DataFrame:
         for model in MODELS:
             p = pred[f"p_{model}"].to_numpy()
             for cap in np.round(np.arange(0.05, 0.51, 0.05), 2):
-                sel = p >= np.quantile(p, 1 - cap)
+                sel = capacity_selection(p, cap)
                 fa, fb = rates(y[g == a], sel[g == a]), rates(y[g == b], sel[g == b])
                 rows.append({"model": model, "attribute": attr, "method": "group_blind_single_threshold",
                              "capacity": cap, "fnr_gap": fa["fnr"] - fb["fnr"], "fpr_gap": fa["fpr"] - fb["fpr"],
@@ -250,12 +251,13 @@ def frontier(pred: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def figures(result: pd.DataFrame, front: pd.DataFrame) -> None:
+def operating_figure(result: pd.DataFrame, panels: list[tuple[str, str]], filename: str) -> None:
+    """One row per (metric, label) panel, one column per attribute, with the TOST tolerance band."""
     sns.set_theme(style="whitegrid", context="talk")
     attrs = list(ATTRIBUTES)
-    fig, axes = plt.subplots(2, len(attrs), figsize=(7 * len(attrs), 11), sharey="row")
-    for r, (metric, label) in enumerate([("fnr", "FNR gap (missed support), primary"),
-                                         ("selection_rate", "Selection-rate gap (statistical parity)")]):
+    fig, axes = plt.subplots(len(panels), len(attrs), figsize=(7 * len(attrs), 5.5 * len(panels) + 0.5),
+                             sharey="row", squeeze=False)
+    for r, (metric, label) in enumerate(panels):
         for ax, attr in zip(axes[r], attrs):
             part = result[(result.attribute == attr) & (result.metric == metric)]
             x = np.arange(len(MODELS))
@@ -273,9 +275,18 @@ def figures(result: pd.DataFrame, front: pd.DataFrame) -> None:
     axes[0][0].legend(fontsize=10)
     fig.suptitle(f"Fairness gaps with 95% bootstrap CIs; dotted lines = ±{DELTA:.0%} TOST tolerance", fontsize=14)
     fig.tight_layout()
-    fig.savefig(FIGURE_DIR / "fairness_operating_point.png", dpi=180, bbox_inches="tight")
+    fig.savefig(FIGURE_DIR / filename, dpi=180, bbox_inches="tight")
     plt.close(fig)
 
+
+def figures(result: pd.DataFrame, front: pd.DataFrame) -> None:
+    # Primary for a support programme: missed support (FNR) and statistical parity.
+    operating_figure(result, [("fnr", "FNR gap (missed support), primary"),
+                              ("selection_rate", "Selection-rate gap (statistical parity)")],
+                     "fairness_support_access.png")
+    operating_figure(result, [("fpr", "FPR gap (predictive equality), secondary")],
+                     "fairness_operating_point.png")
+    attrs = list(ATTRIBUTES)
     fig, axes = plt.subplots(1, len(attrs), figsize=(7.5 * len(attrs), 6))
     for ax, attr in zip(axes, attrs):
         a, b = ATTRIBUTES[attr]
