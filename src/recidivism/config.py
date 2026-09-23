@@ -1,5 +1,13 @@
+"""Central configuration for paths, feature eligibility, and reproducibility.
+
+Start here when you want to understand which raw columns enter the models.
+Keeping this choice in one file prevents the notebook, training script, and app
+from silently using different definitions of the prediction problem.
+"""
+
 from pathlib import Path
 
+# ``parents[2]`` moves from src/recidivism/config.py to the project root.
 ROOT = Path(__file__).resolve().parents[2]
 DATA_PATH = ROOT / "nij-challenge2021_full_dataset.csv"
 ARTIFACT_DIR = ROOT / "artifacts"
@@ -10,6 +18,8 @@ REPORT_DIR = ROOT / "reports"
 TARGET = "Recidivism_Within_3years"
 SPLIT_COLUMN = "Training_Sample"
 ID_COLUMN = "ID"
+# These columns never enter a model. We keep them separately to measure whether
+# error rates or service allocation differ across demographic groups.
 PROTECTED_COLUMNS = ["Gender", "Race"]
 
 # Only fields available when supervision starts are eligible. Dynamic supervision
@@ -29,11 +39,18 @@ BASELINE_COLUMNS = [
     "Condition_Other",
 ]
 
+# The downloaded CSV uses four shortened names. The official NIJ codebook says:
+# _v1 = prior arrest with a probation/parole-violation charge
+# _v2 = prior conviction with a probation/parole-violation charge
+# _v3 = prior conviction with a domestic-violence charge
+# _v4 = prior conviction with a gun charge
+
 # Protected attributes and geography are retained for audit but excluded from scoring.
 # Residence PUMA is excluded because it can be a strong proxy for race.
 EXCLUDED_FROM_MODEL = {"Gender", "Race", "Residence_PUMA"}
 FEATURE_COLUMNS = [c for c in BASELINE_COLUMNS if c not in EXCLUDED_FROM_MODEL]
 
+# A fixed seed makes sampling, model fitting, and audits repeatable.
 RANDOM_SEED = 42
+# Threshold metrics such as TPR and FPR need probabilities converted to 0/1.
 DECISION_THRESHOLD = 0.50
-
