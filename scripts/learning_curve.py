@@ -40,7 +40,7 @@ def fit_predict(name: str, X: pd.DataFrame, y: pd.Series, X_test: pd.DataFrame):
         from tabicl import TabICLClassifier
 
         train, test = tabicl_frames(X, X_test)
-        model = TabICLClassifier(n_estimators=2, random_state=RANDOM_SEED, n_jobs=-1)
+        model = TabICLClassifier(n_estimators=16, random_state=RANDOM_SEED, n_jobs=-1)
         model.fit(train, y.to_numpy())
         return model.predict_proba(test)[:, 1]
     model = logistic_model(X) if name == "logistic" else xgboost_model(X)

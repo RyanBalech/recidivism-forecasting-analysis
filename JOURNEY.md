@@ -18,6 +18,15 @@ current `main`.
 | **Landed** | Client + product framing throughout; the learning curve maps directly to the vendor's "which model for which agency size" decision. |
 | **Why** | The brief requires a client you present to; a vendor with many differently-sized agencies makes the learning-curve finding a business decision, not a curiosity. |
 
+## Data leakage (found & fixed)
+| | |
+|---|---|
+| **Started** | Original `tabicl_frames` passed raw NaN to TabICLv2, which encodes NaN as its own category. |
+| **Found** | A teammate flagged a possible leak; a scan confirmed `Gang_Affiliated` is missing for **exactly the 2,217 women and no men**, so the missingness perfectly encoded the excluded Gender. It inflated TabICL's gender FPR gap (0.27 at 0.5) and lent it ~0.001 AUC. |
+| **Fixed** | Mode-fill categorical NaN before TabICL (matching the other pipelines), a regression test, and a full `scripts/leakage_audit.py` (also a pytest) that scans every feature's missingness vs race and gender, checks for post-scoring features, and verifies the split is disjoint. |
+| **Landed** | Audit passes: no protected-aligned NaN reaches TabICL, no post-scoring feature, train/test disjoint. After the fix, TabICL's gender gap dropped to 0.041 and it lost its illusory AUC edge — the three models became a genuine tie. |
+| **Lesson** | Attribute exclusion is not enough; representation-level leaks (missingness, encodings) can smuggle a protected attribute back in. This is a headline trustworthy-AI finding, not a footnote. |
+
 ## Predictive accuracy (XGBoost)
 | Step | Held-out AUC | Brier | ECE | Verdict |
 |---|---:|---:|---:|---|
@@ -55,18 +64,18 @@ current `main`.
 |---|---|
 | **Started** | Bootstrap CI widths + a feature-shuffle test — these measure *performance uncertainty*, not structural stability. |
 | **Replaced with** | **Structural stability**: refit each model on bootstrap resamples of the training data, then measure distance between refits (mean \|Δp\|), decision overlap (top-20% Jaccard), and drift in feature contributions (SHAP rank correlation). |
-| **Landed** | Logistic/XGBoost most stable; TabICLv2 drifts most (0.045 vs ~0.034) and has the lowest decision overlap (73%). ~1 person in 4 changes priority status across refits — scores need governance. |
-| **Disclosed** | TabICL uses 4 refits vs 8 for the others (each TabICL refit ≈73s on CPU — a stated cost trade-off, not a methodological slip). |
+| **Landed** | All three comparably stable (drift ~0.034–0.036, decision overlap ~76–77%, 8 refits each on GPU). ~1 person in 4 changes priority status across refits — scores need governance. |
+| **GPU note** | Early runs used 2 TabICL estimators / 4 refits on CPU, which made TabICL look least stable. On GPU (RTX 4060) we use 16 estimators / 8 refits, and the gap disappears. |
 
 ## Fairness — the deepest iteration
 | Step | What changed | Result |
 |---|---|---|
-| Start | Gaps audited at threshold **0.5** only | XGB race 0.042 / gender 0.108; TabICL gender **0.272** |
-| Fix 1 | Audit at the **deployed top-20%** operating point (what the product ships) | gaps shrink 2–4× (TabICL gender 0.272 → **0.072**) |
+| Start | Gaps audited at threshold **0.5** only | XGB gender 0.108; TabICL gender **0.106** (0.27 while the leak was live) |
+| Fix 1 | Audit at the **deployed top-20%** operating point (what the product ships) | gaps shrink ~2–3× (TabICL gender 0.106 → **0.041**) |
 | Fix 2 | **Bootstrap 95% CIs** on every gap (inference test) | e.g. logistic race gap at top-20% is **not** significant |
 | Fix 3 | **Impossibility result, split by attribute** | race base rates ≈equal (0.582/0.564) → gap **fixable**; gender differ 13.7 pts (0.591/0.454) → theorem **binds** |
 | Fix 4 | **Mitigation frontier**, first race-only | group thresholds drive race gap → ~0 keeping ~all events |
-| Fix 5 | **Extended mitigation to gender** (reviewer caught race-only) | gender gap 0.072 → **0.002**, keeps 1,287/1,295 events — **but decalibrates women** (base-rate gap 0.137) |
+| Fix 5 | **Extended mitigation to gender** (reviewer caught race-only) | gender gap → **~0.00** for all models, keeps ~1,285/1,295 events — **but decalibrates women** (base-rate gap 0.137) |
 | Fix 6 | **Race A/B + twin test** | adding race changes AUC ≤0.0007 but makes twins differ up to 4.8 pts; removing it is free + fairer, though TabICL shows proxy leakage |
 
 - **Landed:** fairness is the centerpiece, audited at the right operating point, with inference tests,

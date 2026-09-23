@@ -29,7 +29,7 @@ CAPACITY = 0.20
 def fit_predict(name, X_train, y_train, X_eval_list):
     if name == "tabicl":
         from tabicl import TabICLClassifier
-        m = TabICLClassifier(n_estimators=2, random_state=RANDOM_SEED, n_jobs=-1)
+        m = TabICLClassifier(n_estimators=16, random_state=RANDOM_SEED, n_jobs=-1)
         m.fit(tabicl_frames(X_train, X_train)[0], y_train.to_numpy())
         return [m.predict_proba(tabicl_frames(X_train, X)[1])[:, 1] for X in X_eval_list]
     else:

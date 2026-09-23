@@ -44,12 +44,12 @@ SHAP global + individual waterfall (logistic, XGBoost); LIME agrees via a differ
 **TabICL has no native explanation path** — a real deployment cost, only PDP/ICE cover it.
 
 ## 10 — Stability (1:00)
-Refits on resampled data. ~1 person in 4 changes priority status across refits; TabICL least stable
-(and only 4 refits vs 8, a stated CPU cost). Scores need governance. No time split → temporal
+Refits on resampled data (8 each). All three comparably stable (~0.035 drift). But ~1 person in 4
+changes priority status across refits, so scores need governance. No time split → temporal
 stability is a deployment gate.
 
 ## 11 — Fairness at the deployed point (1:15)
-Audit at top-20% (what we ship), not 0.5 — gaps are 2–4× smaller there (TabICL gender 0.272→0.072).
+Audit at top-20% (what we ship), not 0.5 — gaps are ~2–3× smaller there (TabICL gender 0.106→0.041).
 Bootstrap CIs on every gap. XGBoost has the smallest gender gap; TabICL the largest.
 
 ## 12 — Impossibility result (1:15)
@@ -62,7 +62,7 @@ The required slide. Performance near-tie → decision driven by interpretability
 Walk the green/amber/red columns.
 
 ## 14 — Recommendation (1:00)
-Deploy XGBoost (best calibration + net value, smallest gender gap, explainable, 35× faster). Logistic
+Deploy XGBoost (best calibration + net value, smallest gender gap, explainable, ~10× faster). Logistic
 challenger. TabICL only for very small agencies. Benefit-only, prospective pilot, appeal route,
 quarterly audits, stop rules.
 
@@ -74,7 +74,7 @@ Close on the rule: deploy only if benefit is shown without unacceptable subgroup
 
 # Likely Q&A
 
-**Did you actually beat the foundation model?** No — at full data it's a near-tie (0.7338 vs 0.7326).
+**Did you actually beat the foundation model?** No — at full data it's a statistical tie (0.7328 vs 0.7326).
 We don't claim to. Our finding is the crossover *shape* and that both crush the 0.60 incumbent. The
 recommendation rests on trust dimensions, where XGBoost wins.
 
@@ -88,11 +88,11 @@ thresholds are an *analytic device* to trace the frontier. A per-race threshold 
 threshold; we show what a race-blind alternative costs.
 
 **Why audit at top-20% not 0.5?** The product allocates the top 20% by risk, so 0.5 describes an
-operating point we never deploy. Auditing at 0.5 overstates gaps 2–4×.
+operating point we never deploy. Auditing at 0.5 overstates gaps ~2–3×.
 
-**Why is TabICL's stability weaker with only 4 refits?** Cost — each TabICL refit is ~73s on CPU vs
-~3s for XGBoost. 4 refits still show it drifts most and has the lowest decision overlap. We disclose
-the asymmetry.
+**Is TabICL less stable?** No — with 16 estimators on GPU we run 8 refits for all three; they are
+comparably stable (~0.035 drift, ~76-77% decision overlap). The earlier "TabICL least stable" reading
+was an artifact of running it light (2 estimators, 4 refits) before we had the GPU.
 
 **Why exclude the dynamic variables?** They accrue after the score is made — leakage, and they encode
 supervision intensity that's downstream of the outcome.

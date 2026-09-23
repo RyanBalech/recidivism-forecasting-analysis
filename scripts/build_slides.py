@@ -102,7 +102,8 @@ card(s, "TRAIN", "18,028", .8, 1.9); card(s, "UNTOUCHED TEST", "7,807", 3.75, 1.
 card(s, "BASELINE FIELDS", "29", 6.7, 1.9); card(s, "TEST TARGET RATE", f"{pred.actual.mean():.1%}", 9.65, 1.9, PURPLE)
 bullets(s, ["Post-release violations, tests, programs and employment excluded to prevent leakage",
             "Race, gender and residence geography excluded from scoring; kept only in the audit layer",
-            "Balanced outcome (57.8%), so no resampling; official NIJ split preserves an honest evaluation"], y=3.72, h=2.4, size=20); footer(s, 3)
+            "Found + fixed a subtle leak: Gang_Affiliated is missing for exactly the women — the foundation model read that missingness as gender (now mode-filled, regression-tested, audit script)",
+            "Balanced outcome (57.8%), so no resampling; official NIJ split preserves an honest evaluation"], y=3.55, h=2.7, size=18); footer(s, 3)
 
 # 4 — Three models
 s = make_slide(prs); title(s, "Three model families, one comparison", "03 · Model design")
@@ -149,9 +150,9 @@ textbox(s, "TabICLv2 has no native explanation path — a real deployment cost, 
 # 10 — Stability
 s = make_slide(prs); title(s, "Structural stability across refits on resampled data", "09 · Stability")
 picture(s, FIG / "structural_stability.png", .5, 1.75, 8.3)
-card(s, "SCORE DRIFT · TABICL", "0.045", 9.35, 1.9, RED)
-card(s, "TOP-20% OVERLAP", "73–77%", 9.35, 3.5, ORANGE)
-textbox(s, "~1 person in 4 changes priority status across refits — scores need governance. TabICLv2 is least stable (4 refits vs 8, a stated cost trade-off).", 1.0, 6.75, 11, .4, 11, GREY, True, PP_ALIGN.CENTER); footer(s, 10)
+card(s, "SCORE DRIFT (ALL)", "~0.035", 9.35, 1.9, TEAL)
+card(s, "TOP-20% OVERLAP", "76–77%", 9.35, 3.5, ORANGE)
+textbox(s, "All three comparably stable (8 refits each). But ~1 person in 4 changes priority status across refits — scores need governance and monitoring.", 1.0, 6.75, 11, .4, 11, GREY, True, PP_ALIGN.CENTER); footer(s, 10)
 
 # 11 — Fairness at the deployed point
 s = make_slide(prs); title(s, "Fairness, audited where we actually deploy", "10 · Subgroup audit")

@@ -15,11 +15,11 @@ The official NIJ `Training_Sample` indicator creates an untouched 18,028/7,807 t
 | Incumbent score | 0.600 | — | — | — | — |
 | Logistic regression | 0.7295 | 0.7691 | 0.2055 | 0.0132 | 1.2 s |
 | XGBoost | 0.7326 | 0.7722 | 0.2044 | **0.0109** | 2.9 s |
-| TabICLv2 | **0.7338** | **0.7723** | **0.2038** | 0.0191 | 103.7 s |
+| TabICLv2 | **0.7328** | 0.7722 | **0.2044** | 0.0199 | 23.1 s |
 
-\*Training plus one full held-out prediction run. XGBoost hyperparameters come from a 5-fold CV search; TabICLv2 runs on CPU here (a CUDA GPU is much faster). Bootstrap 95% intervals across the three models overlap.
+\*Training plus one full held-out prediction run. XGBoost hyperparameters come from a 5-fold CV search; TabICLv2 uses 16 ensemble members on a CUDA GPU (RTX 4060). Bootstrap 95% intervals across the three models overlap, so the three are a statistical tie.
 
-**Recommendation:** deploy XGBoost for support allocation, with logistic regression as the transparent challenger; TabICLv2 only for very small agencies where its small-data edge is real (see the learning curve). XGBoost calibrates best, has the highest scenario net value and the smallest gender false-positive gap, runs ~35× faster than TabICLv2, and is SHAP-explainable (the foundation model has no native explanation path). Do not deploy before a prospective impact and fairness pilot. Full four-dimension comparison in [`artifacts/tradeoff_matrix.md`](artifacts/tradeoff_matrix.md) and the [technical report](reports/technical_report.md).
+**Recommendation:** deploy XGBoost for support allocation, with logistic regression as the transparent challenger; TabICLv2 only for very small agencies where its small-data edge is real (see the learning curve). XGBoost calibrates best, has the highest scenario net value and the smallest gender false-positive gap, runs ~10× faster than TabICLv2, and is SHAP-explainable (the foundation model has no native explanation path). Do not deploy before a prospective impact and fairness pilot. Full four-dimension comparison in [`artifacts/tradeoff_matrix.md`](artifacts/tradeoff_matrix.md) and the [technical report](reports/technical_report.md).
 
 ## Deliverables
 

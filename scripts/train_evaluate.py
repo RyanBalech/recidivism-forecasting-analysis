@@ -82,7 +82,7 @@ def fit_models(include_tabicl: bool = True) -> tuple[dict, dict[str, np.ndarray]
         model = TabICLClassifier(
             # Two ensemble views balance quality with the available 6 GB GPU.
             # The representation cache speeds up repeated permutation audits.
-            n_estimators=2,
+            n_estimators=16,
             batch_size=1,
             kv_cache="repr",
             random_state=RANDOM_SEED,
@@ -205,7 +205,7 @@ def audit(models: dict, predictions: dict[str, np.ndarray], context: dict) -> No
         "test_rows": len(split.X_test),
         "features": list(split.X_train.columns),
         "protected_attributes_used_for_audit_only": ["Gender", "Race"],
-        "tabicl_estimators": 2 if "tabicl" in predictions else 0,
+        "tabicl_estimators": 16 if "tabicl" in predictions else 0,
     }, ARTIFACT_DIR / "run_manifest.json")
     make_figures(split.y_test, predictions, metrics, fairness, importance)
 

@@ -58,7 +58,7 @@ scoring moment. Race, gender and Residence PUMA (a race proxy) are excluded from
 audit only. Ordered counts are ordinal-encoded; XGBoost hyperparameters come from a 5-fold CV search
 (`scripts/tune_xgboost.py`). Full pipeline in `scripts/train_evaluate.py`.
 
-Set `RUN_TRAINING = True` to rebuild every artifact (TabICLv2 runs on CPU here, ~2 min)."""),
+Set `RUN_TRAINING = True` to rebuild every artifact (TabICLv2 runs on GPU at 16 estimators; a CUDA GPU is recommended)."""),
     code("""RUN_TRAINING = False
 if RUN_TRAINING:
     import subprocess
@@ -79,7 +79,7 @@ median.)"""),
     fig("performance_calibration.png"),
     code("""intervals = json.loads((ROOT / 'artifacts/bootstrap_intervals.json').read_text())
 pd.concat({m: pd.DataFrame(v).T for m, v in intervals.items()}, names=['model','metric']).round(4)"""),
-    md("TabICLv2 has marginally the best discrimination and Brier; XGBoost the best calibration (ECE). "
+    md("TabICLv2 and XGBoost tie on discrimination and Brier (AUC 0.733 vs 0.733); XGBoost calibrates best (ECE). "
        "Bootstrap 95% intervals overlap, so the ranking among the three is not decisive."),
     md("""### Learning curve: which model for which agency size?
 
@@ -114,9 +114,9 @@ pd.DataFrame([{'model': m, **economic_value(predictions.actual, predictions[f'p_
     md("## 5. Stability (structural)"),
     code("A('stability_summary.csv').round(4)"),
     fig("structural_stability.png", 1100),
-    md("Each model refit on bootstrap resamples of the training data (logistic/XGBoost 8 refits, "
-       "TabICLv2 4 — a stated CPU cost trade-off). About one person in four changes priority status "
-       "across refits; TabICLv2 drifts most. Event dates are unavailable, so temporal stability is a "
+    md("Each model refit on 8 bootstrap resamples of the training data. All three are comparably stable "
+       "(drift ~0.034-0.036, decision overlap ~76-77%). About one person in four changes priority status "
+       "across refits, so scores need governance. Event dates are unavailable, so temporal stability is a "
        "deployment gate on a later cohort."),
     md("## 6. Fairness"),
     md("### Gaps at the deployed operating point, with inference tests\n"
@@ -124,7 +124,7 @@ pd.DataFrame([{'model': m, **economic_value(predictions.actual, predictions[f'p_
     code("""inf = A('fairness_inference.csv')
 inf[(inf.rule=='top_20pct') & inf.metric.isin(['fpr','tpr','selection_rate'])].round(3).sort_values(['attribute','metric','model'])"""),
     fig("fairness_operating_point.png", 1100),
-    md("Auditing at 0.5 would overstate gaps 2–4× (TabICLv2 gender 0.272 at 0.5 vs 0.072 at top-20%)."),
+    md("Auditing at 0.5 would overstate gaps ~2–3× (TabICLv2 gender 0.106 at 0.5 vs 0.041 at top-20%)."),
     md("### The impossibility result, split by attribute"),
     code("A('fairness_impossibility.csv').round(3)"),
     md("""Race base rates barely differ (0.582 vs 0.564) → calibration and equal error rates are
@@ -146,7 +146,7 @@ women. This explains why gender gaps exceed race gaps."""),
     md("## 7. Trade-offs and recommendation"),
     fig("tradeoff_matrix.png", 1100),
     md("""Performance is a near-tie, so the decision turns on interpretability, fairness, stability and
-cost. **Deploy XGBoost** (best calibration and net value, smallest gender gap, SHAP-explainable, 35×
+cost. **Deploy XGBoost** (best calibration and net value, smallest gender gap, SHAP-explainable, ~10×
 faster than the TFM), **logistic as transparent challenger**, **TabICLv2 only for very small
 agencies** where its few-shot edge is real. Any deployment is benefit-only, with a prospective pilot,
 an appeal route, quarterly subgroup audits at the deployed operating point, and stop rules."""),
