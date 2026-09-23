@@ -12,9 +12,9 @@
     "bootstrap_auc_interval_width": 0.023242067585565462
   },
   "tabicl": {
-    "all_features_shuffled_mae": 0.22533024847507477,
-    "all_features_shuffled_rank_correlation": 0.0007239247239247239,
-    "bootstrap_brier_interval_width": 0.008891028546658464,
-    "bootstrap_auc_interval_width": 0.02326586433663813
+    "all_features_shuffled_mae": 0.2235792577266693,
+    "all_features_shuffled_rank_correlation": -0.00772353459668947,
+    "bootstrap_brier_interval_width": 0.008882518125693656,
+    "bootstrap_auc_interval_width": 0.02343197369969441
   }
 }

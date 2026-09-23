@@ -65,3 +65,13 @@ def test_tabicl_frames_do_not_expose_gender_through_missingness():
     assert split.X_train.Gang_Affiliated.isna().any(), "source data changed; revisit this test"
     for frame in tabicl_frames(split.X_train, split.X_test):
         assert not frame.select_dtypes(exclude="number").isna().any().any()
+
+
+def test_leakage_audit_passes():
+    """The systematic leakage audit must pass: no protected-aligned NaN into TabICL, no post-scoring feature, clean split."""
+    import runpy, sys
+    sys.argv = ["leakage_audit"]
+    try:
+        runpy.run_path(str(__import__("pathlib").Path(__file__).resolve().parents[1] / "scripts" / "leakage_audit.py"), run_name="__main__")
+    except SystemExit as e:
+        assert e.code in (0, None), "leakage_audit.py reported a failure"

@@ -148,7 +148,7 @@ def main() -> None:
 
     # --- PDP + ICE for all three models ---
     from tabicl import TabICLClassifier
-    tab = TabICLClassifier(n_estimators=2, random_state=RANDOM_SEED, n_jobs=-1)
+    tab = TabICLClassifier(n_estimators=16, random_state=RANDOM_SEED, n_jobs=-1)
     tab.fit(*tabicl_frames(X_train, X_train)[:1], split.y_train.to_numpy())
     predictors = {"logistic": models["logistic"].predict_proba, "xgboost": models["xgboost"].predict_proba,
                   "tabicl": lambda X: tab.predict_proba(tabicl_frames(X_train, X)[1])}

@@ -14,10 +14,11 @@ choice between our three models, is the finding that matters to the client.
 
 Among the three, **deploy XGBoost as the production model, with logistic regression as the
 transparent challenger.** XGBoost has the best calibration (ECE 0.0109), the highest scenario net
-value ($5.27M), the smallest gender false-positive gap, and runs ~35× faster than TabICLv2. TabICLv2
-has marginally the best discrimination but no native explanation path, the largest gender gap, and
-the lowest stability — costs that outweigh a ~0.001 AUC edge for a government-facing tool. For very
-small agencies (< ~5,000 records) TabICLv2's few-shot advantage is real and can justify it there.
+value ($5.27M), the smallest gender false-positive gap, and runs ~10× faster than TabICLv2. TabICLv2
+ties on discrimination (AUC 0.7328 vs 0.7326) but has no native explanation path, slightly worse
+calibration, and slightly larger subgroup gaps — so its costs outweigh a statistically-indistinguishable
+accuracy for a government-facing tool. For very small agencies (< ~5,000 records) TabICLv2's few-shot
+advantage on scarce data is real and can justify it there (see the learning curve).
 
 This is a pilot recommendation, not authorization for operational use. Any deployment requires a
 prospective study, an appeal route, drift monitoring, and quarterly subgroup audits.
@@ -47,32 +48,42 @@ split on rank; remaining categoricals are one-hot encoded, numerics median-imput
 missingness flag and standardized. Logistic and XGBoost share this matrix; TabICLv2 receives the raw
 mixed-type frame and applies its own encoding.
 
+**A subtle leak we found and fixed.** `Gang_Affiliated` is missing for exactly the 2,217 women and no
+men in NIJ. TabICLv2 encodes NaN as its own category, so an early version could reconstruct the
+excluded Gender attribute through that missingness — a leak that inflated TabICL's apparent gender
+false-positive gap (0.27 at threshold 0.5) and lent it ~0.001 AUC. We now fill categorical NaN with
+the training mode before TabICL (matching the other two pipelines), with a regression test. No
+numeric column's missingness is gender-aligned, so the fix is complete. This is exactly the kind of
+representation-level leak a trustworthy-AI review must catch.
+
 ## Models
 
 - **Logistic regression** — L2, `C=0.25`. Transparent linear baseline.
 - **XGBoost** — hyperparameters from a 5-fold cross-validated random search on the training set only
   (`scripts/tune_xgboost.py`, CV AUC 0.7343); ordinal-encoded counts.
-- **TabICLv2** — pretrained in-context tabular transformer, two ensemble members (compute choice
-  recorded in the run manifest).
+- **TabICLv2** — pretrained in-context tabular transformer, 16 ensemble members, run on GPU (RTX 4060).
+  A sweep of 1–64 members (`scripts/estimator_sweep.py`) shows AUC plateaus by ~8 (0.7326) and gains
+  only +0.0005 up to 64 for 9× the runtime, so 16 is a fair, near-maximal choice — the TFM is not
+  under-powered, and more members change no conclusion.
 
 ## Predictive performance
 
 | Model | ROC AUC | Avg precision | Brier ↓ | ECE ↓ | Net value @20% | Runtime |
 |---|---:|---:|---:|---:|---:|---:|
 | **Incumbent score** | 0.600 | — | — | — | $2.75M | — |
-| Logistic regression | 0.7295 | 0.7691 | 0.2055 | 0.0132 | $5.02M | 1.2 s |
-| XGBoost | 0.7326 | 0.7722 | 0.2044 | **0.0109** | **$5.27M** | 2.9 s |
-| TabICLv2 | **0.7338** | **0.7723** | **0.2038** | 0.0191 | $5.14M | 103.7 s |
+| Logistic regression | 0.7295 | 0.7691 | 0.2055 | 0.0132 | $5.02M | 0.8 s |
+| XGBoost | 0.7326 | **0.7722** | **0.2044** | **0.0109** | **$5.27M** | 2.4 s |
+| TabICLv2 | **0.7328** | 0.7722 | **0.2044** | 0.0199 | $5.13M | 23.1 s |
 
-Bootstrap 95% intervals overlap across the three models (e.g. XGBoost AUC [0.7205, 0.7437]), so the
-ranking among them is not decisive — which is exactly why the recommendation turns on interpretability,
-fairness, stability, and cost. Full intervals in `artifacts/bootstrap_intervals.json`.
+TabICLv2 and XGBoost are a **statistical tie** (AUC 0.7328 vs 0.7326, identical Brier); bootstrap 95%
+intervals overlap heavily (e.g. XGBoost AUC [0.7205, 0.7437]). The ranking among the three is not
+decisive, which is exactly why the recommendation turns on interpretability, fairness, stability, and
+cost. Full intervals in `artifacts/bootstrap_intervals.json`.
 
 **Learning curve** (`scripts/learning_curve.py`, train sizes 1,500 / 5,000 / 10,000 with 3 seeds
-each, plus one run at the full 18,028): at 1,500 rows TabICLv2 leads clearly (0.720 vs XGBoost 0.699
-and logistic 0.703); the gap shrinks to +0.004 AUC at full data and never crosses. This is why model
-choice depends on an agency's data volume. (The full-data point is a single seed, so its variance
-band is not reported.)
+each, plus one run at the full 18,028): at 1,500 rows TabICLv2 leads (0.720 vs XGBoost 0.712 and
+logistic 0.703); the gap closes to a tie at full data. This is why model choice depends on an agency's
+data volume. (The full-data point is a single seed, so its variance band is not reported.)
 
 **Economic scenario.** At 20% capacity under illustrative assumptions ($5,000 support cost, $50,000
 event cost, 20% effectiveness), net value is $5.0–5.3M for the models vs $2.75M for the incumbent and
@@ -97,13 +108,12 @@ assumption. These are scenario outputs, not causal estimates.
 
 ## Stability
 
-`scripts/stability_structural.py` refits each model on bootstrap resamples of the training data and
+`scripts/stability_structural.py` refits each model on 8 bootstrap resamples of the training data and
 measures, on the fixed test set, distance between refits, decision overlap, and drift in feature
-contributions. Logistic (8 refits) and XGBoost (8 refits) are the most stable; **TabICLv2 uses 4
-refits** (each costs ~73 s on CPU — a stated cost trade-off). Across refits about **one person in
-four changes priority status** for every model, so scores need governance and monitoring regardless
-of model. TabICLv2 has the largest score drift (0.045 vs ~0.034) and lowest decision overlap (73%).
-Event dates are unavailable, so temporal stability must be evaluated on a later cohort before launch.
+contributions. All three are comparably stable (score drift ~0.034–0.036, top-20% decision overlap
+~76–77%). Across refits about **one person in four changes priority status** for every model, so
+scores need governance and monitoring regardless of model. Event dates are unavailable, so temporal
+stability must be evaluated on a later cohort before launch.
 
 ## Fairness
 
@@ -113,23 +123,24 @@ operating point** with bootstrap 95% CIs (`scripts/fairness_audit.py`):
 
 | Model | Race FPR gap | Gender FPR gap |
 |---|---:|---:|
-| Logistic | 0.017 (n.s.) | 0.040 |
+| Logistic | **0.017** (n.s.) | 0.040 |
 | XGBoost | 0.020 | **0.036** |
-| TabICLv2 | 0.019 | 0.072 |
+| TabICLv2 | 0.024 | 0.041 |
 
-Auditing at the deployed point matters: at threshold 0.5 the same gaps are 2–4× larger (TabICLv2
-gender 0.272 at 0.5 vs 0.072 at top-20%), so a 0.5 audit would describe an operating point we never
-deploy.
+Auditing at the deployed point matters: at threshold 0.5 the same gaps are ~2–3× larger (TabICLv2
+gender 0.106 at 0.5 vs 0.041 at top-20%), so a 0.5 audit would describe an operating point we never
+deploy. (Before the missingness leak was fixed, TabICL's gender gap read 0.27 at 0.5 — a further
+reason the leak mattered.)
 
 **Impossibility result, split by attribute — the key fairness insight.** Race base rates barely
 differ (0.582 vs 0.564), so calibration and equal error rates are near-jointly achievable: the
 observed race FPR gap is a *model property*, and group-specific thresholds drive it to ~0 while
 keeping essentially all captured events. Gender base rates differ by **13.7 points** (0.591 vs
-0.454), so the theorem binds: because race is excluded, logistic and XGBoost over-predict women
-(mean score ~0.52 vs actual 0.45), which is why their gender gaps exceed their race gaps. Group
-thresholds can still equalize the gender FPR gap (0.072 → 0.002 for TabICLv2, keeping 1,287 of 1,295
-events), **but doing so decalibrates women** — selecting them at a rate inconsistent with their lower
-actual recidivism. That is the trade-off the theorem forces; we surface it rather than hide it.
+0.454), so the theorem binds: because gender is excluded from every model, **all three over-predict
+women** (mean score ~0.52 vs actual 0.45). Group thresholds can still equalize the gender FPR gap
+(→ ~0.00 for every model, keeping ~1,285 of ~1,295 events), **but doing so decalibrates women** —
+selecting them at a rate inconsistent with their lower actual recidivism. That is the trade-off the
+theorem forces; we surface it rather than hide it.
 
 **Mitigation caveat (legal).** Applying a different decision threshold by race or gender is disparate
 treatment (cf. *Ricci v. DeStefano*) and contradicts excluding the attribute from inputs. We present

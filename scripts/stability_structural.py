@@ -28,7 +28,7 @@ from recidivism.config import ARTIFACT_DIR, FIGURE_DIR
 from recidivism.data import load_official_split
 from recidivism.modeling import logistic_model, tabicl_frames, xgboost_model
 
-REFITS = {"logistic": 8, "xgboost": 8, "tabicl": 4}
+REFITS = {"logistic": 8, "xgboost": 8, "tabicl": 8}
 CAPACITY = 0.20
 DISPLAY = {"logistic": "Logistic regression", "xgboost": "XGBoost", "tabicl": "TabICLv2"}
 PALETTE = {"logistic": "#234E70", "xgboost": "#FB8500", "tabicl": "#7B2CBF"}
@@ -37,7 +37,7 @@ PALETTE = {"logistic": "#234E70", "xgboost": "#FB8500", "tabicl": "#7B2CBF"}
 def refit(name: str, X: pd.DataFrame, y: pd.Series, X_test: pd.DataFrame, seed: int):
     if name == "tabicl":
         from tabicl import TabICLClassifier
-        m = TabICLClassifier(n_estimators=2, random_state=seed, n_jobs=-1)
+        m = TabICLClassifier(n_estimators=16, random_state=seed, n_jobs=-1)
         train, test = tabicl_frames(X, X_test)
         m.fit(train, y.to_numpy())
         return m.predict_proba(test)[:, 1], None
