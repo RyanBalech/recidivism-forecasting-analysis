@@ -40,6 +40,8 @@ XPER approximates performance attribution on 150 records and 60 sampled coalitio
 
 TabICLv2 has permutation importance, PDP/ICE and interactive feature edits for local sensitivity. Native additive attribution is not implemented; this is an implementation limitation, not proof that the model cannot be explained. PDP/ICE can create implausible records and are not causal counterfactuals.
 
+Local sensitivity for the same person across all three models and a transformed-unit logistic coefficient/odds-ratio table complement the explanations.
+
 ## Stability
 
 Bootstrap refits compare probability drift, rank correlation and top-capacity Jaccard overlap. All three models use eight refits. Pairwise comparisons share refits and are not independent samples.
@@ -50,15 +52,29 @@ Refit sensitivity does not measure temporal drift. Random subsets of one histori
 
 ## Fairness
 
-Report FPR, TPR, selection rates, precision, Brier and calibration by race/gender, plus descriptive race-by-gender intersections and denominators. Small intersections and single-class groups have less reliable or undefined statistics. Bootstrap intervals are exploratory, with no multiple-testing correction.
+Report FPR, TPR, selection rates, precision, Brier and calibration by race, gender and age (under 33 vs 33 or older), plus descriptive race-by-gender intersections and denominators. Small intersections and single-class groups have less reliable or undefined statistics. The section contains more than 90 intervals and tests with no multiple-testing correction; read them as an exploratory audit.
 
-For beneficial support, prioritize missed access (FNR = 1 − TPR) and selection rates; retain FPR as a secondary allocation-error measure. Arrest is only a proxy for need and does not identify who benefits from support. An age-group descriptive audit is also included because age is a model input. Local sensitivity for the same person across all three models and a transformed-unit logistic coefficient/odds-ratio table complement the explanations.
+For beneficial support, prioritize missed access (FNR = 1 − TPR) and selection rates; retain FPR as a secondary allocation-error measure. In the course notation, selection is the favorable output and a re-arrested person is the one who needs it, so the course's equal opportunity is our equal FNR. Arrest is only a proxy for need and does not identify who benefits from support.
+
+**Equivalence, not just difference.** A nonsignificant difference does not show fairness. Each gap is also tested with two one-sided tests (TOST) against a tolerance of ±5 percentage points. The tolerance was fixed in code before any TOST was run, but after the team had seen the point estimates of the gaps; state this openly. Rationale: at 20% capacity a 5-point difference in the share of a group offered support is the smallest gap we treat as operationally material. Gaps are classified as *equivalent* (TOST rejects |gap| ≥ 5 points), *different* (95% bootstrap interval excludes 0, equivalence not shown) or *inconclusive*. The TOST uses an analytic binomial variance that ignores the data-dependent top-20% cutoff, while the displayed intervals are bootstrap, so borderline cases can disagree.
+
+Results at the proposed top-20% rule ([fairness_inference.csv](../artifacts/fairness_inference.csv), [fairness_tests.csv](../artifacts/fairness_tests.csv), [fairness_age_bands.csv](../artifacts/fairness_age_bands.csv)):
+
+- **Race (Black minus White):** selection, FNR and FPR gaps are equivalent within ±5 points for all three models. For XGBoost and TabICLv2 the selection and FPR gaps (about +2 points) are also significant: nonzero but small, in the direction of more support offered to Black people. Logistic has no significant race gap. The course chi-squared table agrees except for logistic predictive equality (p ≈ 0.049, while the bootstrap interval includes 0). Precision gaps are inconclusive.
+- **Gender (men minus women):** FNR gap −0.096 / −0.112 / −0.124 (logistic / XGBoost / TabICLv2), different for all models: women who are later re-arrested miss support more often. All models over-predict women (mean score ≈ 0.52 vs observed 0.454; ECE ≈ 0.07–0.08 vs ≈ 0.01–0.02 for men), and sufficiency is rejected. Women are nonetheless selected less, because few of them reach the top-20% cutoff.
+- **Age (under 33 minus 33+):** FNR gap −0.245 / −0.228 / −0.237. About 97% of re-arrested people aged 48 or older are not selected, vs about 47–49% at 18–22. Age is a model input and a validated risk factor; in a support programme, ranking by risk rather than need is a policy choice that must be justified to the client.
+
+**Which inputs generate the gender gap (FPDP).** For logistic and XGBoost, each input is set to each of its values for everyone, the top 20% is re-selected, and the equal-opportunity test is recomputed. Candidate variables are `Gang_Affiliated` and `Age_at_Release` ([fairness_candidates.csv](../artifacts/fairness_candidates.csv)). Gang affiliation is never recorded for women and is imputed as "No"; on the raw field its Cramér's V with gender is 1.0 ([fairness_dependence.csv](../artifacts/fairness_dependence.csv)). It is therefore a gender-aligned measurement artefact, not only a behavioural signal. Race proxies are weak (largest Cramér's V with race ≈ 0.18). TabICLv2 is excluded from FPDP because each point needs a full in-context prediction pass.
+
+**Mitigation** ([fairness_mitigation.csv](../artifacts/fairness_mitigation.csv)). Dropping gang affiliation and re-estimating removes the equal-opportunity rejection (logistic p 0.000 → 0.995; XGBoost → 0.67) at about −0.014 AUC, roughly six times the XGBoost − logistic difference. Statistical parity is still rejected. Dropping age does not remove the gender gap. Neutralizing without re-estimation uses the FPDP value with the highest p-value on the evaluation set (for XGBoost, everyone set to gang = "Yes"), which is in-sample optimization and not a deployable rule. A p-value above 0.05 after mitigation is not evidence of fairness. Candidates, neutral values and mitigation are all evaluated on the same labels; confirm them on a separate validation split before claiming a mitigation.
 
 The proposed capacity rule selects exactly round(n × 0.20). Its gaps differ from those at probability 0.5 because decisions differ. A smaller gap at another operating point does not mean the model itself improved.
 
 Calibration and error-rate balance can conflict when base rates differ ([Chouldechova](https://arxiv.org/abs/1703.00056)). Descriptive group averages do not establish that a theorem binds for one attribute but not another. Equal FPR alone is not equalization of both error rates. **Changing thresholds leaves the probabilities and their calibration unchanged**, while allocations, precision and recall may change.
 
-The group-threshold frontier optimizes using evaluation outcomes. Its small gaps are optimistic in-sample illustrations, not independently validated mitigation. Any group-aware policy needs separate policy/legal review; we make no categorical legal determination.
+The group-threshold frontier now equalizes FNR. It optimizes using evaluation outcomes, so its near-zero gaps are optimistic in-sample illustrations, not independently validated mitigation. Any group-aware policy needs separate policy/legal review; we make no categorical legal determination.
+
+Conditional statistical parity conditions on the historical Georgia supervision score. That score is built from arrest history and may itself carry policing bias, so conditioning on it can hide part of a disparity.
 
 Removing race guarantees invariance to changing that raw input while fixing included features. It does not establish causal counterfactual fairness, eliminate proxies or guarantee smaller disparities. A/B results do not prove removal is universally free or fairer.
 

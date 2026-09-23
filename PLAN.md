@@ -64,7 +64,7 @@ predates the fix** — including the 0.273 gender FPR gap, "TabICL drifts most",
 "proxy leakage". Re-run the full pipeline before quoting any TabICL figure. The leak itself is a
 strong Q&A story: our fairness audit found a protected attribute leaking through missingness.
 
-## First post-fix numbers (CPU run, 23 Sep evening; confirm with the GPU re-run)
+## First post-fix numbers (CPU run, 23 Sep evening — historical; current values are in the status audit below)
 
 | Model | AUC before fix → after | Brier | ECE |
 |---|---|---:|---:|
@@ -106,20 +106,15 @@ before any CPU re-run.
 
 ## Status audit — 23 Sep evening (code vs artifacts vs deliverables)
 
-**Most important finding: the published artifacts predate the course-aligned fairness code.**
-The last regeneration (commit 405b608, 16-member GPU ensemble) ran *before* 598b0dd
-(TOST, course test table, age audit, FPDP, mitigation) was merged. Consequences:
-- Missing in `artifacts/`: `fairness_tests.csv`, `fairness_age_bands.csv`, `fpdp_values.csv`,
-  `fairness_dependence.csv`, `fairness_candidates.csv`, `fairness_mitigation.csv`,
-  `figures/fpdp_*.png`, `figures/fairness_dependence.png`.
-- `fairness_inference.csv` has no `tost_p` / `n_a` / `n_b` columns; `fairness_frontier.csv` has no
-  `fnr_gap` column (it is the old FPR frontier), so the frontier figure is FPR-based.
-- The committed notebook has no TOST/FPDP cells (built by the old `build_notebook.py`); the app
-  references `fairness_dependence.png`, which does not exist (it shows "not generated yet").
-- **Do not quote** the CPU numbers in "First post-fix numbers" (TOST race equivalence, age FNR gap
-  −0.23 to −0.25, gang-drop removes gender gap) until they are regenerated into `artifacts/`.
+**Resolved (commit 4a076cf):** the published artifacts predated the course-aligned fairness code
+(the GPU run 405b608 ran before 598b0dd was merged). The CPU-only steps `fairness_audit`,
+`fairness_interpretability`, `tradeoff_matrix`, `build_notebook` and `build_slides` were re-run on the
+unchanged `test_predictions.csv`, so all fairness outputs now share the GPU run's predictions. The
+CPU numbers in "First post-fix numbers" are confirmed by these outputs; quote the artifact values
+below, not that historical section.
 
-**Authoritative current results (GPU run 405b608) — safe to quote:**
+**Authoritative current results (model outputs from GPU run 405b608; fairness outputs from
+4a076cf on the same predictions) — safe to quote:**
 - Performance: AUC 0.730 / 0.732 / 0.733 (logistic / XGBoost / TabICL), Brier ≈ 0.205 / 0.204 /
   0.204. XGBoost − logistic AUC +0.0025 [0.0006, 0.0044]; TabICL vs XGBoost not significant.
   Incumbent AUC 0.60; net value at 20%: $5.05M / $5.17M / $5.12M vs $2.73M incumbent.
@@ -135,15 +130,32 @@ The last regeneration (commit 405b608, 16-member GPU ensemble) ran *before* 598b
   ECE 0.07–0.08; Black women n=339, ECE 0.106). Race: logistic nothing significant; XGBoost and
   TabICL selection-rate and FPR gaps ≈ +0.02 to +0.03, significant (Black people selected slightly
   more); race FNR gaps not significant for any model.
+- Equivalence (TOST, δ = ±5 pts, top-20%): race selection, FNR and FPR gaps **equivalent** for all
+  three models; gender and age gaps **different**; precision gaps inconclusive. Course test table:
+  gender and age rejected on every criterion (incl. sufficiency for gender); race only borderline
+  (logistic predictive equality p = 0.049 while its bootstrap CI includes 0).
+- Age (<33 − 33+): FNR gap −0.245 / −0.228 / −0.237; about 97% of re-arrested people aged 48+ are
+  not selected vs about 47–49% at 18–22.
+- FPDP (gender, logistic and XGBoost): candidates `Gang_Affiliated` and `Age_at_Release`. Raw gang
+  field has Cramér's V = 1.0 with gender (never recorded for women). Race proxies weak (max V ≈ 0.18).
+- Mitigation: drop gang + re-estimate → equal-opportunity p 0.000 → 0.995 (logistic) / 0.67
+  (XGBoost) at about −0.014 AUC (≈ 6× the XGBoost − logistic gap); statistical parity still
+  rejected. Dropping age does not remove the gender gap. Panel B for XGBoost picks "gang = Yes for
+  everyone" — an in-sample artefact, not a rule.
 
-**Inconsistencies to resolve:**
-- Recommendation: this plan says OPEN, but the report, deck (slide 15) and notebook already say
-  "pilot XGBoost, logistic as challenger".
-- Deck slide 11 still headlines FPR gaps; FNR is the declared primary metric.
-- Deck slide 6 highlights "ECE · XGBoost 0.011" although ECE differences are not significant.
-- `surrogate_tree.txt` and raw CSVs still show `_v1`…`_v4`; the deck/app use readable labels.
-- `run_manifest.json` has no package versions (they are in `validation_manifest.json`).
-- `../AGENTS.md` still says TabICL has 4 refits and 73% overlap; the current run has 8 refits and 77%.
+**Inconsistencies — status after the documentation pass (24 Sep):**
+- 🟡 Recommendation: this plan says OPEN, but the report, deck (slide 16), notebook and README still
+  say "pilot XGBoost, logistic as challenger". Left unchanged pending the team decision (P0.3);
+  the Q&A notes now flag it.
+- ✅ Deck slide 11 now headlines gender FNR gap, race TOST equivalence and age FNR gap.
+- ✅ Deck slide 6: the ECE "winner" card is replaced by the paired XGBoost − logistic AUC gap.
+- ✅ New deck slide 13 (FPDP: gang affiliation as the gender-gap candidate); later slides renumbered.
+- ✅ Report fairness section, notebook fairness findings, Q&A notes, README summary and JOURNEY.md
+  (stability numbers, stale "TabICL proxy leakage") updated to the current artifacts.
+- ❌ `surrogate_tree.txt` and raw CSVs still show `_v1`…`_v4`; the deck/app use readable labels.
+- ❌ `run_manifest.json` has no package versions (they are in `validation_manifest.json`) and does
+  not record the CPU-only fairness re-run (it is generated by `train_evaluate.py`, a GPU step; fix in
+  code at the next full run rather than editing the JSON by hand).
 
 ## To-do order (revised 23 Sep evening after the status audit)
 
@@ -152,23 +164,20 @@ Tags: **[CPU]** = can be done now without the GPU once the local environment is 
 Status: ✅ done · 🟡 partial · ❌ not started · ⚠️ code done, outputs missing.
 
 ### P0 — required before the deadline
-1. ⚠️ **[CPU] Generate the fairness outputs** that the code already produces: run
-   `fairness_audit`, `fairness_interpretability`, `tradeoff_matrix`, `build_notebook`, `build_slides`
-   on the existing `test_predictions.csv`. Check that the new CSVs/figures exist, the app no longer
-   shows "not generated yet", and the notebook shows the TOST and FPDP cells. Record the run in the
-   manifest. This does not change any model, so it stays consistent with the GPU run 405b608.
-2. **[TEXT] Justify δ for TOST before reading its output.** Write the reason for ±5 percentage
-   points (e.g. operational tolerance for allocation at 20% capacity) into the report/notebook. Note
-   the limits: TOST uses an analytic variance that ignores the data-dependent top-20% threshold,
-   while the displayed CIs are bootstrap; state this or switch to the bootstrap 90% CI rule. Report
-   `equivalent` / `different` / `inconclusive`, never "fair" from a nonsignificant test.
+1. ✅ **[CPU] Generate the fairness outputs** (commit 4a076cf) on the existing
+   `test_predictions.csv`; notebook and deck rebuilt. Manifest entry still missing (see above).
+2. ✅ **[TEXT] Justify δ for TOST.** Report and notebook state the ±5-point rationale, that δ was
+   fixed in code before TOST ran but after the gap point estimates had been seen, the analytic-vs-
+   bootstrap variance caveat, and the equivalent / different / inconclusive classification (the
+   notebook now prints it). Optional [CPU]: switch TOST to the bootstrap 90% CI rule for consistency.
 3. **[TEXT] Team decision on the recommendation, derived from the 3 × 4 matrix,** then make
    PLAN, report, deck and notebook say the same thing. Current evidence to weigh: XGBoost beats
    logistic by only +0.0025 AUC, has a larger gender FNR gap (−0.112 vs −0.096), the lowest
    top-20% overlap (0.755 vs 0.772), and significant (small) race selection/FPR gaps where logistic
    has none. "Logistic in production, XGBoost as challenger" needs serious consideration.
-4. **[TEXT] Fix deck/doc inconsistencies** listed above (FNR headline on the fairness slide, drop the
-   ECE "winner", readable labels, AGENTS.md stability numbers, `run_all.py` → `reproduce.py`).
+4. 🟡 **[TEXT] Fix deck/doc inconsistencies** listed above: FNR headline, ECE card, FPDP slide and
+   narrative done; readable labels in raw artifacts and the manifest remain. **Check the rebuilt deck
+   visually** (slides 6, 11, 12, 13): layout was not rendered during the edit.
 
 ### P1 — methodological gaps the jury is likely to probe
 5. **[CPU] FPDP / mitigation logic.** "Candidate variable" and "mitigation worked" are currently
@@ -176,6 +185,8 @@ Status: ✅ done · 🟡 partial · ❌ not started · ⚠️ code done, outputs
    with CI (or TOST) next to the p-value. Panel B picks the neutral value that maximizes the p-value
    **on the test set** (in-sample optimisation): say so, or choose it on a training-only validation
    split. Add calibration (ECE) and captured events to the mitigation table, not only AUC.
+   Current evidence: XGBoost Panel B neutralizes gang to "Yes" for everyone, and dropping gang still
+   leaves statistical parity rejected — both are already disclosed in the report.
 6. **[CPU] Gang_Affiliated as a gender measurement problem.** It is missing for every woman and
    mode-imputed as "No", which pushes women's scores down. Make this the main FPDP story. Compare:
    drop the feature, or add an explicit "not recorded" level, each with AUC, calibration, captured
@@ -225,12 +236,12 @@ Status: ✅ done · 🟡 partial · ❌ not started · ⚠️ code done, outputs
 ### Status of the earlier to-do list (pre-audit numbering)
 | Earlier item | Status |
 |---|---|
-| 1. Fairness, course-aligned | ⚠️ code done, outputs missing → P0.1 |
+| 1. Fairness, course-aligned | ✅ outputs generated (4a076cf) and written up; method caveats in P1.5, P1.11 |
 | 2. Notebook data preparation | 🟡 → P2.15 |
 | 3. Logistic table / per-person for 3 models / XPER vs PI vs SHAP | 🟡 / 🟡 / ❌ → P1.8, P2.13, P1.7 |
 | 4. Stability: course distances, disjoint halves, TabICL seed-only | ❌ → P1.9 |
 | 5. Paired model tests artifact | ✅ `paired_comparisons.csv` |
-| 6. Full re-run + app update | 🟡 GPU run done before the fairness merge; app captions updated, fairness figures missing → P0.1 |
+| 6. Full re-run + app update | ✅ GPU run + CPU fairness re-run on the same predictions; app now finds all fairness figures |
 | 7. Recommendation decision | ⚠️ documents already say XGBoost while this plan says OPEN → P0.3 |
 | 8. Q&A rehearsal | ❌ → P2.16 |
 

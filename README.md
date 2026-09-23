@@ -24,6 +24,8 @@ Models achieve approximately **0.73 ROC AUC and 0.20 Brier loss**, compared with
 Current run: TabICLv2 on **NVIDIA GeForce RTX 4050 Laptop GPU**, conventional models on CPU. Timings are hardware-specific. XGBoost minus TabICLv2 AUC is -0.00044, with paired 95% interval [-0.00230, 0.00127]; this does not establish superiority or equivalence. XGBoost reduces Brier loss by 16.4% relative to training-prevalence probabilities.
 <!-- RESULTS:END -->
 
+**Fairness at the proposed top-20% support rule** (FNR = re-arrested but not offered support): race gaps are equivalent within a ±5-point tolerance for all three models (TOST); women who are re-arrested miss support more often (FNR gap about 10–12 points), and age is the largest disparity (about 23–25 points, older people selected far less). A fairness partial dependence analysis traces the gender gap mainly to gang affiliation, which is never recorded for women; removing it costs about 0.014 AUC. See the [technical report](reports/technical_report.md#fairness).
+
 **Recommend XGBoost for a prospective shadow pilot, with logistic regression as the transparent challenger.** Model choice weighs explanation cost, subgroup errors, runtime and refit sensitivity. Small-sample TabICLv2 results do not establish transferability to smaller agencies elsewhere. Economic values are scenarios, not measured savings.
 
 ## Results and deliverables
