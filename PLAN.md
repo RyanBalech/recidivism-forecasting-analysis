@@ -24,22 +24,46 @@ Dynamic supervision variables are excluded to prevent leakage.
 
 ## Three models (brief requirement: white-box / ML / TFM)
 
-- **Logistic regression** — white-box.
+- **Logistic regression** — white-box; one-hot + L1, C=0.2154 from a 5-fold CV grid
+  (`scripts/tune_logistic.py`). The CV curve is flat for C in [0.05, 1], so tuning barely matters —
+  but it is now backed by code, and L1 sparsity is the course's own argument for penalized LR.
 - **XGBoost** — ML; count columns ordinal-encoded, hyperparameters from 5-fold CV random search.
+  Kept after a CV comparison against LightGBM, CatBoost, HistGB, random forest and EBM
+  (`scripts/compare_ml_models.py`): CatBoost 0.7343 vs XGBoost 0.7342 CV AUC is a tie, and
+  XGBoost is already wired into every audit.
 - **TabICLv2** — Tabular Foundation Model.
+
+## ⚠️ Status 23 Sep, 16:00 — TabICL results are invalid until re-run
+
+`Gang_Affiliated` is missing for **all 3,167 women and no man**. TabICL encoded NaN as its own
+category, so it could read the excluded Gender attribute. Fixed in PR #1 (`tabicl_frames` now
+mode-fills categoricals, like the other two pipelines; regression test added). Logistic and
+XGBoost were never affected (mode imputation, no categorical missing flag). No other feature has
+gender- or race-dependent missingness (checked).
+
+**Every TabICL number in `artifacts/`, the deck, the notebook, the report, README and JOURNEY.md
+predates the fix** — including the 0.273 gender FPR gap, "TabICL drifts most", and the race A/B
+"proxy leakage". Re-run the full pipeline before quoting any TabICL figure. The leak itself is a
+strong Q&A story: our fairness audit found a protected attribute leaking through missingness.
 
 ## Key findings so far
 
 - All three models plateau at ~0.73 AUC / ~0.20 Brier. Confirmed by CV search (best CV AUC
-  0.7343). This is the data's signal ceiling, matching NIJ challenge winners. **Accuracy is not
-  a grading criterion — report the ceiling in one slide and move on.**
+  0.7343) and by six ML candidates all landing at 0.728–0.734 CV AUC. This is the data's signal
+  ceiling, matching NIJ challenge winners. **Accuracy is not a grading criterion — report the
+  ceiling in one slide and move on.**
+- **Paired bootstrap on the test set** (same people, 1,000 resamples): XGBoost beats logistic by
+  +0.003 AUC and −0.001 Brier, both significant but small; TabICL vs XGBoost is **not** significant
+  on AUC, Brier or ECE. **ECE differences are not significant for any pair**, so "calibrates best"
+  cannot justify a recommendation. (Pre-fix TabICL numbers; re-check after the re-run.)
 - **Incumbent benchmark:** `Supervision_Risk_Score_First` is Georgia's existing 1–10 actuarial
   score that agencies use today. Standalone AUC = **0.60**, vs **0.73** for our models. The
   client's real question — "is any of this better than what we already deploy?" — answers itself:
   our models more than double the lift over random. This is the economic centerpiece.
 - **Learning curve** (1,500 / 5,000 / 10,000 / 18,028 rows, 3 seeds, fixed test set): TabICL leads
   at every size but its edge over XGBoost shrinks from +0.021 AUC at 1,500 to +0.004 at full data.
-  No crossover. TabICL calibrates best; XGBoost is ~35× faster and far more explainable.
+  No crossover. XGBoost is ~35× faster and far more explainable. (Pre-fix TabICL numbers; the full-data
+  TabICL point has 1 seed, not 3 — say so or add seeds.)
 
 ## Non-negotiable framing rule (from two external reviews)
 
@@ -58,11 +82,16 @@ before the recommendation.
    missing test values, imputed at the median.**
 
 ### Fairness — the centerpiece (required dimension + course headline)
-2. **Audit at the deployed operating point, not 0.5.** The product allocates the top 20% by risk, so
-   report every fairness gap at the top-20% capacity threshold AND at 0.5, and make the difference a
-   slide (fairness is operating-point-dependent). Verified: TabICL gender FPR gap 0.273 @0.5 vs 0.07
-   @top-20%.
-3. Gaps by race and gender for all three models: demographic parity, equal opportunity, FPR/FNR gaps.
+2. **Audit at the deployed operating point, not 0.5.** [DONE] The product allocates the top 20% by
+   risk, so report every fairness gap at the top-20% capacity threshold AND at 0.5. (The quoted TabICL
+   0.273 → 0.07 is pre-fix.)
+3. **[TODO — reviewer's #1 Q&A risk] Make FNR / equal opportunity the primary metric.** Being flagged
+   high-risk means *getting support*, so a false positive is not the harm; the harm is a false
+   negative — someone who needed help and was not selected. Primary: FNR gap + selection rate
+   (statistical parity) + within-group calibration (sufficiency). FPR becomes secondary. Update
+   `fairness_audit.py`, the frontier, `tradeoff_matrix.py`, and the slides. Pre-fix data already
+   shows the story: women have a significantly higher FNR at top-20% for all three models
+   (+0.09 logistic, +0.11 XGBoost); race FNR gaps are not significant.
 4. Bootstrap confidence intervals on every gap (syllabus: "metrics and inference tests"). Female =
    950 test rows, so show interval width, not point estimates.
 5. **Impossibility result — split by attribute (corrected):**
@@ -75,6 +104,22 @@ before the recommendation.
    inputs. Present group thresholds as an *analytic device to trace the frontier*, then show a
    race-blind alternative (single threshold minimizing the gap, or pre/in-processing) and its cost.
    Note that scoping to service allocation (not sanctions) changes the legal calculus.
+   **[TODO] Re-target the frontier to gender FNR**, and add the course's mitigation (below).
+
+**[TODO] Align with the course slides (§8, pp. 238–277).** These are taught methods the jury will
+look for:
+- **Fairness test statistics** (χ² / CMH / z-tests) with p-values, in the course's table layout
+  (statistical parity, conditional statistical parity, equal odds, equal opportunity, predictive
+  equality, sufficiency) × 3 models × {race, gender}. Keep the bootstrap CIs alongside.
+- **Fairness interpretability: FPDP + candidate variables**, and the **X/D vs X/Y dependence
+  scatter** (p260). This doubles as the **proxy-variable answer** (reviewer #7: are gang
+  affiliation or prior arrests proxies for race?).
+- **Course-style mitigation:** neutralize candidate variables with and without re-estimation,
+  report SP p-value + AUC (pp. 261–262), instead of relying only on group thresholds.
+- **Fairness equivalence (TOST, tolerance δ):** "not significant" ≠ "fair". Use TOST to *certify*
+  that race gaps are within δ (e.g. 5 pts) — the only way to claim race fairness honestly.
+- Explain the gender gap with the impossibility result + within-group calibration (pre-fix: logistic
+  and XGBoost over-predict women, 0.52 vs 0.454 observed; re-check TabICL after the fix).
 
 ### Interpretability (required dimension — for ALL three models)
 7. SHAP individual waterfall for logistic + XGBoost (notebook + app).
@@ -83,18 +128,43 @@ before the recommendation.
 9. **TabICL interpretability story, said deliberately:** no native explanation path; KernelSHAP over
    7,807 rows is impractical. PDP/ICE cover it model-agnostically. Frame the missing native path as a
    *deployment cost*, not an oversight — it feeds the recommendation.
-10. Attempt XPER (instructor's method); permutation importance is the documented fallback.
+10. Attempt XPER (instructor's method); permutation importance is the documented fallback. [DONE on
+    AUC, 150-row sample — noisy; consider a larger sample or XPER on the economic metric, p202]
+
+Done since: SHAP global + individual (logistic, XGBoost), LIME, depth-3 surrogate (R²=0.61), PDP/ICE
+for all three, XPER. Readable feature labels everywhere (`config.pretty`; no more `_v1`).
+**[TODO]**
+- **Logistic coefficient table**: coefficient, odds ratio, average marginal effect (course p66). The
+  white-box advantage is invisible without it.
+- **Individual explanations for all three models** on 1–2 test people (one clearly selected, one near
+  the top-20% cut where models disagree). KernelSHAP on raw features makes TabICL explainable for a
+  single person, so "no explanation path" becomes "explainable per person, but slow".
+- **XPER vs permutation importance vs SHAP** comparison chart (course pp. 206/208) and a note on the
+  disagreement problem (Krishna et al.).
 
 ### Stability (currently the weakest dimension)
 11. Real structural stability: refit across seeds/resamples, measure distance between resulting models
-    and drift in feature contributions — not just performance variance. **Budget TabICL seeds
-    explicitly (~73s/fit on CPU); decide the seed count now, not Sunday.**
+    and drift in feature contributions — not just performance variance. [DONE, pre-fix TabICL]
+    **[TODO] align with the course definitions (§7.1):**
+    - distance between models as **‖θ₁ − θ₂‖₂** on logistic coefficients, and **‖φ(f₁) − φ(f₂)‖₂** on
+      feature-importance vectors (we currently report rank correlation);
+    - per-person score SD across refits (how much one individual's score moves);
+    - **TabICL seed-only variability** (same data, different seeds/ensemble views) separated from
+      data resampling — course §7.2 on randomness: report seed, hardware (CPU vs GPU), version;
+    - optional: stability–performance trade-off curve over C for logistic (course p192).
 
 ### Supporting
 12. Learning curve — keep as support for the recommendation, not more slide time than fairness.
-13. **Commit the CV search as real code.** The repo still has hardcoded XGBoost hyperparameters and a
-    one-hot preprocessor; the "tuned + ordinal, 5-fold CV" claim is currently unbacked. Add the search
-    script + ordinal encoder and bake the result in, so every member can defend it.
+13. **Commit the CV search as real code.** [DONE] `tune_xgboost.py`, `tune_logistic.py`,
+    `compare_ml_models.py`.
+14. **[TODO] Full re-run after the leak fix**, in this order (TabICL on CPU ≈ 30–60 min total):
+    `train_evaluate` → `interpretability` → `xper_attribution` → `stability_structural` →
+    `fairness_audit` → `incumbent_benchmark` → `learning_curve` → `race_ab_test` → `tradeoff_matrix`
+    → `build_notebook` → `build_slides`. Never use `--skip-tabicl` for a real run: it overwrites
+    `test_predictions.csv` / `model_metrics.csv` without the TabICL column and breaks every
+    downstream script and the app.
+15. **[TODO] Refresh README, report, deck, notes and JOURNEY.md** with post-fix numbers; add the leak
+    to JOURNEY.md as a fairness finding.
 
 ## Deliverables checklist
 
@@ -115,8 +185,20 @@ before the recommendation.
 
 ## Recommendation to the client (trustworthy-AI wording)
 
-Any of the three models is a large upgrade over the incumbent score (0.60 → 0.73 AUC; ~$2.75M →
-~$5.1M net value). Then, grounded in confidence intervals and economics, not raw AUC:
+**[OPEN — team decision after the re-run]** The current deck says "deploy XGBoost" because it
+"calibrates best" and has "the smallest gender FPR gap". Neither holds up: ECE differences are not
+significant, and at top-20% logistic has *no* significant race gap while XGBoost's is borderline
+significant. The reviewer's #8: in a justice setting with an appeal process, transparency and
+contestability weigh heavily, and XGBoost's edge over logistic is +0.003 AUC. Two defensible options:
+- **Logistic regression in production, XGBoost as challenger** — transparent, contestable, fairness no
+  worse, performance practically equal.
+- **XGBoost in production** — only if we argue explicitly that a significant +0.003 AUC / ~$0.1–0.25M
+  is worth the loss of native interpretability, and show SHAP explanations are stable enough.
+Whichever we choose, derive it from the 3 × 4 trade-off table, not from slide-by-slide accumulation.
+
+Previous wording, kept for reference. Any of the three models is a large upgrade over the incumbent
+score (0.60 → 0.73 AUC; ~$2.75M → ~$5.1M net value). Then, grounded in confidence intervals and
+economics, not raw AUC:
 - **Small-data agencies:** TabICL offers the strongest predictive performance and calibration;
   deployment is justified where its incremental benefit exceeds its computational and auditability
   costs (it has no native explanation path).
@@ -126,5 +208,9 @@ Guardrails throughout: support allocation only, appeal process, drift monitoring
 
 ## Timeline
 
-Due Mon 28 Sep 9:40 AM. Dataset pre-validation was due Thu 24 Sep — confirm the instructor approved
-the NIJ dataset. ~5 days: economic case done; fairness next; keep TabICL refit counts tight.
+Due Mon 28 Sep 9:40 AM. **Dataset pre-validation is due Thu 24 Sep 9:40 AM** — confirm someone sent
+`reports/dataset_prevalidation.pdf` and the instructor approved the NIJ dataset.
+- Wed 23: leak fixed; logistic tuned; ML comparison; plan updated.
+- Thu 24: course-aligned fairness / interpretability / stability additions; full re-run.
+- Fri 25 – Sat 26: decide the recommendation; rebuild deck, notebook, report; app check.
+- Sun 27: Q&A rehearsal — each member defends a section they did not write.
