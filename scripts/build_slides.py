@@ -167,22 +167,27 @@ panel(s, "RACE — FIXABLE", "Base rates near-equal\n(0.582 vs 0.564)\n\nCalibra
 panel(s, "GENDER — BINDS", "Base rates differ 13.7 pts\n(0.591 vs 0.454)\n\nTheorem binds: cannot equalize both\n\nEqualizing gender FPR decalibrates women — a choice we surface, not hide", 6.85, 1.85, 5.75, 4.7, RED)
 footer(s, 12)
 
-# 13 — Trade-off matrix (required)
-s = make_slide(prs); title(s, "Which model should the client deploy?", "12 · Trade-offs across four dimensions")
-picture(s, FIG / "tradeoff_matrix.png", 2.2, 1.62, 8.9); footer(s, 13)
+# 13 — Improvement journey (process)
+s = make_slide(prs); title(s, "How we got here: what we tried, where we landed", "12 · Process")
+picture(s, FIG / "improvement_journey.png", .55, 1.75, 12.2)
+textbox(s, "Full log in JOURNEY.md — every step measured, including the attempts we rejected.", 1.0, 6.82, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 13)
 
-# 14 — Recommendation
-s = make_slide(prs); title(s, "Deploy XGBoost; challenger logistic; TabICL for small agencies", "13 · Recommendation")
+# 14 — Trade-off matrix (required)
+s = make_slide(prs); title(s, "Which model should the client deploy?", "13 · Trade-offs across four dimensions")
+picture(s, FIG / "tradeoff_matrix.png", 2.2, 1.62, 8.9); footer(s, 14)
+
+# 15 — Recommendation
+s = make_slide(prs); title(s, "Deploy XGBoost; challenger logistic; TabICL for small agencies", "14 · Recommendation")
 panel(s, "WHY XGBOOST", "Best calibration + net value\n\nSmallest gender FPR gap\n\nSHAP-explainable\n\n35× faster than the TFM", .8, 1.8, 5.75, 4.65, TEAL)
-panel(s, "CONDITIONS", "Benefit-only allocation\n\nLogistic as transparent challenger\n\nProspective shadow validation\n\nAppeal route, logs, quarterly audits, stop rules", 6.8, 1.8, 5.75, 4.65, PURPLE); footer(s, 14)
+panel(s, "CONDITIONS", "Benefit-only allocation\n\nLogistic as transparent challenger\n\nProspective shadow validation\n\nAppeal route, logs, quarterly audits, stop rules", 6.8, 1.8, 5.75, 4.65, PURPLE); footer(s, 15)
 
 # 15 — App + roadmap
-s = make_slide(prs); title(s, "The application makes every trade-off testable", "14 · Client experience")
+s = make_slide(prs); title(s, "The application makes every trade-off testable", "15 · Client experience")
 panel(s, "ASSESS", "Score one person, all 3 models + SHAP", .75, 1.75, 5.7, 1.72, ORANGE)
 panel(s, "AUDIT", "Race + gender, at the deployed point", 6.85, 1.75, 5.7, 1.72, PURPLE)
 panel(s, "COMPARE", "Incumbent, learning curve, matrix", .75, 3.8, 5.7, 1.72, ORANGE)
 panel(s, "SIMULATE", "Costs, capacity, sensitivity", 6.85, 3.8, 5.7, 1.72, PURPLE)
-textbox(s, "streamlit run app.py", 4.4, 6.25, 4.5, .4, 17, PALE, True, PP_ALIGN.CENTER, "Consolas"); footer(s, 15)
+textbox(s, "streamlit run app.py", 4.4, 6.25, 4.5, .4, 17, PALE, True, PP_ALIGN.CENTER, "Consolas"); footer(s, 16)
 
 REPORTS.mkdir(exist_ok=True)
 prs.save(OUT)
