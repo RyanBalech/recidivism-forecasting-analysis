@@ -1,72 +1,105 @@
 # 15-minute presentation notes
 
-## Slide 1 — A useful score must earn trust (0:45)
+Timing target ~13 min talk + buffer. Every member must be able to defend any slide.
 
-Open with the decision: the client has limited support capacity at the start of supervision. We compare three model families, but the recommendation must balance accuracy, explanations, stability, and fairness.
+## 1 — Title / thesis (0:45)
+We are a consultancy for a vendor that sells risk-assessment tools to US community-supervision
+agencies. The headline: our models don't just work, they clearly beat the tool agencies use today.
+The talk judges three models on performance, interpretability, stability, fairness.
 
-## Slide 2 — The decision boundary (1:00)
+## 2 — Client and decision (0:45)
+The score ranks people for *voluntary* re-entry support at supervision start. Never sanctions or
+surveillance. Outcome is a recorded arrest — institutionally mediated — so we predict the recorded
+outcome, not inherent propensity.
 
-The score ranks people for voluntary re-entry services. It cannot justify sanctions or greater surveillance. The outcome is arrest, which is institutionally mediated, so the model predicts the recorded outcome rather than a person's inherent propensity.
+## 3 — Data design (1:00)
+18,028 / 7,807 official NIJ split. Post-release variables excluded (leakage — they accrue after the
+score). Race, gender, PUMA excluded from inputs, kept for audit. Balanced outcome (57.8%), no
+resampling.
 
-## Slide 3 — Data and leakage guardrail (1:15)
+## 4 — Three models (0:45)
+Logistic (white-box), XGBoost (ordinal counts + 5-fold CV tuning), TabICLv2 (foundation model, no
+training, no native explanation). Same fields, same test cohort.
 
-Describe 25,835 Georgia releases, the official 70/30 split, and the three-year target. Emphasize why post-release violations, drug tests, employment, and programs are excluded. Race, gender, and geography stay out of scoring and remain available for auditing.
+## 5 — Incumbent benchmark — the hook (1:30)
+`Supervision_Risk_Score_First` is Georgia's existing 1–10 tool. Alone it scores **0.60 AUC** — barely
+better than a coin flip at ranking. Our models hit **0.73** and roughly double net value ($2.75M →
+$5.1–5.3M). That is the client's real question, answered. The choice among our three is secondary.
 
-## Slide 4 — Three deliberately different models (1:00)
+## 6 — Predictive performance (1:00)
+Among the three: near-tie. TabICL best AUC/Brier by a hair; XGBoost best calibration. Bootstrap 95%
+CIs overlap — don't oversell the ranking.
 
-Logistic regression is the white-box anchor. XGBoost learns nonlinear interactions. TabICLv2 brings pretrained tabular knowledge with in-context inference. All see the same eligible information and untouched test cohort.
+## 7 — Learning curve (1:15)
+Sizes 1.5k/5k/10k/full. TabICL leads on small data (small county); XGBoost catches up as data grows
+(large state). Gap closes to +0.004, no crossover. This is *why* model choice depends on agency size.
 
-## Slide 5 — Predictive performance is close (1:15)
+## 8 — Economic performance (0:45)
+20% capacity, editable $5k/$50k/20% scenario. Models beat incumbent at every capacity 5–50%
+(sensitivity sweep). Scenario, not causal savings.
 
-TabICLv2 wins Brier and AUC. The absolute gain over XGBoost is 0.0015 Brier and 0.0036 AUC. Bootstrap intervals overlap, so do not call this a decisive statistical victory. XGBoost calibrates best and runs in less than half the time.
+## 9 — Interpretability (1:15)
+SHAP global + individual waterfall (logistic, XGBoost); LIME agrees via a different mechanism; XPER
+(Pérignon's method) attributes AUC — age at release is the top driver. Depth-3 surrogate R²=0.61.
+**TabICL has no native explanation path** — a real deployment cost, only PDP/ICE cover it.
 
-## Slide 6 — Economic value depends on assumptions (1:00)
+## 10 — Stability (1:00)
+Refits on resampled data. ~1 person in 4 changes priority status across refits; TabICL least stable
+(and only 4 refits vs 8, a stated CPU cost). Scores need governance. No time split → temporal
+stability is a deployment gate.
 
-At 20% capacity, every model captures about 29% of observed events. Walk through the editable $5k cost, $50k event cost, and 20% effectiveness scenario. State clearly that observational predictions do not estimate intervention effects.
+## 11 — Fairness at the deployed point (1:15)
+Audit at top-20% (what we ship), not 0.5 — gaps are 2–4× smaller there (TabICL gender 0.272→0.072).
+Bootstrap CIs on every gap. XGBoost has the smallest gender gap; TabICL the largest.
 
-## Slide 7 — Drivers are consistent (1:00)
+## 12 — Impossibility result (1:15)
+Our data shows both sides. Race base rates near-equal (0.582 vs 0.564) → gap is fixable, group
+thresholds drive it to ~0. Gender differs 13.7 pts (0.591 vs 0.454) → theorem binds, equalizing
+gender FPR **decalibrates women**. We surface the trade-off, we don't hide it.
 
-Age at release, gang affiliation, prior felony arrests, and prison tenure recur across models. Permutation importance is held-out and model-agnostic. It describes reliance, not causal levers.
+## 13 — Trade-off matrix (1:00)
+The required slide. Performance near-tie → decision driven by interpretability, fairness, cost.
+Walk the green/amber/red columns.
 
-## Slide 8 — Fairness changes the ranking (1:30)
+## 14 — Recommendation (1:00)
+Deploy XGBoost (best calibration + net value, smallest gender gap, explainable, 35× faster). Logistic
+challenger. TabICL only for very small agencies. Benefit-only, prospective pilot, appeal route,
+quarterly audits, stop rules.
 
-XGBoost has the smallest race FPR gap. TabICLv2's gender FPR gap is much larger at the 0.5 threshold. Explain that threshold choice and base rates matter. Protected-attribute exclusion reduces direct use but does not remove proxy or label bias.
+## 15 — App + close (0:45)
+Demo: score one person across all 3 models + SHAP; fairness at deployed point; incumbent + sensitivity.
+Close on the rule: deploy only if benefit is shown without unacceptable subgroup harm.
 
-## Slide 9 — Stability evidence and missing evidence (1:00)
-
-Bootstrap interval widths are similar. Input stress tests show material feature reliance. The dataset has no suitable time split, so temporal transportability is unknown and must be tested prospectively.
-
-## Slide 10 — Recommendation (1:30)
-
-Recommend XGBoost for a controlled pilot, with logistic regression as challenger. The small performance sacrifice versus TabICLv2 buys calibration, speed, simpler operations, and smaller observed fairness gaps. Require benefit-only use and human accountability.
-
-## Slide 11 — Application workflow (1:00)
-
-Demo model comparison, subgroup audits, editable economics, held-out cohort inspection, and the individual sandbox. Point out that the app foregrounds governance limits rather than hiding them.
-
-## Slide 12 — Production roadmap (0:45)
-
-Shadow test, validate prospectively, estimate intervention effects, launch narrowly, and monitor quarterly. End with the rule: deployment depends on demonstrated benefit without unacceptable subgroup harm.
+---
 
 # Likely Q&A
 
-**Why not use TabICLv2 when it has the best Brier score?**  
-The improvement is small and uncertain, while its threshold fairness, calibration, runtime, and operational complexity are worse in this run. Trustworthy selection is multi-objective.
+**Did you actually beat the foundation model?** No — at full data it's a near-tie (0.7338 vs 0.7326).
+We don't claim to. Our finding is the crossover *shape* and that both crush the 0.60 incumbent. The
+recommendation rests on trust dimensions, where XGBoost wins.
 
-**Why exclude race and gender?**  
-For this support-allocation prototype, we chose not to use protected status directly. We still audit by both attributes. This does not guarantee fairness, so proxy, label, and outcome audits remain necessary.
+**Your impossibility claim — does it hold for gender?** No, and that's the point. Race base rates are
+near-equal so the gap is fixable; gender base rates differ 13.7 pts so the theorem binds. Same slide,
+both sides.
 
-**Why exclude the dynamic variables?**  
-They occur after the score is supposed to be made. They can encode supervision intensity and may be downstream of recidivism, creating leakage and an unusable baseline model.
+**You excluded race, then used race-specific thresholds — explain.** We didn't ship those. Group
+thresholds are an *analytic device* to trace the frontier. A per-race threshold is disparate treatment
+(Ricci v. DeStefano) and contradicts excluding race. The deployment option is the group-blind single
+threshold; we show what a race-blind alternative costs.
 
-**Why use arrest as the target?**  
-It is the challenge outcome and operationally observable, but it is imperfect. Our model card explicitly treats it as an institutionally mediated proxy and restricts use to beneficial support.
+**Why audit at top-20% not 0.5?** The product allocates the top 20% by risk, so 0.5 describes an
+operating point we never deploy. Auditing at 0.5 overstates gaps 2–4×.
 
-**Is the economic estimate credible?**  
-It is a scenario, not a forecast of savings. The app exposes each assumption. A prospective randomized or quasi-experimental study is required to estimate actual intervention value.
+**Why is TabICL's stability weaker with only 4 refits?** Cost — each TabICL refit is ~73s on CPU vs
+~3s for XGBoost. 4 refits still show it drifts most and has the lowest decision overlap. We disclose
+the asymmetry.
 
-**Would equal thresholds be fair?**  
-Not necessarily. Equal thresholds can yield unequal error rates when group distributions differ. Threshold policy must reflect the benefit-only use case, legal review, and explicit fairness objectives.
+**Why exclude the dynamic variables?** They accrue after the score is made — leakage, and they encode
+supervision intensity that's downstream of the outcome.
 
-**What would make you stop the model?**  
-Calibration drift, material subgroup-gap growth, degraded data quality, evidence of adverse use, or failure to show net benefit in the prospective pilot.
+**Is the economic number credible?** It's a scenario, not a savings forecast — every assumption is
+editable, and the ranking vs incumbent holds across the whole sensitivity sweep. Real impact needs a
+prospective randomized/quasi-experimental study.
+
+**What would make you stop the model?** Calibration drift, growing subgroup gaps at the deployed point,
+data-quality failure, evidence of adverse use, or no net benefit in the pilot.

@@ -1,68 +1,160 @@
 # Technical report and model card
 
+*Client: a software vendor that sells risk-assessment tools to US state community-supervision
+agencies. Engagement: choose and justify a three-year re-arrest scoring model to embed in the
+vendor's product, evaluated as a trustworthy AI system rather than on accuracy alone.*
+
 ## Executive recommendation
 
-Pilot **XGBoost** for allocating voluntary re-entry support, with logistic regression as a transparent challenger and quarterly governance review. TabICLv2 produced the best held-out probability accuracy, but the improvement over XGBoost was small: Brier score improved from 0.2054 to 0.2039 and ROC AUC from 0.7299 to 0.7336. XGBoost had the best calibration error (0.0118), required less than half the runtime, and showed smaller observed subgroup gaps at the fixed 0.5 threshold.
+**Any of our three models is a large upgrade over the tool agencies use today.** The incumbent
+actuarial score (`Supervision_Risk_Score_First`, a 1–10 scale already in the data) reaches only
+**0.60 ROC AUC**; all three candidate models reach **~0.73** and roughly double the net value of a
+capacity-limited support programme (about $2.75M → $5.1–5.3M under our scenario). That gap, not the
+choice between our three models, is the finding that matters to the client.
 
-This is a pilot recommendation, not an authorization for operational use. A prospective study must show that offering services from the score improves outcomes without creating harmful allocation gaps.
+Among the three, **deploy XGBoost as the production model, with logistic regression as the
+transparent challenger.** XGBoost has the best calibration (ECE 0.0109), the highest scenario net
+value ($5.27M), the smallest gender false-positive gap, and runs ~35× faster than TabICLv2. TabICLv2
+has marginally the best discrimination but no native explanation path, the largest gender gap, and
+the lowest stability — costs that outweigh a ~0.001 AUC edge for a government-facing tool. For very
+small agencies (< ~5,000 records) TabICLv2's few-shot advantage is real and can justify it there.
+
+This is a pilot recommendation, not authorization for operational use. Any deployment requires a
+prospective study, an appeal route, drift monitoring, and quarterly subgroup audits.
 
 ## Decision and population
 
 - **Intended decision:** prioritize scarce, beneficial support at the start of parole supervision.
-- **Population:** people released from Georgia prisons to parole supervision from 2013–2015.
-- **Target:** any new felony or misdemeanor arrest within three years.
-- **Train/test:** NIJ's official split, 18,028 training and 7,807 held-out records.
-- **Threshold:** 0.5 for the primary error-rate audit; the client app also supports fixed-capacity ranking.
+  Never sanctions, detention, or surveillance.
+- **Population:** people released from Georgia prisons to parole, 2013–2015.
+- **Target:** any new arrest within three years (base rate 57.8%; balanced, so no resampling).
+- **Train/test:** NIJ's official split, 18,028 training / 7,807 held-out.
+- **Operating point:** the product allocates support to the **top 20% by risk**, so fairness is
+  audited at that capacity threshold as well as at 0.5.
 
-The target is an arrest, not latent offending. It reflects policing, reporting, and legal processes as well as behavior. The model must never be used to impose sanctions or reduce access to services.
+The target is an arrest, not latent offending: it reflects policing, reporting, and legal processes
+as well as behaviour.
 
 ## Data preparation and leakage control
 
-Only 29 baseline fields available at supervision start are modeled. Gender, race, and Residence PUMA are excluded from the feature set. Gender and race remain in a separate audit table. Post-release variables covering violations, drug tests, employment, program attendance, and residential changes are excluded because they accrue after the scoring time and can be affected by the outcome or supervision intensity.
+29 baseline fields available at supervision start are modeled. Race, gender, and Residence PUMA (a
+race proxy) are excluded from inputs and kept only for auditing. Post-release variables (violations,
+drug tests, employment, program attendance, residence changes) are excluded because they accrue
+*after* the scoring moment.
 
-Numeric fields are median-imputed and standardized for logistic regression; categorical fields are most-frequent-imputed and one-hot encoded. XGBoost uses the same transformed matrix for a fair comparison. TabICLv2 receives the mixed-type pandas frame and applies its native categorical encoding and learned normalization.
+Ordered count fields ("3 or more", age bands, prison-tenure bands) are ordinal-encoded so trees can
+split on rank; remaining categoricals are one-hot encoded, numerics median-imputed with a
+missingness flag and standardized. Logistic and XGBoost share this matrix; TabICLv2 receives the raw
+mixed-type frame and applies its own encoding.
 
 ## Models
 
-**Logistic regression** uses L2 regularization (`C=0.25`) and provides a stable, auditable linear baseline. **XGBoost** uses 550 depth-three trees, conservative learning rate and regularization. **TabICLv2** is a pretrained in-context tabular transformer. Two ensemble views are used to fit within the available 6 GB GPU; this compute choice is recorded in the run manifest.
+- **Logistic regression** — L2, `C=0.25`. Transparent linear baseline.
+- **XGBoost** — hyperparameters from a 5-fold cross-validated random search on the training set only
+  (`scripts/tune_xgboost.py`, CV AUC 0.7343); ordinal-encoded counts.
+- **TabICLv2** — pretrained in-context tabular transformer, two ensemble members (compute choice
+  recorded in the run manifest).
 
-## Held-out results
+## Predictive performance
 
-| Model | ROC AUC | Average precision | Brier ↓ | Log loss ↓ | ECE ↓ |
-|---|---:|---:|---:|---:|---:|
-| Logistic regression | 0.7295 | 0.7691 | 0.2055 | 0.5970 | 0.0132 |
-| XGBoost | 0.7299 | 0.7686 | 0.2054 | 0.5969 | **0.0118** |
-| TabICLv2 | **0.7336** | **0.7719** | **0.2039** | **0.5932** | 0.0197 |
+| Model | ROC AUC | Avg precision | Brier ↓ | ECE ↓ | Net value @20% | Runtime |
+|---|---:|---:|---:|---:|---:|---:|
+| **Incumbent score** | 0.600 | — | — | — | $2.75M | — |
+| Logistic regression | 0.7295 | 0.7691 | 0.2055 | 0.0132 | $5.02M | 1.2 s |
+| XGBoost | 0.7326 | 0.7722 | 0.2044 | **0.0109** | **$5.27M** | 2.9 s |
+| TabICLv2 | **0.7338** | **0.7723** | **0.2038** | 0.0191 | $5.14M | 103.7 s |
 
-Bootstrap 95% intervals are stored in `artifacts/bootstrap_intervals.json`. Their overlap means the ranking should not be oversold.
+Bootstrap 95% intervals overlap across the three models (e.g. XGBoost AUC [0.7205, 0.7437]), so the
+ranking among them is not decisive — which is exactly why the recommendation turns on interpretability,
+fairness, stability, and cost. Full intervals in `artifacts/bootstrap_intervals.json`.
 
-## Economic scenario
+**Learning curve** (`scripts/learning_curve.py`, train sizes 1,500 / 5,000 / 10,000 with 3 seeds
+each, plus one run at the full 18,028): at 1,500 rows TabICLv2 leads clearly (0.720 vs XGBoost 0.699
+and logistic 0.703); the gap shrinks to +0.004 AUC at full data and never crosses. This is why model
+choice depends on an agency's data volume. (The full-data point is a single seed, so its variance
+band is not reported.)
 
-At a 20% service capacity, the three models identify 1,282–1,292 of the held-out positive outcomes, or about 28.6%–28.8% of all events. Under the illustrative assumptions of $5,000 support cost, $50,000 event cost, and 20% effectiveness, the calculated net value is about $5.0M–$5.1M. These are scenario outputs, not causal estimates. The application exposes every assumption and allows the client to change it.
+**Economic scenario.** At 20% capacity under illustrative assumptions ($5,000 support cost, $50,000
+event cost, 20% effectiveness), net value is $5.0–5.3M for the models vs $2.75M for the incumbent and
+$1.46M for random allocation. The app exposes every assumption and a sensitivity sweep; the models
+dominate the incumbent at all capacities from 5% to 50%, so the conclusion does not rest on one
+assumption. These are scenario outputs, not causal estimates.
 
 ## Interpretability
 
-Held-out permutation importance identifies age at release, gang affiliation, prior felony arrests, and prison tenure as recurring drivers. Logistic regression adds signed coefficients through its fitted pipeline. For TabICLv2, a model-agnostic permutation audit covers ten prespecified high-relevance fields. Explanations describe how the model behaves; they do not imply that changing a field would causally change recidivism.
+- **SHAP** (`scripts/interpretability.py`): global mean-|SHAP| and individual waterfalls for logistic
+  and XGBoost. Recurring drivers are age at release, gang affiliation, prior felony arrests, prison
+  tenure. **LIME** on the same individual gives a consistent local story via a different mechanism.
+- **XPER** (Hué, Hurlin, Pérignon, Saurin — `scripts/xper_attribution.py`) decomposes the model's
+  **AUC** into feature contributions. Age at release is the top performance driver (~0.088 AUC),
+  then prior felony arrests. This complements SHAP, which splits predictions, not performance.
+- **Global surrogate**: a depth-3 tree mimics XGBoost with test fidelity R² = 0.61 — enough to
+  narrate the main logic, not enough to replace the model.
+- **TabICLv2 has no native attribution path**, and KernelSHAP over 7,807 rows is impractical on CPU.
+  It is covered only model-agnostically (PDP/ICE, permutation). **This is a deployment cost**: a
+  caseworker cannot be told why the foundation model scored a person — a real strike against it for a
+  government-facing tool.
 
 ## Stability
 
-Four hundred bootstrap resamples quantify sampling uncertainty. The 95% ROC AUC interval widths are 0.022–0.023 and Brier interval widths are 0.0079–0.0088 across models. A feature-destruction stress test confirms all models rely materially on the input signal. Because the source lacks usable event dates, temporal stability cannot be estimated. A real pilot must evaluate a later release cohort and define drift triggers before launch.
+`scripts/stability_structural.py` refits each model on bootstrap resamples of the training data and
+measures, on the fixed test set, distance between refits, decision overlap, and drift in feature
+contributions. Logistic (8 refits) and XGBoost (8 refits) are the most stable; **TabICLv2 uses 4
+refits** (each costs ~73 s on CPU — a stated cost trade-off). Across refits about **one person in
+four changes priority status** for every model, so scores need governance and monitoring regardless
+of model. TabICLv2 has the largest score drift (0.045 vs ~0.034) and lowest decision overlap (73%).
+Event dates are unavailable, so temporal stability must be evaluated on a later cohort before launch.
 
 ## Fairness
 
-At threshold 0.5, XGBoost has the smallest observed race false-positive-rate gap (0.042) and gender FPR gap (0.107). Corresponding gaps are 0.062/0.121 for logistic regression and 0.068/0.273 for TabICLv2. Brier gaps by race remain under 0.009 for all models. Threshold metrics depend on the operating policy and subgroup base rates, so the app lets reviewers inspect several measures rather than reducing fairness to one number.
+Protected attributes: Race (Black 58%, White 42%) and Gender (M 88%, F 12%). Base recidivism rates:
+Black 0.582 / White 0.564; **Male 0.591 / Female 0.454**. Gaps reported at the **deployed top-20%
+operating point** with bootstrap 95% CIs (`scripts/fairness_audit.py`):
 
-Excluding protected attributes does not create fairness by itself. Proxy variables, label bias, differential policing, and historical selection can remain. Fairness monitoring should cover both error rates and who receives useful services.
+| Model | Race FPR gap | Gender FPR gap |
+|---|---:|---:|
+| Logistic | 0.017 (n.s.) | 0.040 |
+| XGBoost | 0.020 | **0.036** |
+| TabICLv2 | 0.019 | 0.072 |
+
+Auditing at the deployed point matters: at threshold 0.5 the same gaps are 2–4× larger (TabICLv2
+gender 0.272 at 0.5 vs 0.072 at top-20%), so a 0.5 audit would describe an operating point we never
+deploy.
+
+**Impossibility result, split by attribute — the key fairness insight.** Race base rates barely
+differ (0.582 vs 0.564), so calibration and equal error rates are near-jointly achievable: the
+observed race FPR gap is a *model property*, and group-specific thresholds drive it to ~0 while
+keeping essentially all captured events. Gender base rates differ by **13.7 points** (0.591 vs
+0.454), so the theorem binds: because race is excluded, logistic and XGBoost over-predict women
+(mean score ~0.52 vs actual 0.45), which is why their gender gaps exceed their race gaps. Group
+thresholds can still equalize the gender FPR gap (0.072 → 0.002 for TabICLv2, keeping 1,287 of 1,295
+events), **but doing so decalibrates women** — selecting them at a rate inconsistent with their lower
+actual recidivism. That is the trade-off the theorem forces; we surface it rather than hide it.
+
+**Mitigation caveat (legal).** Applying a different decision threshold by race or gender is disparate
+treatment (cf. *Ricci v. DeStefano*) and contradicts excluding the attribute from inputs. We present
+group thresholds only as an **analytic device** to trace the fairness/utility frontier, alongside the
+group-blind single threshold that a real deployment would use.
+
+**Removing race is free and fairer** (`scripts/race_ab_test.py`). Adding race as an input changes AUC
+by ≤ 0.0007 for every model but makes two otherwise-identical people receive different scores (up to
+4.8 points for XGBoost). Excluding it guarantees identical "twins". It does **not** guarantee equal
+group rates: TabICLv2's race FPR gap slightly rises when race is removed, evidence of proxy leakage —
+the classic limit of fairness-through-unawareness.
 
 ## Deployment controls
 
-1. Run a prospective shadow-mode evaluation on a later cohort.
-2. Use the score only to expand access to voluntary support.
-3. Publish plain-language documentation and provide an appeal/correction route.
-4. Log data quality, predictions, allocation decisions, overrides, and outcomes.
-5. Review calibration, drift, and subgroup gaps quarterly; suspend scoring on breach.
-6. Estimate causal program benefit through a randomized or strong quasi-experimental design.
+1. Prospective shadow-mode evaluation on a later cohort before any live use.
+2. Score used only to expand access to voluntary support.
+3. Plain-language documentation and an appeal/correction route.
+4. Log data quality, predictions, allocations, overrides, outcomes.
+5. Review calibration, drift, and subgroup gaps quarterly at the deployed operating point; suspend on
+   breach.
+6. Estimate causal programme benefit via a randomized or strong quasi-experimental design.
 
 ## Limitations
 
-The data is historical, from one state, and de-identified through aggregation. It does not include every factor relevant to re-entry. Arrest is an imperfect and institutionally mediated outcome. The foundation-model ensemble was limited for local hardware. The economic analysis is illustrative. None of the three models is validated for high-stakes adverse decisions.
+Historical data from one state, de-identified by aggregation. Arrest is an institutionally mediated
+outcome, not latent offending. The foundation-model ensemble was limited by local hardware. The
+economic analysis is illustrative. None of the three models is validated for high-stakes adverse
+decisions, and this tool must never drive them.

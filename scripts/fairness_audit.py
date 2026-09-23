@@ -84,32 +84,41 @@ def impossibility(pred: pd.DataFrame) -> pd.DataFrame:
 
 
 def frontier(pred: pd.DataFrame) -> pd.DataFrame:
-    """Race-blind capacity sweep, plus group thresholds that equalize FPR at 20% capacity."""
+    """For race AND gender: group-blind capacity sweep, plus group thresholds equalizing FPR.
+
+    Group thresholds are an analytic device to trace the fairness/utility frontier, not a
+    shipping recommendation (applying a different decision threshold by race or gender is
+    disparate treatment). We also record the calibration cost of equalizing, since forcing
+    equal error rates when base rates differ decalibrates the minority group.
+    """
     y = pred["actual"].to_numpy()
-    race = pred["Race"].to_numpy()
     rows = []
-    for model in MODELS:
-        p = pred[f"p_{model}"].to_numpy()
-        for cap in np.round(np.arange(0.05, 0.51, 0.05), 2):
-            sel = p >= np.quantile(p, 1 - cap)
-            fb, fw = rates(y[race == "BLACK"], sel[race == "BLACK"]), rates(y[race == "WHITE"], sel[race == "WHITE"])
-            rows.append({"model": model, "method": "race_blind_single_threshold", "capacity": cap,
-                         "fpr_gap": fb["fpr"] - fw["fpr"], "captured_events": int(y[sel].sum())})
-        # Analytic device: per-group thresholds, same total capacity, FPR equalized by search.
-        k = int(round(len(p) * CAPACITY))
-        best = None
-        for share_b in np.linspace(0.3, 0.8, 101):
-            kb = int(round(k * share_b))
-            kw = k - kb
-            sb, sw = race == "BLACK", race == "WHITE"
-            sel = np.zeros(len(p), bool)
-            sel[np.where(sb)[0][np.argsort(-p[sb])[:kb]]] = True
-            sel[np.where(sw)[0][np.argsort(-p[sw])[:kw]]] = True
-            gap = rates(y[sb], sel[sb])["fpr"] - rates(y[sw], sel[sw])["fpr"]
-            if best is None or abs(gap) < abs(best[0]):
-                best = (gap, int(y[sel].sum()))
-        rows.append({"model": model, "method": "group_thresholds_equal_fpr", "capacity": CAPACITY,
-                     "fpr_gap": best[0], "captured_events": best[1]})
+    for attr, (a, b) in ATTRIBUTES.items():
+        g = pred[attr].to_numpy()
+        base_gap = y[g == a].mean() - y[g == b].mean()
+        for model in MODELS:
+            p = pred[f"p_{model}"].to_numpy()
+            for cap in np.round(np.arange(0.05, 0.51, 0.05), 2):
+                sel = p >= np.quantile(p, 1 - cap)
+                fa, fb = rates(y[g == a], sel[g == a]), rates(y[g == b], sel[g == b])
+                rows.append({"model": model, "attribute": attr, "method": "group_blind_single_threshold",
+                             "capacity": cap, "fpr_gap": fa["fpr"] - fb["fpr"], "captured_events": int(y[sel].sum())})
+            # Per-group thresholds, same total capacity, FPR gap minimized by search.
+            k = int(round(len(p) * CAPACITY))
+            ma, mb = g == a, g == b
+            best = None
+            for share_a in np.linspace(0.2, 0.95, 151):
+                ka = min(int(round(k * share_a)), int(ma.sum()))
+                kb = min(k - ka, int(mb.sum()))
+                sel = np.zeros(len(p), bool)
+                sel[np.where(ma)[0][np.argsort(-p[ma])[:ka]]] = True
+                sel[np.where(mb)[0][np.argsort(-p[mb])[:kb]]] = True
+                gap = rates(y[ma], sel[ma])["fpr"] - rates(y[mb], sel[mb])["fpr"]
+                if best is None or abs(gap) < abs(best["fpr_gap"]):
+                    best = {"model": model, "attribute": attr, "method": "group_thresholds_equal_fpr",
+                            "capacity": CAPACITY, "fpr_gap": gap, "captured_events": int(y[sel].sum()),
+                            "base_rate_gap": base_gap}
+            rows.append(best)
     return pd.DataFrame(rows)
 
 
@@ -133,16 +142,19 @@ def figures(result: pd.DataFrame, front: pd.DataFrame) -> None:
     fig.savefig(FIGURE_DIR / "fairness_operating_point.png", dpi=180, bbox_inches="tight")
     plt.close(fig)
 
-    fig, ax = plt.subplots(figsize=(10, 6))
-    for model in MODELS:
-        f = front[(front.model == model) & (front.method == "race_blind_single_threshold")]
-        ax.plot(f.captured_events, f.fpr_gap, marker="o", color=PALETTE[model], label=f"{DISPLAY[model]} (race-blind)")
-        g = front[(front.model == model) & (front.method == "group_thresholds_equal_fpr")]
-        ax.scatter(g.captured_events, g.fpr_gap, marker="*", s=350, color=PALETTE[model], edgecolor="black")
-    ax.axhline(0, color="grey", lw=1)
-    ax.set(xlabel="Recidivism events captured by the service allocation", ylabel="Race FPR gap (Black minus White)",
-           title="Fairness/utility frontier (stars = group thresholds, analytic only)")
-    ax.legend(fontsize=10)
+    fig, axes = plt.subplots(1, 2, figsize=(17, 6))
+    for ax, attr in zip(axes, ATTRIBUTES):
+        a, b = ATTRIBUTES[attr]
+        for model in MODELS:
+            f = front[(front.model == model) & (front.attribute == attr) & (front.method == "group_blind_single_threshold")]
+            ax.plot(f.captured_events, f.fpr_gap, marker="o", color=PALETTE[model], label=f"{DISPLAY[model]} (group-blind)")
+            s = front[(front.model == model) & (front.attribute == attr) & (front.method == "group_thresholds_equal_fpr")]
+            ax.scatter(s.captured_events, s.fpr_gap, marker="*", s=350, color=PALETTE[model], edgecolor="black")
+        ax.axhline(0, color="grey", lw=1)
+        ax.set(xlabel="Recidivism events captured", ylabel=f"FPR gap ({a} minus {b})",
+               title=f"{attr}: fairness/utility frontier")
+    axes[0].legend(fontsize=9)
+    fig.suptitle("Stars = per-group thresholds equalizing FPR (analytic device, not a shipping option)", fontsize=12)
     fig.tight_layout()
     fig.savefig(FIGURE_DIR / "fairness_frontier.png", dpi=180, bbox_inches="tight")
     plt.close(fig)

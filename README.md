@@ -8,15 +8,18 @@ The decision is framed as estimating three-year arrest risk at the start of paro
 
 The official NIJ `Training_Sample` indicator creates an untouched 18,028/7,807 train/test split. Race, gender, and residence geography are excluded from model inputs and retained for subgroup audits. Only baseline variables available at supervision start are used.
 
+**The client's real question — better than the tool agencies use today?** `Supervision_Risk_Score_First`, Georgia's existing 1–10 actuarial score, reaches only **0.60 ROC AUC**. Every candidate model reaches ~0.73 and roughly doubles the net value of a capacity-limited support programme (~$2.75M → ~$5.1–5.3M).
+
 | Model | ROC AUC | Average precision | Brier ↓ | Calibration error ↓ | Runtime* |
 |---|---:|---:|---:|---:|---:|
-| Logistic regression | 0.7295 | 0.7691 | 0.2055 | 0.0132 | 0.59 s |
-| XGBoost | 0.7299 | 0.7686 | 0.2054 | **0.0118** | 3.04 s |
-| TabICLv2 | **0.7336** | **0.7719** | **0.2039** | 0.0197 | 7.13 s |
+| Incumbent score | 0.600 | — | — | — | — |
+| Logistic regression | 0.7295 | 0.7691 | 0.2055 | 0.0132 | 1.2 s |
+| XGBoost | 0.7326 | 0.7722 | 0.2044 | **0.0109** | 2.9 s |
+| TabICLv2 | **0.7338** | **0.7723** | **0.2038** | 0.0191 | 103.7 s |
 
-\*Training plus one full held-out prediction run on the development machine. TabICLv2 uses two ensemble members on an RTX 4050 Laptop GPU.
+\*Training plus one full held-out prediction run. XGBoost hyperparameters come from a 5-fold CV search; TabICLv2 runs on CPU here (a CUDA GPU is much faster). Bootstrap 95% intervals across the three models overlap.
 
-**Recommendation:** pilot XGBoost for support allocation, with logistic regression as the transparent challenger. Its predictive performance is statistically close to TabICLv2, it calibrates best, runs cheaply, and has the smallest observed race and gender false-positive gaps. Do not deploy before a prospective impact and fairness pilot.
+**Recommendation:** deploy XGBoost for support allocation, with logistic regression as the transparent challenger; TabICLv2 only for very small agencies where its small-data edge is real (see the learning curve). XGBoost calibrates best, has the highest scenario net value and the smallest gender false-positive gap, runs ~35× faster than TabICLv2, and is SHAP-explainable (the foundation model has no native explanation path). Do not deploy before a prospective impact and fairness pilot. Full four-dimension comparison in [`artifacts/tradeoff_matrix.md`](artifacts/tradeoff_matrix.md) and the [technical report](reports/technical_report.md).
 
 ## Deliverables
 
