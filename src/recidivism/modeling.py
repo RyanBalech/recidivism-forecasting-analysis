@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import warnings
 
 import pandas as pd
 from sklearn.compose import ColumnTransformer
@@ -27,6 +28,14 @@ XGB_PARAMS = dict(
     subsample=0.8217, colsample_bytree=0.6233, gamma=0.4576,
     reg_lambda=4.5603, reg_alpha=1.4192,
 )
+
+# From scripts/tune_logistic.py (5-fold CV grid over C, penalty, and count encoding;
+# one-hot counts beat ordinal counts, 0.7324 vs 0.7315).
+LOGIT_ENCODING = "onehot"
+# scikit-learn 1.8+ deprecates ``penalty`` in favour of ``l1_ratio``, which 1.7 rejects
+# for liblinear. Keep ``penalty`` so every version in requirements.txt behaves the same.
+warnings.filterwarnings("ignore", message="'penalty' was deprecated", category=FutureWarning)
+LOGIT_PARAMS = dict(C=0.2154, penalty="l1")  # CV AUC 0.7324; C in [0.05, 1] is flat within 0.0002
 
 
 def ordinal_encode(frame: pd.DataFrame) -> pd.DataFrame:
@@ -71,14 +80,27 @@ def preprocessor(frame: pd.DataFrame) -> ColumnTransformer:
     )
 
 
-def logistic_model(frame: pd.DataFrame) -> Pipeline:
-    """White-box benchmark: preprocessing followed by regularized logit."""
-    return Pipeline([
+def logistic_model(frame: pd.DataFrame, encoding: str | None = None, **overrides) -> Pipeline:
+    """White-box benchmark: preprocessing followed by regularized logit.
+
+    ``encoding="onehot"`` gives every count level its own coefficient;
+    ``"ordinal"`` turns counts into numbers so each field has one slope.
+    Defaults come from LOGIT_PARAMS (5-fold CV grid in scripts/tune_logistic.py).
+    """
+    encoding = encoding or LOGIT_ENCODING
+    params = {**LOGIT_PARAMS, **overrides}
+    steps = []
+    if encoding == "ordinal":
+        steps.append(("ordinal", FunctionTransformer(ordinal_encode)))
+        frame = ordinal_encode(frame)
+    elif encoding != "onehot":
+        raise ValueError(f"Unknown encoding: {encoding}")
+    # C is inverse regularization strength: smaller C means stronger shrinkage.
+    steps += [
         ("prepare", preprocessor(frame)),
-        # C is inverse regularization strength. 0.25 applies useful shrinkage to
-        # the 108 transformed columns and limits extreme coefficients.
-        ("model", LogisticRegression(C=0.25, max_iter=2_000, solver="liblinear", random_state=42)),
-    ])
+        ("model", LogisticRegression(**params, max_iter=2_000, solver="liblinear", random_state=42)),
+    ]
+    return Pipeline(steps)
 
 
 def xgboost_model(frame: pd.DataFrame, random_state: int = 42, **overrides) -> Pipeline:

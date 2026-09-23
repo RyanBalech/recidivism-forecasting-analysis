@@ -28,7 +28,7 @@ from sklearn.metrics import brier_score_loss, roc_curve
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from recidivism.config import ARTIFACT_DIR, FIGURE_DIR, MODEL_DIR, RANDOM_SEED
+from recidivism.config import ARTIFACT_DIR, FIGURE_DIR, MODEL_DIR, RANDOM_SEED, pretty
 from recidivism.data import load_official_split
 from recidivism.metrics import (
     bootstrap_intervals,
@@ -260,7 +260,7 @@ def make_figures(y: pd.Series, predictions: dict[str, np.ndarray], metrics: pd.D
     fig, axes = plt.subplots(1, len(predictions), figsize=(6 * len(predictions), 6), squeeze=False)
     for ax, name in zip(axes[0], predictions):
         part = top[top.model.eq(name)].sort_values("importance")
-        ax.barh(part.feature.str.replace("_", " "), part.importance, color=palette[name])
+        ax.barh(part.feature.map(pretty), part.importance, color=palette[name])
         ax.set_title(DISPLAY_NAMES[name])
         ax.set_xlabel("Increase in Brier loss when shuffled")
     fig.tight_layout()

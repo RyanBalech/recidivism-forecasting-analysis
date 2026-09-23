@@ -1,0 +1,6 @@
+{
+  "cv_roc_auc": 0.7324,
+  "encoding": "onehot",
+  "C": 0.21544,
+  "penalty": "l1"
+}
