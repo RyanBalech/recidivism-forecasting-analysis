@@ -1,13 +1,21 @@
+# Python
 __pycache__/
 *.py[cod]
-.pytest_cache/
-.ipynb_checkpoints/
 .venv/
 .env
+
+# Tooling caches
+.pytest_cache/
+.ipynb_checkpoints/
+.DS_Store
+*.log
+catboost_info/
+
+# Secrets
 .streamlit/secrets.toml
+
+# Generated locally, not part of the submission
+artifacts/smoke/
+artifacts/slide_previews/
 artifacts/models/*.pkl
 artifacts/models/*.ckpt
-artifacts/slide_previews/
-*.log
-artifacts/smoke/
-catboost_info/

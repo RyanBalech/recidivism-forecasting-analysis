@@ -9,7 +9,8 @@ from pathlib import Path
 
 # ``parents[2]`` moves from src/recidivism/config.py to the project root.
 ROOT = Path(__file__).resolve().parents[2]
-DATA_PATH = ROOT / "nij-challenge2021_full_dataset.csv"
+DATA_DIR = ROOT / "data"
+DATA_PATH = DATA_DIR / "nij-challenge2021_full_dataset.csv"
 ARTIFACT_DIR = ROOT / "artifacts"
 MODEL_DIR = ARTIFACT_DIR / "models"
 FIGURE_DIR = ARTIFACT_DIR / "figures"

@@ -65,7 +65,7 @@ def main():
     paths = [ROOT / "scripts" / f"{name}.py" for name in
              ["accuracy_review", "native_accuracy_review", "leakage_stress", "leakage_positive_control",
               "thread_sensitivity", "deep_leakage_audit", "summarize_deep_review"]]
-    paths += [ROOT / "src/recidivism/modeling.py", ROOT / "nij-challenge2021_full_dataset.csv"]
+    paths += [ROOT / "src/recidivism/modeling.py", DATA_DIR / "nij-challenge2021_full_dataset.csv"]
     paths += sorted(OUT.glob("*.csv"))
     paths += [p for p in sorted(OUT.glob("*.json")) if p.name != "source_and_result_hashes.json"]
     hashes = {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest() for path in paths}

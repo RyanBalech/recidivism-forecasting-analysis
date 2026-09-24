@@ -9,8 +9,8 @@ import nbformat as nbf
 from nbclient import NotebookClient
 
 ROOT = Path(__file__).resolve().parents[1]
-OUTS = [ROOT / "Recidivism_Project_Submission.ipynb",
-        ROOT / "notebooks" / "recidivism_analysis.ipynb"]
+# One canonical notebook. A second copy only ever drifts from this one.
+OUTS = [ROOT / "Recidivism_Project_Submission.ipynb"]
 md = nbf.v4.new_markdown_cell
 code = nbf.v4.new_code_cell
 nb = nbf.v4.new_notebook()

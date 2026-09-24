@@ -129,7 +129,7 @@ mode-fills categoricals, like the other two pipelines; regression test added). L
 XGBoost were never affected (mode imputation, no categorical missing flag). No other feature has
 gender- or race-dependent missingness (checked).
 
-**Every TabICL number in `artifacts/`, the deck, the notebook, the report, README and JOURNEY.md
+**Every TabICL number in `artifacts/`, the deck, the notebook, the report, README and docs/JOURNEY.md
 predates the fix** — including the 0.273 gender FPR gap, "TabICL drifts most", and the race A/B
 "proxy leakage". Re-run the full pipeline before quoting any TabICL figure. The leak itself is a
 strong Q&A story: our fairness audit found a protected attribute leaking through missingness.
@@ -219,7 +219,7 @@ below, not that historical section.
 - ✅ Deck slide 11 now headlines gender FNR gap, race TOST equivalence and age FNR gap.
 - ✅ Deck slide 6: the ECE "winner" card is replaced by the paired XGBoost − logistic AUC gap.
 - ✅ New deck slide 13 (FPDP: gang affiliation as the gender-gap candidate); later slides renumbered.
-- ✅ Report fairness section, notebook fairness findings, Q&A notes, README summary and JOURNEY.md
+- ✅ Report fairness section, notebook fairness findings, Q&A notes, README summary and docs/JOURNEY.md
   (stability numbers, stale "TabICL proxy leakage") updated to the current artifacts.
 - ❌ `surrogate_tree.txt` and raw CSVs still show `_v1`…`_v4`; the deck/app use readable labels.
 - ❌ `run_manifest.json` has no package versions (they are in `validation_manifest.json`) and does
@@ -325,7 +325,7 @@ Priority = what the brief grades and what the jury will ask. Details under each 
 4. **Stability** — course distances; disjoint halves; TabICL seed-only variability.
 5. Paired model tests saved as an artifact.
 6. **Full re-run** with the leak fix (`python scripts/reproduce.py`, GPU teammate), then **app update** (FNR, TabICL per-person explanation).
-7. Team decision on the recommendation → deck, report, notes, README, JOURNEY.md.
+7. Team decision on the recommendation → deck, report, notes, README, docs/JOURNEY.md.
 8. Q&A rehearsal.
 
 ## Key findings so far
@@ -452,8 +452,8 @@ for all three, XPER. Readable feature labels everywhere (`config.pretty`; no mor
     `train_evaluate` → `interpretability` → `xper_attribution` → `stability_structural` →
     `fairness_audit` → `incumbent_benchmark` → `learning_curve` → `race_ab_test` → `tradeoff_matrix`
     → `build_notebook` → `build_slides`. The review makes `--skip-tabicl` write to `artifacts/smoke/`, preserving published artifacts.
-15. **[PARTIAL — see P0.3, P0.4] Refresh README, report, deck, notes and JOURNEY.md** with post-fix numbers; add the leak
-    to JOURNEY.md as a fairness finding.
+15. **[PARTIAL — see P0.3, P0.4] Refresh README, report, deck, notes and docs/JOURNEY.md** with post-fix numbers; add the leak
+    to docs/JOURNEY.md as a fairness finding.
 16. **[PARTIAL — see P2.15] Notebook data-preparation section.** The current notebook starts from saved artifacts.
     Add: target balance, the official split, excluded columns (protected, PUMA, post-release
     dynamics) and why, missingness by group (the Gang_Affiliated/gender finding), encoding choices.

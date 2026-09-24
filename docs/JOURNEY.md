@@ -66,7 +66,7 @@ current `main`.
 | **Started** | Bootstrap CI widths + a feature-shuffle test — these measure *performance uncertainty*, not structural stability. |
 | **Replaced with** | **Structural stability**: refit each model on bootstrap resamples of the training data, then measure distance between refits (mean \|Δp\|), decision overlap (top-20% Jaccard), and drift in feature contributions (SHAP rank correlation). |
 | **Landed** | Historical (pre-fix, CPU, 4 TabICL refits): TabICLv2 drifted most (0.045) with 73% overlap. **Current run (GPU, 8 refits for every model):** mean \|Δp\| 0.032 / 0.035 / 0.036 and top-20% Jaccard 0.77 / 0.75 / 0.77 (logistic / XGBoost / TabICLv2) — the three models are close. Jaccard ≈ 0.76 means about 14% of the selected set is replaced between refits, not 1 person in 4. |
-| **Disclosed** | Resamples are not shared across models, and data and seed vary together; separating sampling from estimator randomness is still open (PLAN.md P1.9). |
+| **Disclosed** | Resamples are not shared across models, and data and seed vary together; separating sampling from estimator randomness is still open (docs/PLAN.md P1.9). |
 
 ## Fairness — the deepest iteration
 | Step | What changed | Result |
@@ -97,6 +97,6 @@ current `main`.
 
 ### How we kept track
 - **Git history** on `main` — each step is a commit with a message.
-- **`PLAN.md`** — the plan and its two external-review revisions.
+- **`docs/PLAN.md`** — the plan and its two external-review revisions.
 - **`artifacts/`** — every number is a CSV/JSON; every figure regenerates from `scripts/`.
 - **This file** — the human-readable narrative of the path, for the presentation and Q&A.

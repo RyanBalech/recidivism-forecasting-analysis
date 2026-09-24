@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from recidivism.config import DATA_PATH, FEATURE_COLUMNS, ROOT
+from recidivism.config import DATA_DIR, DATA_PATH, FEATURE_COLUMNS, ROOT
 from recidivism.data import load_official_split
 from recidivism.modeling import logistic_model, tabicl_frames
 
@@ -15,7 +15,7 @@ from recidivism.modeling import logistic_model, tabicl_frames
                                     "Percent_Days_Employed", "Program_Attendances"])
 def test_independent_release_gate_rejects_injected_feature(field):
     check = runpy.run_path(str(ROOT / "scripts/deep_leakage_audit.py"))["check_release_features"]
-    released = pd.read_csv(ROOT / "nij-challenge2021_test_dataset_1.csv", nrows=0)
+    released = pd.read_csv(DATA_DIR / "nij-challenge2021_test_dataset_1.csv", nrows=0)
     with pytest.raises(ValueError):
         check([*FEATURE_COLUMNS, field], released.columns)
 

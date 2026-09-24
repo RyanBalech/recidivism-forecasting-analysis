@@ -3,7 +3,7 @@
 Two panels: (1) the fairness gender-FNR-gap journey (0.5 audit -> deployed-point audit ->
 group-threshold mitigation), the clearest 'we improved this' story; (2) the XGBoost accuracy
 journey (baseline -> ordinal -> CV-tuned, with the rejected deeper-tree attempt marked).
-Numbers are measured in this project; see JOURNEY.md for the full log and sources.
+Numbers are measured in this project; see docs/JOURNEY.md for the full log and sources.
 """
 from __future__ import annotations
 

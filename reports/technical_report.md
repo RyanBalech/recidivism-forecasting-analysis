@@ -34,7 +34,7 @@ Logistic uses the merged team's L1 regularization with C=0.2154 and one-hot enco
 
 The fresh five-fold conventional-model CV in `validation_cv.csv` evaluates fixed configurations with fold-local preprocessing. Earlier tuning used the same training data, so this is **not nested validation of the search procedure**. The TabICLv2 ensemble sensitivity check is not a full cross-validation study.
 
-The original test set was repeatedly inspected for model variants, learning curves and audits. Historical choices in JOURNEY.md reference its results. It is therefore an evaluation set, **not an untouched final holdout**. New temporal/external data are required for confirmation; pipeline leakage control cannot undo adaptive evaluation reuse. See [scikit-learn's evaluation guidance](https://scikit-learn.org/stable/modules/cross_validation.html).
+The original test set was repeatedly inspected for model variants, learning curves and audits. Historical choices in docs/JOURNEY.md reference its results. It is therefore an evaluation set, **not an untouched final holdout**. New temporal/external data are required for confirmation; pipeline leakage control cannot undo adaptive evaluation reuse. See [scikit-learn's evaluation guidance](https://scikit-learn.org/stable/modules/cross_validation.html).
 
 ## Predictive and economic performance
 

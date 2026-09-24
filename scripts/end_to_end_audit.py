@@ -179,7 +179,7 @@ def main():
             if not np.isclose(part[metric].mean(), stability.loc[name, metric], atol=5.1e-5):
                 raise ValueError(f"Stale stability summary: {name}/{metric}")
     submission_notebook = ROOT / "Recidivism_Project_Submission.ipynb"
-    notebook_path = ROOT / "notebooks/recidivism_analysis.ipynb"
+    notebook_path = ROOT / "Recidivism_Project_Submission.ipynb"
     slides_path = ROOT / "reports/ISAF_Recidivism_Presentation.pptx"
     for path in [submission_notebook, notebook_path, slides_path]:
         if not path.is_file() or path.stat().st_size == 0:

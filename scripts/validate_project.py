@@ -22,7 +22,7 @@ from sklearn.model_selection import StratifiedKFold, cross_validate
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-from recidivism.config import ARTIFACT_DIR, DATA_PATH, MODEL_DIR
+from recidivism.config import ARTIFACT_DIR, DATA_DIR, DATA_PATH, MODEL_DIR
 from recidivism.data import load_official_split
 from recidivism.metrics import classification_metrics, fairness_table
 from recidivism.modeling import logistic_model, xgboost_model
@@ -34,8 +34,8 @@ def main():
     expected = split.audit_test.assign(actual=split.y_test)
     pd.testing.assert_frame_equal(pred[expected.columns], expected, check_dtype=False)
     raw = pd.read_csv(DATA_PATH)
-    training = pd.read_csv(ROOT / "nij-challenge2021_training_dataset.csv")
-    test = pd.read_csv(ROOT / "nij-challenge2021_test_dataset_1.csv")
+    training = pd.read_csv(DATA_DIR / "nij-challenge2021_training_dataset.csv")
+    test = pd.read_csv(DATA_DIR / "nij-challenge2021_test_dataset_1.csv")
     assert set(training.ID) == set(split.audit_train.ID)
     assert set(test.ID) == set(split.audit_test.ID)
     for year in [2, 3]:

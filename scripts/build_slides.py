@@ -310,7 +310,7 @@ textbox(s, "Jaccard is intersection / union, not the share of people switching. 
 # A7 — Improvement journey
 s = make_slide(prs); title(s, "How we got here: what we tried, where we landed", "A7 · Process")
 picture(s, FIG / "improvement_journey.png", .55, 1.75, 12.2)
-textbox(s, "Full log in JOURNEY.md — every step measured, including the attempts we rejected.", 1.0, 6.82, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER)
+textbox(s, "Full log in docs/JOURNEY.md — every step measured, including the attempts we rejected.", 1.0, 6.82, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER)
 
 # A8 — proxy recovery
 s = make_slide(prs); title(s, "Does excluding an attribute remove it?", "A8 · Proxy recovery")

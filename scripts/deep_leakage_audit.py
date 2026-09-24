@@ -12,7 +12,7 @@ from sklearn.metrics import roc_auc_score
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-from recidivism.config import DATA_PATH, EXCLUDED_FROM_MODEL, FEATURE_COLUMNS, ID_COLUMN, SPLIT_COLUMN, TARGET
+from recidivism.config import DATA_DIR, DATA_PATH, EXCLUDED_FROM_MODEL, FEATURE_COLUMNS, ID_COLUMN, SPLIT_COLUMN, TARGET
 from recidivism.data import load_official_split
 from recidivism.modeling import tabicl_frames
 
@@ -29,9 +29,9 @@ def check_release_features(features, release_columns):
 
 def audit(include_prediction_sensitivity=True):
     split = load_official_split()
-    released = pd.read_csv(ROOT / "nij-challenge2021_test_dataset_1.csv")
+    released = pd.read_csv(DATA_DIR / "nij-challenge2021_test_dataset_1.csv")
     raw = pd.read_csv(DATA_PATH)
-    original_train = pd.read_csv(ROOT / "nij-challenge2021_training_dataset.csv")
+    original_train = pd.read_csv(DATA_DIR / "nij-challenge2021_training_dataset.csv")
     check_release_features(FEATURE_COLUMNS, released.columns)
     assert set(split.audit_test.ID) == set(released.ID)
     assert set(split.audit_train.ID) == set(original_train.ID)
