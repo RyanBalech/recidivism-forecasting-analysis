@@ -1,0 +1,42 @@
+{
+  "grid": [
+    {
+      "n_estimators": 1196,
+      "max_depth": 2,
+      "learning_rate": 0.0188,
+      "min_child_weight": 8,
+      "subsample": 0.8217,
+      "colsample_bytree": 0.6233,
+      "gamma": 0.4576,
+      "reg_lambda": 4.5603,
+      "reg_alpha": 1.4192
+    },
+    {
+      "n_estimators": 900,
+      "max_depth": 3,
+      "learning_rate": 0.02,
+      "min_child_weight": 20,
+      "subsample": 0.8217,
+      "colsample_bytree": 0.6233,
+      "gamma": 0.4576,
+      "reg_lambda": 15,
+      "reg_alpha": 1.4192
+    },
+    {
+      "n_estimators": 1600,
+      "max_depth": 2,
+      "learning_rate": 0.015,
+      "min_child_weight": 30,
+      "subsample": 0.8217,
+      "colsample_bytree": 0.6233,
+      "gamma": 0.4576,
+      "reg_lambda": 20,
+      "reg_alpha": 1.4192
+    }
+  ],
+  "device": "cuda",
+  "follow_up_after_initial_search": true,
+  "catboost": "fixed 784 iterations, depth 5, learning rate .0148, L2 6.1721",
+  "selection": "minimum mean inner Brier, 3 folds",
+  "seed": 20260923
+}

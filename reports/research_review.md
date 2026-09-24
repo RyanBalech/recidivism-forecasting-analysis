@@ -10,7 +10,7 @@ Reviewed 23 September 2026 against the supplied two-page course brief, the NIJ p
 | White-box, ML, foundation model | Logistic, XGBoost, TabICLv2 | Two-member TFM ensemble is a compute choice |
 | Statistical and economic performance | Probability metrics, baselines, paired bootstrap, CV, capacity/cost scenarios | Reused evaluation set; scenario effectiveness is assumed |
 | Individual/global interpretation | SHAP, LIME, XPER, surrogate, PDP/ICE, editable app records | TFM lacks implemented native additive attribution; sensitivity is not causality |
-| Stability | Bootstrap refits, rank/probability drift, allocation overlap | Unequal refit budgets; no temporal validation |
+| Stability | Eight bootstrap refits per model, rank/probability drift, allocation overlap | No temporal validation; pairwise comparisons share refits |
 | Fairness | Race/gender and intersectional audits; two operating points; A/B race experiment | Multiple comparisons; threshold frontier fitted to evaluation labels |
 | Recommendation across dimensions | Trade-off matrix and shadow-pilot recommendation | Needs external/prospective validation |
 | Slides, code/notebook, app | Generated deck, executable notebook, Streamlit | Team must rehearse and submit deliverables |

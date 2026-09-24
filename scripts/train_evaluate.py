@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import platform
 import sys
 import time
@@ -196,6 +197,8 @@ def audit(models: dict, predictions: dict[str, np.ndarray], context: dict) -> No
         "python": platform.python_version(),
         "platform": platform.platform(),
         "seed": RANDOM_SEED,
+        "logical_cpu_count": os.cpu_count(),
+        "xgboost_n_jobs": models["xgboost"].named_steps["model"].n_jobs,
         "train_rows": len(split.X_train),
         "test_rows": len(split.X_test),
         "features": list(split.X_train.columns),

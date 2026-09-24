@@ -1,0 +1,194 @@
+{
+  "seed": 20260923,
+  "outer_folds": 3,
+  "inner_folds": 3,
+  "selection": "minimum mean Brier; AUC tie break",
+  "xgboost_n_jobs": 4,
+  "candidates": [
+    {
+      "encoding": "ordinal",
+      "params": {
+        "n_estimators": 1196,
+        "max_depth": 2,
+        "learning_rate": 0.0188,
+        "min_child_weight": 8,
+        "subsample": 0.8217,
+        "colsample_bytree": 0.6233,
+        "gamma": 0.4576,
+        "reg_lambda": 4.5603,
+        "reg_alpha": 1.4192
+      }
+    },
+    {
+      "encoding": "ordinal",
+      "params": {
+        "max_depth": 1,
+        "n_estimators": 1600,
+        "learning_rate": 0.04,
+        "min_child_weight": 10,
+        "reg_lambda": 10,
+        "reg_alpha": 0.2,
+        "subsample": 0.85,
+        "colsample_bytree": 0.9,
+        "gamma": 0.0
+      }
+    },
+    {
+      "encoding": "ordinal",
+      "params": {
+        "max_depth": 2,
+        "n_estimators": 1200,
+        "learning_rate": 0.025,
+        "min_child_weight": 10,
+        "reg_lambda": 10,
+        "reg_alpha": 0.2,
+        "subsample": 0.85,
+        "colsample_bytree": 0.9,
+        "gamma": 0.0
+      }
+    },
+    {
+      "encoding": "ordinal",
+      "params": {
+        "max_depth": 3,
+        "n_estimators": 900,
+        "learning_rate": 0.025,
+        "min_child_weight": 20,
+        "reg_lambda": 15,
+        "reg_alpha": 0.2,
+        "subsample": 0.85,
+        "colsample_bytree": 0.9,
+        "gamma": 0.0
+      }
+    },
+    {
+      "encoding": "ordinal",
+      "params": {
+        "max_depth": 4,
+        "n_estimators": 700,
+        "learning_rate": 0.02,
+        "min_child_weight": 30,
+        "reg_lambda": 20,
+        "reg_alpha": 0.2,
+        "subsample": 0.85,
+        "colsample_bytree": 0.9,
+        "gamma": 0.0
+      }
+    },
+    {
+      "encoding": "ordinal",
+      "params": {
+        "max_depth": 2,
+        "n_estimators": 1800,
+        "learning_rate": 0.015,
+        "min_child_weight": 30,
+        "reg_lambda": 20,
+        "reg_alpha": 0.2,
+        "subsample": 0.85,
+        "colsample_bytree": 0.9,
+        "gamma": 0.0
+      }
+    },
+    {
+      "encoding": "ordinal",
+      "params": {
+        "max_depth": 3,
+        "n_estimators": 1000,
+        "learning_rate": 0.02,
+        "min_child_weight": 50,
+        "reg_lambda": 30,
+        "reg_alpha": 0.2,
+        "subsample": 0.85,
+        "colsample_bytree": 0.9,
+        "gamma": 0.0
+      }
+    },
+    {
+      "encoding": "onehot",
+      "params": {
+        "max_depth": 1,
+        "n_estimators": 1600,
+        "learning_rate": 0.04,
+        "min_child_weight": 10,
+        "reg_lambda": 10,
+        "reg_alpha": 0.2,
+        "subsample": 0.85,
+        "colsample_bytree": 0.9,
+        "gamma": 0.0
+      }
+    },
+    {
+      "encoding": "onehot",
+      "params": {
+        "max_depth": 2,
+        "n_estimators": 1200,
+        "learning_rate": 0.025,
+        "min_child_weight": 10,
+        "reg_lambda": 10,
+        "reg_alpha": 0.2,
+        "subsample": 0.85,
+        "colsample_bytree": 0.9,
+        "gamma": 0.0
+      }
+    },
+    {
+      "encoding": "onehot",
+      "params": {
+        "max_depth": 3,
+        "n_estimators": 900,
+        "learning_rate": 0.025,
+        "min_child_weight": 20,
+        "reg_lambda": 15,
+        "reg_alpha": 0.2,
+        "subsample": 0.85,
+        "colsample_bytree": 0.9,
+        "gamma": 0.0
+      }
+    },
+    {
+      "encoding": "onehot",
+      "params": {
+        "max_depth": 4,
+        "n_estimators": 700,
+        "learning_rate": 0.02,
+        "min_child_weight": 30,
+        "reg_lambda": 20,
+        "reg_alpha": 0.2,
+        "subsample": 0.85,
+        "colsample_bytree": 0.9,
+        "gamma": 0.0
+      }
+    },
+    {
+      "encoding": "onehot",
+      "params": {
+        "max_depth": 2,
+        "n_estimators": 1800,
+        "learning_rate": 0.015,
+        "min_child_weight": 30,
+        "reg_lambda": 20,
+        "reg_alpha": 0.2,
+        "subsample": 0.85,
+        "colsample_bytree": 0.9,
+        "gamma": 0.0
+      }
+    },
+    {
+      "encoding": "onehot",
+      "params": {
+        "max_depth": 3,
+        "n_estimators": 1000,
+        "learning_rate": 0.02,
+        "min_child_weight": 50,
+        "reg_lambda": 30,
+        "reg_alpha": 0.2,
+        "subsample": 0.85,
+        "colsample_bytree": 0.9,
+        "gamma": 0.0
+      }
+    }
+  ],
+  "official_evaluation_used": false,
+  "limitations": "Historical defaults already tuned on this training partition",
+  "blend": "fixed equal weight selected XGBoost and TabICL"
+}

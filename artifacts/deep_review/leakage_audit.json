@@ -1,0 +1,61 @@
+{
+  "checks_passed": [
+    "official split IDs",
+    "independent first-release feature schema",
+    "baseline values unchanged since official releases",
+    "training-only categorical modes",
+    "no explicit protected/ID/split/target feature",
+    "no categorical NaN into TabICL"
+  ],
+  "train_rows": 18028,
+  "evaluation_rows": 7807,
+  "cross_split_identical_feature_patterns": 15,
+  "evaluation_rows_with_training_pattern": 20,
+  "auc_excluding_shared_patterns": {
+    "logistic": 0.7304429842667768,
+    "xgboost": 0.7327223589311876,
+    "tabicl": 0.7328935262009029
+  },
+  "missingness": [
+    {
+      "feature": "Gang_Affiliated",
+      "missing_n": 2217,
+      "female_share_missing": 1.0,
+      "female_share_all": 0.12297537164410917,
+      "target_rate_missing": 0.456021650879567,
+      "target_rate_present": 0.5951552716463222
+    },
+    {
+      "feature": "Supervision_Risk_Score_First",
+      "missing_n": 330,
+      "female_share_missing": 0.1303030303030303,
+      "female_share_all": 0.12297537164410917,
+      "target_rate_missing": 0.6393939393939394,
+      "target_rate_present": 0.5769013447847214
+    },
+    {
+      "feature": "Supervision_Level_First",
+      "missing_n": 1212,
+      "female_share_missing": 0.12128712871287128,
+      "female_share_all": 0.12297537164410917,
+      "target_rate_missing": 0.6278877887788779,
+      "target_rate_present": 0.5744529019980971
+    },
+    {
+      "feature": "Prison_Offense",
+      "missing_n": 2321,
+      "female_share_missing": 0.10426540284360189,
+      "female_share_all": 0.12297537164410917,
+      "target_rate_missing": 0.5764756570443774,
+      "target_rate_present": 0.5782772012478513
+    }
+  ],
+  "limitations": [
+    "Matching coarse features does not prove records are the same person; unique IDs are the available identity check",
+    "Gender-aligned missingness is proxy exposure, not by itself future-target leakage",
+    "Mode filling removes an explicit NaN category; other proxies may remain",
+    "First release availability does not timestamp initial risk assessment or gang verification",
+    "Evaluation labels have been inspected repeatedly; performance comparisons remain exploratory",
+    "Permutation controls cannot exclude timing leakage or benchmark selection contamination"
+  ]
+}

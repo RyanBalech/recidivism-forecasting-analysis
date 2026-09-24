@@ -1,0 +1,7 @@
+{
+  "device": "cuda",
+  "checkpoint": "tabicl-classifier-v2-20260212.ckpt",
+  "small_vs_full_max_abs": 9.334087371826172e-05,
+  "single_vs_small_max_abs": 0.0009465217590332031,
+  "note": "Numerical differences possible; no labels passed at predict time"
+}

@@ -26,8 +26,11 @@ Current run: TabICLv2 on **NVIDIA GeForce RTX 4050 Laptop GPU**, conventional mo
 
 **Recommend XGBoost for a prospective shadow pilot, with logistic regression as the transparent challenger.** Model choice weighs explanation cost, subgroup errors, runtime and refit sensitivity. Small-sample TabICLv2 results do not establish transferability to smaller agencies elsewhere. Economic values are scenarios, not measured savings.
 
+The [fresh accuracy review](reports/deep_review.md) found no material improvement from deeper trees, alternate encoding, native categorical trees or sigmoid calibration. A fixed XGBoost–TabICL average is a promising research challenger (evaluation AUC 0.7332, Brier 0.2042), but its paired improvement intervals include zero and its top-capacity capture is lower. The review also measured thread-dependent XGBoost fitting differences larger than the original model-family AUC gap.
+
 ## Results and deliverables
 
+- [Fresh leakage and accuracy review](reports/deep_review.md): independent release checks, 144 inner-fold XGBoost fits, calibration, native categorical trees, and a fixed ensemble challenger. Reproduce with the commands in that report.
 - [Exact performance](artifacts/model_metrics.csv), [probability baselines and Brier skill](artifacts/validation_baselines.csv)
 - [Paired model differences with bootstrap intervals](artifacts/paired_comparisons.csv), [fixed-configuration training CV](artifacts/validation_cv.csv)
 - [Intersectional audit](artifacts/intersectional_audit.csv), [four-dimension trade-offs](artifacts/tradeoff_matrix.md)
@@ -55,6 +58,8 @@ streamlit run app.py
 The complete run regenerates dependent analyses, validates saved-model/prediction agreement, and builds notebook/slides. Allow tens of minutes or longer depending on hardware. It runs a leakage gate and a training-only [TabICLv2 ensemble sensitivity check](scripts/estimator_sweep.py); the shared 16-member configuration is then fitted on all training rows. It does not repeat historical hyperparameter search. The merged team additions include [logistic tuning](scripts/tune_logistic.py), [six-candidate ML comparison](scripts/compare_ml_models.py), and readable feature labels; their historical search artifacts are retained. Run `scripts/tune_xgboost.py` separately to explore new configurations; its output is not automatically adopted.
 
 `python scripts/train_evaluate.py --skip-tabicl` writes a conventional-model smoke run to `artifacts/smoke/`, preserving published three-model artifacts. `--output-dir PATH` supports isolated training outputs. The app reads `artifacts/`; live TabICLv2 inference is opt-in. `python scripts/validate_project.py` audits existing predictions and runs conventional-model CV.
+
+`python scripts/deep_leakage_audit.py` independently checks the original NIJ releases, including unchanged baseline values and training-only imputation. Passing these checks does not establish exact measurement timing or remove the bias from repeated evaluation-set inspection.
 
 ## Interpretation boundaries
 

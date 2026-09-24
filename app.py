@@ -140,11 +140,17 @@ with tab_ind:
                "what happens if race is added as an input.")
 
 with tab_cmp:
-    st.subheader("Held-out performance (7,807 people never seen in training)")
+    st.subheader("Original evaluation partition (7,807 people)")
     display = metrics[["Model", "roc_auc", "average_precision", "brier", "ece_10", "fit_predict_seconds"]].copy()
     display.columns = ["Model", "ROC AUC", "Average precision", "Brier ↓", "Calibration error ↓", "Runtime (s)"]
     st.dataframe(display.style.format({c: "{:.3f}" for c in display.columns[1:]}), width="stretch", hide_index=True)
     st.caption("Original evaluation partition, repeatedly inspected during development. Results are exploratory; model fitting excludes these records.")
+    review_path = ARTIFACT_DIR / "deep_review/combined_summary.csv"
+    if review_path.exists():
+        with st.expander("Accuracy experiments within the training partition"):
+            st.write("Three outer folds compare prediction quality; XGBoost settings are selected on inner folds. Historical configurations already used this cohort. These internal results support research choices, with external validation still needed.")
+            st.dataframe(pd.read_csv(review_path).round(5), width="stretch", hide_index=True)
+            st.caption("blend_equal averages XGBoost and TabICL at a fixed 50/50 weight. It is a research candidate; the three individual scoring models above remain the published comparison.")
     if data["paired_comparisons"] is not None:
         with st.expander("Paired uncertainty and probability baselines"):
             st.write("Differences are A minus B: positive AUC favors A; negative Brier favors A. Intervals are exploratory and unadjusted for multiple comparisons.")

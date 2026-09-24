@@ -1,0 +1,11 @@
+{
+  "auc_blend_minus_xgb": [
+    -0.00010771441513597046,
+    0.001776274882756037
+  ],
+  "brier_blend_minus_xgb": [
+    -0.0006438801728805086,
+    3.428366435975585e-05
+  ],
+  "scope": "Fixed predictions, reused evaluation partition, unadjusted; excludes training/selection uncertainty"
+}

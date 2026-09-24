@@ -36,7 +36,7 @@ Economic scenarios assume 20% capacity, $5,000 support cost, $50,000 event cost 
 
 SHAP explains logistic/XGBoost predictions in log-odds, aggregated to raw features. Reconstruction tests verify that summed SHAP values recover saved-model probabilities. LIME is a local approximation; inspect its recorded local surrogate R² before trusting the explanation (the review run was about 0.25, a weak fit). Neither identifies causal effects. The shallow global surrogate has imperfect fidelity and cannot replace the original model.
 
-XPER approximates performance attribution on 150 records and 60 sampled coalitions. Its sample AUC and approximate contributions must not be treated as definitive full-population feature rankings.
+XPER approximates performance attribution on 150 records and 60 sampled coalitions. Its sample AUC and approximate contributions must not be treated as definitive full-population feature rankings. The current contribution sums exceed the corresponding sample AUC by 0.01792 (logistic) and 0.02279 (XGBoost); see `xper_diagnostics.csv`. The chart now displays this reconstruction residual. The exact numerical cause has not been isolated; an exact AUC decomposition is not established by these outputs.
 
 TabICLv2 has permutation importance, PDP/ICE and interactive feature edits for local sensitivity. Native additive attribution is not implemented; this is an implementation limitation, not proof that the model cannot be explained. PDP/ICE can create implausible records and are not causal counterfactuals.
 
@@ -63,6 +63,8 @@ The group-threshold frontier optimizes using evaluation outcomes. Its small gaps
 Removing race guarantees invariance to changing that raw input while fixing included features. It does not establish causal counterfactual fairness, eliminate proxies or guarantee smaller disparities. A/B results do not prove removal is universally free or fairer.
 
 ## Reproducibility and deployment gates
+
+The [fresh review](deep_review.md) independently matches baseline features and values against the original NIJ releases and evaluates additional accuracy candidates using inner selection and outer evaluation folds within training. It distinguishes gender proxy exposure from future-outcome leakage. Shuffled-label tests cannot rule out all leakage: even a future-derived predictor loses association when training outcomes are scrambled. Exact measurement dates and fresh external validation remain unresolved.
 
 The audit verifies official IDs, annual/cumulative target consistency, saved probabilities, model/prediction agreement, package versions and SHA-256 hashes. The September review found an XGBoost saved-model/prediction mismatch; models and dependent results were rebuilt together. Smoke outputs now live separately.
 

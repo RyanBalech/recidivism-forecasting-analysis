@@ -7,6 +7,7 @@ needs a fresh in-context prediction pass, which is impractical on CPU (reported 
 """
 from __future__ import annotations
 
+import argparse
 import sys
 import time
 import warnings
@@ -30,6 +31,12 @@ DISPLAY = {"logistic": "Logistic regression", "xgboost": "XGBoost"}
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--refresh-only", action="store_true", help="Rebuild labels and diagnostics from saved values")
+    args = parser.parse_args()
+    if args.refresh_only:
+        write_outputs(pd.read_csv(ARTIFACT_DIR / "xper_values.csv"))
+        return
     warnings.filterwarnings("ignore")
     from XPER.compute.Performance import ModelPerformance
 
@@ -49,7 +56,13 @@ def main() -> None:
 
     result = pd.DataFrame(rows)
     result.to_csv(ARTIFACT_DIR / "xper_values.csv", index=False)
+    write_outputs(result)
 
+
+def write_outputs(result):
+    diagnostics = result.groupby("model").agg(contribution_sum=("xper", "sum"), sample_auc=("sample_auc", "first"))
+    diagnostics["reconstruction_residual"] = diagnostics.contribution_sum - diagnostics.sample_auc
+    diagnostics.to_csv(ARTIFACT_DIR / "xper_diagnostics.csv")
     sns.set_theme(style="whitegrid", context="talk")
     fig, axes = plt.subplots(1, 2, figsize=(18, 7))
     for ax, name in zip(axes, ["logistic", "xgboost"]):
@@ -57,7 +70,8 @@ def main() -> None:
         top = part.reindex(part.xper.abs().sort_values(ascending=False).index).head(10)[::-1]
         ax.barh(top.feature.map(pretty), top.xper, color=PALETTE[name])
         bench = result[(result.model == name) & result.feature.str.startswith("benchmark")].xper.iloc[0]
-        ax.set(title=f"{DISPLAY[name]}: XPER, AUC points per feature\n(benchmark {bench:.3f} + features = AUC)",
+        residual = diagnostics.loc[name, "reconstruction_residual"]
+        ax.set(title=f"{DISPLAY[name]}: approximate XPER\n(benchmark {bench:.3f}; AUC reconstruction residual {residual:+.3f})",
                xlabel="Contribution to AUC")
     fig.tight_layout()
     fig.savefig(FIGURE_DIR / "xper.png", dpi=180, bbox_inches="tight")

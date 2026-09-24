@@ -56,17 +56,25 @@ def main() -> None:
         ("Auditability", {"logistic": ("high", GREEN), "xgboost": ("medium", AMBER), "tabicl": ("low", RED)}),
     ]
 
-    # Auto-colour numeric rows: best = green, worst = red, middle = amber.
+    # Rank full-precision measurements, never rounded display strings.
+    numeric = {
+        "ROC AUC (evaluation)": m.roc_auc,
+        "Brier loss": m.brier,
+        "Net value @20% ($M)": m.economic_assumed_net_value,
+        "Score drift across refits": st.mean_abs_prob_diff,
+        "Top-20% overlap": st.top20_jaccard,
+        "Race FNR gap": fnr.Race.abs(), "Gender FNR gap": fnr.Gender.abs(),
+        "Race FPR gap": fpr.Race.abs(), "Gender FPR gap": fpr.Gender.abs(),
+        "Train+predict (s)": m.fit_predict_seconds,
+    }
     lower_better = {"Brier loss", "Score drift across refits", "Race FPR gap",
                     "Gender FPR gap", "Race FNR gap", "Gender FNR gap", "Train+predict (s)"}
     for label, cells in rows:
         if cells is None or any(c[1] for c in cells.values()):
             continue
-        vals = {x: float(cells[x][0].replace("%", "").replace(",", "")) for x in MODELS}
-        if label.endswith(" gap"):
-            vals = {x: abs(v) for x, v in vals.items()}
-        order = sorted(vals, key=vals.get, reverse=label not in lower_better)
-        colour = {order[0]: GREEN, order[1]: AMBER, order[2]: RED}
+        vals = numeric[label].loc[MODELS]
+        ranks = vals.rank(method="average", ascending=label in lower_better)
+        colour = {x: GREEN if ranks[x] == 1 else RED if ranks[x] == 3 else AMBER for x in MODELS}
         for x in MODELS:
             cells[x] = (cells[x][0], colour[x])
 
@@ -93,8 +101,8 @@ def main() -> None:
             ax.text(j + 1.5, y, text, ha="center", va="center", fontsize=11)
     ax.set_title("Which model should the client deploy? Four dimensions, three models",
                  fontsize=15, fontweight="bold", pad=12)
-    fig.text(0.5, 0.02, "Green = advantage · amber = middle · red = disadvantage. "
-             "Performance is a near-tie; the decision is driven by interpretability, fairness, and cost.",
+    fig.text(0.5, 0.02, "Numeric colors rank full-precision point estimates; they do not establish significant differences.\n"
+             "Explanation/auditability colors are qualitative. Fairness gaps: Black minus White; male minus female.",
              ha="center", fontsize=9, style="italic")
     fig.tight_layout(rect=[0, 0.03, 1, 1])
     fig.savefig(FIGURE_DIR / "tradeoff_matrix.png", dpi=180, bbox_inches="tight")

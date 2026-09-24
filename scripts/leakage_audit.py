@@ -1,4 +1,4 @@
-"""Systematic leakage audit — reproducible evidence that the pipeline is clean.
+"""Bounded leakage audit; passing is not proof that all leakage is absent.
 
 Checks four vectors and prints a verdict:
 1. Missingness of any model feature aligned with a protected attribute (race or gender).
@@ -72,7 +72,11 @@ def main() -> None:
         for f in failures:
             print("  -", f)
         sys.exit(1)
-    print("LEAKAGE AUDIT PASSED: no protected-attribute leak, no post-scoring feature, clean split.")
+    sys.path.insert(0, str(ROOT / "scripts"))
+    from deep_leakage_audit import audit
+    independent = audit()
+    print("Independent original-release checks:", independent["checks_passed"])
+    print("CHECKS PASSED within scope. Proxy information, measurement timing and evaluation reuse remain limitations.")
 
 
 if __name__ == "__main__":

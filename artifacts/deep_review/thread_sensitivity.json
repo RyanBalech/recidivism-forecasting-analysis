@@ -1,0 +1,11 @@
+{
+  "logical_cpus": 22,
+  "xgboost_version": "3.0.5",
+  "max_abs_diff_4_vs_all": 0.03513282537460327,
+  "max_abs_repeat_difference": {
+    "1": 0.0,
+    "4": 0.0,
+    "-1": 0.0
+  },
+  "interpretation": "Runtime setting sensitivity, not target leakage. Do not optimize threads using evaluation scores."
+}
