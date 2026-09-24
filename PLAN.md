@@ -4,6 +4,36 @@ Course: HEC Paris — *Interpretability, Stability, and Algorithmic Fairness* (P
 Deliverables due **Mon 28 Sep, 9:40 AM**: slide deck, notebook (data prep → evaluation), client app.
 Presentation 15 min + Q&A 10 min. Every member must defend any section.
 
+## Explanation and mitigation pass — 24 Sep
+
+Addresses the external review of the notebook, LIME, interpretability comparisons,
+mitigation validation, recommendation defence, wording and deck length.
+
+| # | Item | Status |
+|---|---|---|
+| 1 | Notebook teaches the analysis | ✅ visible train/evaluate cell, metric glossary, one-person walkthrough (raw row → preprocessing → three predictions → explanation → support decision), interpretation after each major output. 53 → 79 cells, executes clean |
+| 2 | LIME fidelity | ✅ `lime_local_fidelity.py`: category-aware perturbation on raw features, 3 fixed cases × 3 seeds, fidelity reported per explanation. R² 0.25 → 0.41–0.43; 63/63 conditions sign-stable. Old one-hot block removed from `interpretability.py` |
+| 3 | Missing course comparisons | ✅ `logistic_effects.py` (average marginal effects + categorical probability contrasts, slides 33–38); `explanation_agreement.py` (SHAP vs PI vs XPER rank agreement + disagreement discussion, slides 175–181). XPER reconstruction residual stays visible |
+| 4 | Mitigation validated out-of-sample | ✅ `mitigation_nested.py`: FPDP candidate re-selected inside each of 5 training folds, assessed on held-out folds. `Gang_Affiliated` selected 5/5 for both models; gender FNR gap −0.118 → −0.035 (logistic) and −0.127 → −0.034 (XGBoost) at ≈0.01 AUC. Evaluation cohort untouched |
+| 5 | Recommendation withstands challenge | ✅ report, notebook and deck slide 12 now state what XGBoost buys, what it costs, why the trade is defensible (mitigation closes 0.08 vs the 0.016 between models) and the four conditions that would make logistic correct |
+| 6 | Wording inconsistencies | ✅ "pre-set" tolerance → stated-but-not-pre-registered, with the ordering made explicit; race "real but small" → reconciled with Holm (no race test survives correction) |
+| 7 | Deck built on three findings | ✅ 13 core slides + marked appendix (7 slides: learning curve, economics, interpretability, explanation disagreement, LIME fidelity, stability, process). Talk sequence in presentation notes rewritten with per-slide timings |
+
+**Environment note.** This pass ran on CPU with packages pinned to `validation_manifest.json`
+(xgboost 3.0.5, pandas 2.3.1, scikit-learn 1.7.2, shap 0.52.0, lime 0.2.0.1). Saved models
+reproduce the published predictions to 7e-08, so the new artifacts are consistent with the
+recorded GPU run.
+
+**Needs a GPU re-run before submission.** `interpretability.py` was edited (LIME block removed)
+but not re-executed, because its PDP/ICE pass fits TabICLv2. `artifacts/interpretability_summary.json`
+was synced by hand to what the changed code now writes — the next full `reproduce.py` regenerates
+it properly. Nothing else in `artifacts/` was hand-edited.
+
+**Still open:** P0.3 recommendation sign-off by the team (documents currently all say XGBoost, and
+the report now carries the counter-case); visual check of the rebuilt deck; PDF export of the deck;
+Q&A rehearsal; readable labels in `surrogate_tree.txt` and raw CSVs; package versions in
+`run_manifest.json`.
+
 ## Integration status — research review
 
 The review preserves this team's pending course-aligned work list. Updated code includes the

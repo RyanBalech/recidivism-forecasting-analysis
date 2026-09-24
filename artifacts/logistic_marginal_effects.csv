@@ -1,0 +1,3 @@
+model,feature,average_marginal_effect,sd_marginal_effect,share_positive,baseline_mean_probability
+logistic,Supervision_Risk_Score_First,0.007417793990310706,0.0019855716084918084,0.9814269245548867,0.5786481354483284
+xgboost,Supervision_Risk_Score_First,0.17957952618598938,0.2600257694721222,0.8479569617010375,0.5784757733345032

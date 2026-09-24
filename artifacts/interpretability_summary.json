@@ -3,7 +3,6 @@
   "xgboost_individual_probability": 0.937201738357544,
   "surrogate_depth": 3,
   "surrogate_fidelity_r2_test": 0.6095788334531511,
-  "lime": "ok (features shown in scaled, preprocessed space)",
-  "lime_local_surrogate_r2": 0.25027814999297615,
+  "lime": "see scripts/lime_local_fidelity.py (category-aware; fidelity reported per case)",
   "tabicl_native_attribution": "none: explained only through model-agnostic PDP/ICE and permutation importance"
 }

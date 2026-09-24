@@ -65,6 +65,8 @@ The complete run regenerates dependent analyses, validates saved-model/predictio
 
 `python scripts/train_evaluate.py --skip-tabicl` writes a conventional-model smoke run to `artifacts/smoke/`, preserving published three-model artifacts. `--output-dir PATH` supports isolated training outputs. The app reads `artifacts/`; live TabICLv2 inference is opt-in. `python scripts/validate_project.py` audits existing predictions and runs conventional-model CV.
 
+The interpretability steps are [`interpretability.py`](scripts/interpretability.py) (SHAP, global surrogate, PDP/ICE), [`lime_local_fidelity.py`](scripts/lime_local_fidelity.py) (category-aware LIME over fixed cases and seeds, with the local surrogate R² reported beside every explanation), [`logistic_effects.py`](scripts/logistic_effects.py) (average marginal effects and categorical probability contrasts, in probability units rather than transformed log-odds) and [`explanation_agreement.py`](scripts/explanation_agreement.py) (rank agreement between SHAP, permutation importance and XPER, plus the XPER reconstruction residual). [`mitigation_nested.py`](scripts/mitigation_nested.py) re-selects the FPDP candidate inside each training fold and scores the mitigation on held-out folds, so selection and assessment never share data; the evaluation cohort is not touched.
+
 `python scripts/deep_leakage_audit.py` independently checks the original NIJ releases, including unchanged baseline values and training-only imputation. Passing these checks does not establish exact measurement timing or remove the bias from repeated evaluation-set inspection.
 
 ## Interpretation boundaries

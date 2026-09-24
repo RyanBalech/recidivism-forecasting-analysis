@@ -1,0 +1,7 @@
+model,method_a,method_b,features_compared,spearman_rank_correlation,p_value,top10_overlap,top10_only_a,top10_only_b
+logistic,shap,permutation_importance,29,0.808374384236453,1.1311255962725069e-07,10,,
+logistic,shap,xper,29,0.5812807881773397,0.0009434029164784835,9,Education_Level,Supervision_Risk_Score_First
+logistic,permutation_importance,xper,29,0.5251231527093595,0.003444987352389087,9,Education_Level,Supervision_Risk_Score_First
+xgboost,shap,permutation_importance,29,0.7660098522167487,1.2781099689282937e-06,9,Supervision_Risk_Score_First,Education_Level
+xgboost,shap,xper,29,0.5586206896551724,0.0016350244673938373,9,Prior_Arrest_Episodes_Property,Condition_Cog_Ed
+xgboost,permutation_importance,xper,29,0.5970443349753694,0.0006281459716374927,8,"Education_Level, Prior_Arrest_Episodes_Property","Condition_Cog_Ed, Supervision_Risk_Score_First"

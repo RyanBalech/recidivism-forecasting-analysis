@@ -95,6 +95,17 @@ drop_gang = mitigation[(mitigation.attribute == "Gender") & (mitigation.feature 
 base_auc = mitigation[mitigation.panel == "baseline"].groupby("model").auc.first()
 gang_cost = base_auc["logistic"] - drop_gang.loc["logistic", "auc"]
 
+# Out-of-fold mitigation evidence: selection inside training folds, assessment on held-out folds.
+_nested_path = ART / "mitigation_nested_summary.csv"
+if _nested_path.exists():
+    _nested = pd.read_csv(_nested_path).set_index("model")
+    nested_sel = float(_nested.selection_agreement.mean())
+    nested_base = float(_nested.baseline_fnr_gap.mean())
+    nested_mit = float(_nested.mitigated_fnr_gap.mean())
+    nested_auc = float(_nested.auc_change.mean())
+else:  # keep the deck buildable before the nested run exists
+    nested_sel, nested_base, nested_mit, nested_auc = float("nan"), float("nan"), float("nan"), float("nan")
+
 
 def span(values):
     """Range across the three models, e.g. '-0.10 to -0.12'."""
@@ -152,76 +163,114 @@ card(s, "BRIER · TABICL", f"{metrics.loc['tabicl','brier']:.4f}", 9.25, 3.5, PU
 card(s, "AUC GAP · XGB − LOGIT", f"+{xgb_minus_logit:.4f}", 9.25, 5.1, ORANGE, "paired bootstrap: significant, small")
 textbox(s, "All three models are within ~0.003 AUC; ECE differences are not significant. Performance alone cannot pick the model.", 1.0, 6.85, 11, .3, 11, GREY, True, PP_ALIGN.CENTER); footer(s, 6)
 
-# 7 — Learning curve
-s = make_slide(prs); title(s, "Which model for which agency size?", "06 · Learning curve")
-picture(s, FIG / "learning_curve.png", .8, 1.8, 11.7)
-textbox(s, "Subsamples of one Georgia cohort test sample-size sensitivity; they do not validate transfer to other agencies.", 1.0, 6.7, 11, .5, 13, ORANGE, True, PP_ALIGN.CENTER); footer(s, 7)
-
-# 8 — Economic performance
-s = make_slide(prs); title(s, "Model value is a scenario, stress-tested", "07 · Economic performance")
-card(s, "SERVICE CAPACITY", "20%", .8, 1.9); card(s, "XGBOOST NET", f"${inc_econ['xgboost']/1e6:.2f}M", 3.75, 1.9, TEAL)
-card(s, "INCUMBENT NET", f"${inc_econ['incumbent']/1e6:.2f}M", 6.7, 1.9, RED); card(s, "RANDOM NET", f"${inc_econ.get('random', 1.46e6)/1e6:.2f}M", 9.65, 1.9, GREY)
-bullets(s, ["$5,000 support cost · $50,000 event cost · 20% assumed effectiveness — all editable in the app",
-            "Models beat the incumbent at every capacity from 5% to 50% (sensitivity sweep)",
-            "A randomized or quasi-experimental pilot must estimate real intervention impact"], y=3.72, size=20); footer(s, 8)
-
-# 9 — Interpretability
-s = make_slide(prs); title(s, "Prediction explanations and their limits", "08 · Interpretability")
-picture(s, FIG / "shap_individual.png", .4, 1.7, 8.3)
-panel(s, "METHODS", "SHAP + LIME (local)\n\nXPER on AUC (Pérignon)\n\nGlobal surrogate: imperfect fidelity\n\nPDP/ICE for all three", 9.0, 1.7, 3.9, 4.9, PURPLE)
-textbox(s, "TabICLv2 has no native explanation path — a real deployment cost, covered only by model-agnostic PDP/ICE.", 1.0, 6.75, 11, .3, 11, RED, True, PP_ALIGN.CENTER); footer(s, 9)
-
-# 10 — Stability
-s = make_slide(prs); title(s, "Structural stability across refits on resampled data", "09 · Stability")
-picture(s, FIG / "structural_stability.png", .5, 1.75, 8.3)
-card(s, "SCORE DRIFT · TABICL", f"{stability.loc['tabicl','mean_abs_prob_diff']:.3f}", 9.35, 1.9, PURPLE)
-card(s, "TABICL JACCARD", f"{stability.loc['tabicl','top20_jaccard']:.1%}", 9.35, 3.5, TEAL)
-textbox(s, "Jaccard is intersection / union, not the share of people switching. Refit sensitivity is not temporal validation.", 1.0, 6.75, 11, .4, 11, GREY, True, PP_ALIGN.CENTER); footer(s, 10)
-
-# 11 — Fairness at the deployed point
-s = make_slide(prs); title(s, "Fairness at the proposed allocation rule", "10 · Subgroup audit")
+# 7 — Fairness at the deployed point
+s = make_slide(prs); title(s, "Fairness at the proposed allocation rule", "06 · Subgroup audit")
 picture(s, FIG / "fairness_support_access.png", .4, 1.7, 8.5)
 card(s, "GENDER FNR GAP (M − F)", span(fnr20["Gender"]), 9.35, 1.9, RED, "women miss support more · all significant")
 card(s, "RACE: EQUIVALENT ±5 PTS", f"{int(race_equiv.sum())} / {len(race_equiv)} models", 9.35, 3.5, TEAL, "TOST on selection, FNR, FPR")
 card(s, "AGE FNR GAP (<33 − 33+)", span(fnr20["Age"]), 9.35, 5.1, ORANGE, "age is an input: needs a stated justification")
-textbox(s, "Selection = support offered, so the harm is a missed offer: FNR is primary. Not significant ≠ fair; we test equivalence.", 1.0, 6.8, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 11)
+textbox(s, "Selection = support offered, so the harm is a missed offer: FNR is primary. Not significant ≠ fair; we test equivalence.", 1.0, 6.8, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 7)
 
-# 12 — Impossibility result
-s = make_slide(prs); title(s, "Fairness: probability scores and allocation rules", "11 · Fairness, sharpened")
+# 8 — Impossibility result
+s = make_slide(prs); title(s, "Fairness: probability scores and allocation rules", "07 · Fairness, sharpened")
 panel(s, "SCORE CALIBRATION", f"Women are over-predicted by every model: mean score {calib.loc[('Gender', 'F'), 'mean_score_xgboost']:.2f} vs observed {calib.loc[('Gender', 'F'), 'base_rate']:.2f}\n\nYet they are selected less at the top 20%\n\nChanging decision thresholds leaves probabilities unchanged", .7, 1.85, 5.75, 4.7, TEAL)
 panel(s, "ALLOCATION ERRORS", "FPR, TPR and selection rates depend on policy\n\nEqual FPR alone is not equalized odds\n\nOur threshold frontier uses evaluation labels: illustrative, not validated", 6.85, 1.85, 5.75, 4.7, RED)
-footer(s, 12)
+footer(s, 8)
 
-# 13 — Fairness interpretability: where the gender gap comes from
-s = make_slide(prs); title(s, "Where does the gender gap come from?", "12 · Fairness interpretability (FPDP)")
+# 9 — Fairness interpretability: where the gender gap comes from
+s = make_slide(prs); title(s, "Where does the gender gap come from?", "08 · Fairness interpretability (FPDP)")
 picture(s, FIG / "fpdp_gender.png", .35, 1.65, 8.4)
 panel(s, "CANDIDATE: GANG", "Never recorded for women; imputed as \"No\"\n\n"
       f"Drop + re-estimate: equal-opportunity p 0.000 → {drop_gang.loc['logistic', 'p_equal_opportunity']:.3f} (logistic)\n\n"
       f"AUC cost ≈ {gang_cost:.3f}, ~{gang_cost / xgb_minus_logit:.0f}× the XGB − logistic gap\n\n"
       "Statistical parity still rejected", 9.0, 1.65, 3.95, 5.0, RED)
-textbox(s, "FPDP identifies candidate variables (association, not causation). Mitigation is evaluated on the same labels: illustrative.", 1.0, 6.82, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 13)
+textbox(s, "FPDP identifies candidate variables: association, not causation.", 1.0, 6.82, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 9)
 
-# 14 — Improvement journey (process)
-s = make_slide(prs); title(s, "How we got here: what we tried, where we landed", "13 · Process")
-picture(s, FIG / "improvement_journey.png", .55, 1.75, 12.2)
-textbox(s, "Full log in JOURNEY.md — every step measured, including the attempts we rejected.", 1.0, 6.82, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 14)
+# 10 — Does the mitigation survive out-of-sample?
+s = make_slide(prs); title(s, "Selecting and testing the fix on different data", "09 · Mitigation, validated")
+panel(s, "IN-SAMPLE", "Candidate chosen AND scored on the same cohort\n\n"
+      f"Equal-opportunity p 0.000 → {drop_gang.loc['logistic', 'p_equal_opportunity']:.2f}\n\n"
+      "An upper bound, not evidence of generalisation", .7, 1.85, 5.75, 4.7, GREY)
+panel(s, "OUT-OF-FOLD", "Candidate re-selected inside each training fold, scored on held-out folds\n\n"
+      f"Same variable selected in {int(nested_sel * 100)}% of folds\n\n"
+      f"Gender FNR gap {nested_base:+.3f} → {nested_mit:+.3f}  ·  AUC {nested_auc:+.3f}", 6.85, 1.85, 5.75, 4.7, TEAL)
+textbox(s, "The evaluation cohort is never touched. About 70% of the gap closes out of fold, for roughly one AUC point.",
+        1.0, 6.82, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 10)
 
-# 15 — Trade-off matrix (required)
-s = make_slide(prs); title(s, "Which model should the client deploy?", "14 · Trade-offs across four dimensions")
-picture(s, FIG / "tradeoff_matrix.png", 2.2, 1.62, 8.9); footer(s, 15)
+# 11 — Trade-off matrix (required)
+s = make_slide(prs); title(s, "Which model should the client deploy?", "10 · Trade-offs across four dimensions")
+picture(s, FIG / "tradeoff_matrix.png", 2.2, 1.62, 8.9); footer(s, 11)
 
-# 16 — Recommendation (team decision pending: see PLAN.md P0.3)
-s = make_slide(prs); title(s, "Pilot XGBoost; retain logistic as a transparent challenger", "15 · Recommendation")
-panel(s, "WHY XGBOOST", "Competitive probability loss\n\nAudit subgroup errors\n\nSHAP explanations available\n\nLow inference cost", .8, 1.8, 5.75, 4.65, TEAL)
-panel(s, "CONDITIONS", "Benefit-only allocation\n\nLogistic as transparent challenger\n\nProspective shadow validation\n\nAppeal route, logs, quarterly audits, stop rules", 6.8, 1.8, 5.75, 4.65, PURPLE); footer(s, 16)
+# 12 — Recommendation
+s = make_slide(prs); title(s, "Pilot XGBoost; retain logistic as a transparent challenger", "11 · Recommendation")
+panel(s, "WHY XGBOOST", "Best calibrated (ECE 0.011)\n\n+12 events captured at 20% capacity\n\n"
+      f"AUC edge +{xgb_minus_logit:.4f}, interval excludes 0\n\nSHAP + surrogate available", .7, 1.8, 3.85, 4.65, TEAL)
+panel(s, "WHAT IT COSTS", "Wider gender FNR gap (−0.11 vs −0.10)\n\nLeast stable selected set (J 0.75)\n\n"
+      "Needs a second tool to explain\n\n~9× slower", 4.75, 1.8, 3.85, 4.65, RED)
+panel(s, "WHAT REVERSES IT", "Audit requires a directly readable model\n\nAgencies too small for SHAP infrastructure\n\n"
+      "Stability of the selected set is contractual\n\nThen: ship logistic", 8.8, 1.8, 3.85, 4.65, PURPLE)
+textbox(s, "The gap the mitigation closes (0.08) dwarfs the gap between the two models (0.016): disparity is a feature-set property, not an estimator choice.",
+        .8, 6.75, 11.7, .4, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 12)
 
-# 17 — App + roadmap
-s = make_slide(prs); title(s, "The application makes every trade-off testable", "16 · Client experience")
+# 13 — App
+s = make_slide(prs); title(s, "The application makes every trade-off testable", "12 · Client experience")
 panel(s, "ASSESS", "Score one person, all 3 models + SHAP", .75, 1.75, 5.7, 1.72, ORANGE)
 panel(s, "AUDIT", "Race, gender, age at the deployed point + FPDP", 6.85, 1.75, 5.7, 1.72, PURPLE)
 panel(s, "COMPARE", "Incumbent, learning curve, matrix", .75, 3.8, 5.7, 1.72, ORANGE)
 panel(s, "SIMULATE", "Costs, capacity, sensitivity", 6.85, 3.8, 5.7, 1.72, PURPLE)
-textbox(s, "streamlit run app.py", 4.4, 6.25, 4.5, .4, 17, PALE, True, PP_ALIGN.CENTER, "Consolas"); footer(s, 17)
+textbox(s, "streamlit run app.py", 4.4, 6.25, 4.5, .4, 17, PALE, True, PP_ALIGN.CENTER, "Consolas"); footer(s, 13)
+
+# ---------------------------------------------------------------- APPENDIX
+# Everything below is reference material for Q&A, not part of the 15-minute talk.
+s = make_slide(prs)
+textbox(s, "APPENDIX", .72, 2.6, 8, .5, 14, ORANGE, True)
+textbox(s, "Supporting evidence\nfor questions", .72, 3.15, 9, 1.5, 34, WHITE, True)
+textbox(s, "Learning curve · economic sensitivity · interpretability methods · explanation disagreement · LIME fidelity · stability · process log",
+        .76, 4.95, 9.5, .9, 15, PALE)
+
+# A1 — Learning curve
+s = make_slide(prs); title(s, "Which model for which agency size?", "A1 · Learning curve")
+picture(s, FIG / "learning_curve.png", .8, 1.8, 11.7)
+textbox(s, "Subsamples of one Georgia cohort test sample-size sensitivity; they do not validate transfer to other agencies.", 1.0, 6.7, 11, .5, 13, ORANGE, True, PP_ALIGN.CENTER)
+
+# A2 — Economic performance
+s = make_slide(prs); title(s, "Model value is a scenario, stress-tested", "A2 · Economic performance")
+card(s, "SERVICE CAPACITY", "20%", .8, 1.9); card(s, "XGBOOST NET", f"${inc_econ['xgboost']/1e6:.2f}M", 3.75, 1.9, TEAL)
+card(s, "INCUMBENT NET", f"${inc_econ['incumbent']/1e6:.2f}M", 6.7, 1.9, RED); card(s, "RANDOM NET", f"${inc_econ.get('random', 1.46e6)/1e6:.2f}M", 9.65, 1.9, GREY)
+bullets(s, ["$5,000 support cost · $50,000 event cost · 20% assumed effectiveness — all editable in the app",
+            "Models beat the incumbent at every capacity from 5% to 50% (sensitivity sweep)",
+            "A randomized or quasi-experimental pilot must estimate real intervention impact"], y=3.72, size=20)
+
+# A3 — Interpretability
+s = make_slide(prs); title(s, "Prediction explanations and their limits", "A3 · Interpretability")
+picture(s, FIG / "shap_individual.png", .4, 1.7, 8.3)
+panel(s, "METHODS", "SHAP + LIME (local)\n\nXPER on AUC (Pérignon)\n\nGlobal surrogate: imperfect fidelity\n\nPDP/ICE for all three", 9.0, 1.7, 3.9, 4.9, PURPLE)
+textbox(s, "TabICLv2 has no native explanation path — a real deployment cost, covered only by model-agnostic PDP/ICE.", 1.0, 6.75, 11, .3, 11, RED, True, PP_ALIGN.CENTER)
+
+# A4 — Explanations disagree
+s = make_slide(prs); title(s, "SHAP, permutation importance and XPER rank differently", "A4 · Explanation disagreement")
+picture(s, FIG / "explanation_agreement.png", .5, 1.7, 8.4)
+panel(s, "WHY", "SHAP explains the prediction\n\nPermutation importance explains loss\n\nXPER decomposes AUC\n\n"
+      "Different questions, so different rankings", 9.1, 1.7, 3.8, 4.9, PURPLE)
+textbox(s, "Top-10 sets largely coincide; ordering is method-dependent. Quote the set, not the rank.", 1.0, 6.75, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER)
+
+# A5 — LIME fidelity
+s = make_slide(prs); title(s, "Is the local explanation faithful?", "A5 · LIME fidelity")
+picture(s, FIG / "lime_individual.png", .4, 1.75, 12.5)
+textbox(s, "Category-aware perturbation raised local fidelity from R² 0.25 to ≈0.41. Three fixed cases × three seeds; every condition keeps its sign.",
+        1.0, 6.75, 11, .4, 12, ORANGE, True, PP_ALIGN.CENTER)
+
+# A6 — Stability
+s = make_slide(prs); title(s, "Structural stability across refits on resampled data", "A6 · Stability")
+picture(s, FIG / "structural_stability.png", .5, 1.75, 8.3)
+card(s, "SCORE DRIFT · TABICL", f"{stability.loc['tabicl','mean_abs_prob_diff']:.3f}", 9.35, 1.9, PURPLE)
+card(s, "TABICL JACCARD", f"{stability.loc['tabicl','top20_jaccard']:.1%}", 9.35, 3.5, TEAL)
+textbox(s, "Jaccard is intersection / union, not the share of people switching. Refit sensitivity is not temporal validation.", 1.0, 6.75, 11, .4, 11, GREY, True, PP_ALIGN.CENTER)
+
+# A7 — Improvement journey
+s = make_slide(prs); title(s, "How we got here: what we tried, where we landed", "A7 · Process")
+picture(s, FIG / "improvement_journey.png", .55, 1.75, 12.2)
+textbox(s, "Full log in JOURNEY.md — every step measured, including the attempts we rejected.", 1.0, 6.82, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER)
 
 REPORTS.mkdir(exist_ok=True)
 prs.save(OUT)

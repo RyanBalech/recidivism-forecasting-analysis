@@ -80,6 +80,81 @@ display(pd.Series({
     'xgboost_execution': 'CPU for published model; paired CPU/CUDA audit available',
 }))
 """),
+    md("""### Train and evaluate here, in this notebook
+
+The configurations above are not just described. The next cell fits the two
+conventional models on the 18,028 training records and scores the 7,807 held-out
+records inside this notebook. TabICLv2 is excluded from this cell only because it
+needs a GPU; its published predictions are read from `test_predictions.csv`.
+
+Two different things are being checked, and they have different tolerances:
+
+1. **Artifact integrity** — do the *saved* models still produce the published
+   probabilities? This must hold exactly, otherwise every number below is stale.
+   It is an assertion.
+2. **Fit reproducibility** — does fitting again from scratch land in the same
+   place? For logistic regression, yes, to machine precision. For XGBoost, *not
+   bit-identically*: histogram splits are accumulated in a thread-dependent order,
+   so a different core count changes the last bits of a split gain and occasionally
+   flips a tie. Performance is reproducible; individual probabilities are only
+   reproducible to ~1e-2. This is a real property of the model worth knowing before
+   a client asks why two runs disagree, so it is reported rather than hidden."""),
+    code("""from recidivism.modeling import logistic_model, xgboost_model
+from recidivism.metrics import classification_metrics
+from recidivism.config import MODEL_DIR
+import joblib, time
+
+published = A('test_predictions.csv')
+
+# --- 1. Artifact integrity: saved models must reproduce the published file ---
+integrity = pd.DataFrame([
+    {'model': label,
+     'max_abs_difference': float(np.abs(
+         joblib.load(MODEL_DIR / f'{label}.joblib').predict_proba(split.X_test)[:, 1]
+         - published[f'p_{label}']).max())}
+    for label in ['logistic', 'xgboost']
+])
+display(integrity)
+assert (integrity.max_abs_difference < 1e-6).all(), 'saved models no longer match the published predictions'
+print('Artifact integrity OK: saved models reproduce the published probabilities.\\n')
+
+# --- 2. Fit reproducibility: refit from scratch and report how close it lands ---
+rows = []
+for label, builder in [('logistic', logistic_model), ('xgboost', xgboost_model)]:
+    start = time.perf_counter()
+    refit = builder(split.X_train).fit(split.X_train, split.y_train)
+    p = refit.predict_proba(split.X_test)[:, 1]
+    rows.append({
+        'model': label,
+        'fit_seconds': round(time.perf_counter() - start, 1),
+        'auc_refit': classification_metrics(split.y_test, p)['roc_auc'],
+        'auc_published': classification_metrics(published.actual, published[f'p_{label}'])['roc_auc'],
+        'max_abs_probability_difference': float(np.abs(p - published[f'p_{label}']).max()),
+    })
+reproducibility = pd.DataFrame(rows)
+reproducibility['auc_difference'] = reproducibility.auc_refit - reproducibility.auc_published
+display(reproducibility)
+assert reproducibility.auc_difference.abs().max() < 1e-3, 'refit performance drifted materially'
+print('Refit performance matches to <0.001 AUC for both models.')
+"""),
+    md("""### What each metric means
+
+Before the numbers, what they measure and which direction is good:
+
+| Metric | Question it answers | Better |
+|---|---|---|
+| **ROC AUC** | Given one person who was re-arrested and one who was not, how often does the model score the first higher? 0.5 = coin flip. | higher |
+| **Average precision** | Area under precision–recall; sensitive to performance on the positive class. | higher |
+| **Brier** | Mean squared error of the probability itself. Rewards being both discriminating *and* honest about uncertainty. | lower |
+| **Log loss** | Like Brier but punishes confident mistakes far harder. | lower |
+| **ECE (10 bins)** | Of the people scored ≈0.7, were ≈70% actually re-arrested? Pure calibration, ignores ranking. | lower |
+| **FNR** | Of people who were re-arrested, the share the rule did *not* select. For a support programme this is the harm: a missed offer. | lower |
+| **Brier skill** | Brier improvement over always predicting the training prevalence. 0 = no better than the base rate. | higher |
+
+For this product the ranking metrics (AUC, AP) decide *who* gets offered support at
+a fixed capacity, and calibration (Brier, ECE) decides whether the score can be
+spoken about honestly to a supervisee. FNR is the fairness-relevant one, because
+the cost of the model being wrong falls on the person who needed support."""),
     md("## Performance and baselines\n\nThe incumbent is a historical recorded score, not evidence about tools agencies use today. Constant prevalence and incumbent calibration are learned on training records."),
     code("""from recidivism.metrics import classification_metrics
 predictions = A('test_predictions.csv')
@@ -108,35 +183,249 @@ display(A('validation_baselines.csv'))
     code("diagnostics = ROOT / 'artifacts/xper_diagnostics.csv'\nif diagnostics.exists(): display(pd.read_csv(diagnostics))"),
     md("Logistic odds ratios below are per transformed unit (numeric inputs are standardized), not causal effects. Local sensitivity changes one field of the same explained person for all three models; it is not an additive attribution."),
     code("display(A('logistic_coefficients.csv')); display(A('local_sensitivity.csv'))"),
+    md("""### Reading the model in probabilities, not log-odds
+
+A coefficient of 0.087 per standardized unit is not something a client can act on.
+Two readings in the units the decision actually uses (course reference: printed
+slides 33–38):
+
+- **Average marginal effect** — the mean change in predicted probability per one
+  *raw* unit, computed by finite difference through the whole fitted pipeline.
+- **Average probability contrast** — set a categorical field to one level for
+  everybody, then to the reference level for everybody, and average the difference.
+  This is valid because each counterfactual row carries exactly one real category;
+  perturbing one-hot columns independently would create people who are simultaneously
+  two age bands, or none.
+
+Both are computed for the linear and the nonlinear model, so the same quantity can
+be compared across them."""),
+    code("""ame = A('logistic_marginal_effects.csv')
+contrasts = A('probability_contrasts.csv')
+display(ame.sort_values('average_marginal_effect', key=abs, ascending=False).head(8))
+top_contrasts = contrasts[contrasts.model == 'logistic'].copy()
+display(top_contrasts.reindex(top_contrasts.average_probability_contrast.abs()
+                              .sort_values(ascending=False).index).head(10))
+display(Image(filename=str(ROOT / 'artifacts/figures/marginal_effects.png'), width=1100))
+"""),
+    md("""Read the contrasts as the client would: moving a supervisee from the 23–27 band to
+48-or-older lowers predicted three-year arrest risk by about 27 percentage points,
+holding everything else fixed. A recorded gang affiliation raises it by about 17.
+These are model responses under a counterfactual edit, not causal effects of ageing
+or of gang membership."""),
+    md("""### Explanations disagree, and the disagreement is the finding
+
+SHAP, permutation importance and XPER are routinely quoted as if interchangeable.
+They are not, and the course treats the discrepancy as the point (printed slides
+175–181):
+
+- **SHAP** attributes the *prediction* — what moved this score away from the average
+  score. No outcome label is involved.
+- **Permutation importance** attributes *loss* — how much worse the model scores when
+  a feature is made uninformative. It needs labels, and it charges a feature for being
+  predictive rather than for being used.
+- **XPER** attributes *AUC*, decomposing a performance metric per feature. Its
+  reconstruction residual is printed above: the decomposition is approximate, and the
+  residual bounds how literally it can be read.
+
+So a feature can lead one ranking and sit mid-table in another without either being
+wrong. The table below measures the disagreement instead of asserting it."""),
+    code("""agreement = A('explanation_agreement.csv')
+display(agreement[['model','method_a','method_b','spearman_rank_correlation','top10_overlap',
+                   'top10_only_a','top10_only_b']])
+display(Image(filename=str(ROOT / 'artifacts/figures/explanation_agreement.png'), width=1200))
+"""),
+    md("""SHAP and permutation importance agree strongly on ranking (Spearman ≈ 0.77–0.81);
+XPER diverges (≈ 0.53–0.60), which is expected because it decomposes a rank-based
+performance metric rather than individual scores. The *top-10 sets* largely coincide
+(8–10 shared features), so the headline drivers are robust while their ordering is
+method-dependent. Quote the set, not the rank."""),
+    md("""### LIME, and whether its explanation is faithful
+
+An explanation that does not approximate the model locally is not evidence about the
+model. The course makes fidelity the criterion (printed slides 110–116), so it is
+reported here beside every explanation rather than left implicit.
+
+The earlier implementation explained the *transformed* one-hot space. Perturbing those
+columns independently produces rows no person could occupy, so the local surrogate was
+fitted on a region the model never sees and scored R² ≈ 0.25. LIME now works on the raw
+feature space with `categorical_features` declared, so a perturbation swaps a category
+for another real category. Fidelity roughly doubles, to R² ≈ 0.41–0.43.
+
+Three cases fixed by rule before any explanation was inspected — highest, median and
+lowest predicted risk — each explained under three seeds, so the reported weights carry
+a visible sampling spread."""),
+    code("""fidelity = A('lime_fidelity.csv')
+display(fidelity.groupby(['model','case']).local_r2.agg(['mean','min','max']).round(3))
+spread = A('lime_seed_spread.csv')
+print(f"sign-stable conditions across seeds: {int(spread.sign_stable.sum())} / {len(spread)}")
+display(spread[spread.model == 'xgboost'].sort_values('mean_weight', key=abs, ascending=False).head(10))
+display(Image(filename=str(ROOT / 'artifacts/figures/lime_individual.png'), width=1200))
+"""),
+    md("""Fidelity of about 0.41 is honest rather than impressive: a linear surrogate can only
+partly track a 1,196-tree model in a 29-feature neighbourhood. Every condition keeps its
+sign across seeds, so the *direction* of each contribution is stable even where the
+magnitude moves. Quote LIME directionally, and quote SHAP when a magnitude is needed."""),
+    md("""### One person, start to finish
+
+Everything above is cohort-level. This section follows a single held-out individual
+through the whole pipeline — raw record, what preprocessing does to it, what each of the
+three models predicts, what the explanations say, and finally whether the deployed rule
+offers them support. This is the path a caseworker would actually traverse."""),
+    code("""from recidivism.metrics import capacity_selection
+preds = A('test_predictions.csv')
+anchor = preds.p_xgboost.to_numpy()
+person_idx = int(np.argsort(anchor)[len(anchor) // 2])   # the median-risk person
+person_raw = split.X_test.iloc[[person_idx]]
+person_id = int(split.audit_test.iloc[person_idx]['ID'])
+
+print(f'Record ID {person_id} — the median-risk person in the evaluation cohort')
+display(person_raw.T.rename(columns={person_idx: 'raw value'}))
+""" ),
+    md("**Step 1 — what preprocessing does to this record.** The raw row is categorical and has missing values. The fitted pipeline imputes, ordinal-encodes ordered counts, one-hot encodes the rest and standardizes numerics. The model never sees the row above; it sees the row below."),
+    code("""pipe = logistic_model(split.X_train).fit(split.X_train, split.y_train)
+transformed = pipe[:-1].transform(person_raw)
+transformed = transformed.toarray() if hasattr(transformed, 'toarray') else transformed
+names = list(pipe[-2].get_feature_names_out())
+nonzero = pd.Series(transformed[0], index=names)
+display(nonzero[nonzero != 0].sort_values(key=abs, ascending=False).head(12).to_frame('encoded value'))
+print(f'{len(names)} transformed columns; {int((nonzero != 0).sum())} non-zero for this person')
+"""),
+    md("**Step 2 — what the three models say.** Same person, three model families. Agreement here is evidence that the score is a property of the record rather than of one estimator."),
+    code("""display(pd.DataFrame([{
+    'model': m,
+    'predicted_probability': float(preds.loc[person_idx, f'p_{m}']),
+} for m in ['logistic','xgboost','tabicl']]).assign(
+    cohort_base_rate=preds.actual.mean(),
+    actually_rearrested=bool(preds.loc[person_idx, 'actual'])))
+"""),
+    md("**Step 3 — why.** The LIME conditions for this person, with their fidelity, and the marginal-effect reading of the same fields."),
+    code("""case = A('lime_weights.csv')
+case = case[(case.model == 'xgboost') & (case.case == 'median_risk')]
+display(case.groupby('condition').weight.agg(['mean','std'])
+        .sort_values('mean', key=abs, ascending=False).head(8))
+r2 = A('lime_fidelity.csv').query("model == 'xgboost' and case == 'median_risk'").local_r2
+print(f'local surrogate fidelity for this explanation: R2 = {r2.mean():.3f}')
+"""),
+    md("**Step 4 — the decision.** The product does not ship a probability; it ships a capacity-constrained offer. At 20% capacity the rule selects the highest-scoring 20% of the cohort. Whether this person is offered support depends on where they sit in that ranking, not on whether their probability exceeds 0.5."),
+    code("""selected = capacity_selection(anchor, 0.20)
+rank = int((anchor > anchor[person_idx]).sum()) + 1
+print(f'Rank {rank:,} of {len(anchor):,} by predicted risk')
+print(f'Inside the top-20% capacity: {bool(selected[person_idx])}')
+print(f'Threshold score at 20% capacity: {np.quantile(anchor, 0.8):.3f} | this person: {anchor[person_idx]:.3f}')
+display(pd.Series({'selected_count': int(selected.sum()),
+                   'capacity_share': float(selected.mean()),
+                   'cohort_size': len(anchor)}).to_frame('deployed rule'))
+"""),
+    md("""This is the gap between a model and a product. The median-risk person carries a
+predicted probability close to the cohort base rate, yet the deployed rule gives a
+binary answer, and that answer is driven by rank against everyone else rather than by
+the probability itself. It is also why every fairness statistic in this project is
+computed at the top-20% rule rather than at 0.5 — 0.5 is not a threshold this product
+ever applies."""),
     md("## Stability\n\nAll models use the same eight bootstrap samples and fixed algorithm seeds to isolate training-data sensitivity. Sample hashes are in artifacts/stability_protocol.json. Jaccard is intersection/union, not the fraction of people retaining status. At equal selected-set size, replaced fraction is (1-J)/(1+J). Refits do not measure temporal stability; pairwise comparisons share refits."),
     code("stability = A('stability_summary.csv'); stability['selected_set_replacement'] = (1-stability.top20_jaccard)/(1+stability.top20_jaccard); display(stability)"),
     md("## Fairness\n\nThresholds change decisions, not calibration of unchanged probabilities. Equal FPR alone is not equalized odds. The group-threshold frontier optimizes using evaluation labels: an optimistic in-sample illustration, not validated mitigation. Removing race does not remove proxies or prove counterfactual fairness."),
     code("display(A('fairness_inference.csv')); display(A('intersectional_audit.csv')); display(A('race_ab_test.csv'))"),
-    md("### Equivalence tests and course test table\n\nFor a support programme the harm is a missed offer, so FNR (equal opportunity) and selection rate (statistical parity) are primary; FPR is secondary. A difference test that fails to reject does not show fairness: `equivalent_within_delta` is a TOST at a pre-set ±5-point tolerance, and an interval that is neither significant nor equivalent is inconclusive. The course table gives p-values at the top-20% rule; conditional statistical parity conditions on the historical supervision score."),
+    md("### Equivalence tests and course test table\n\nFor a support programme the harm is a missed offer, so FNR (equal opportunity) and selection rate (statistical parity) are primary; FPR is secondary. A difference test that fails to reject does not show fairness: `equivalent_within_delta` is a TOST at a ±5-point tolerance (fixed in code before TOST ran, but after the gap point estimates had been seen — so it is a stated tolerance, not a pre-registered one), and an interval that is neither significant nor equivalent is inconclusive. The course table gives p-values at the top-20% rule; conditional statistical parity conditions on the historical supervision score."),
     code("inf = A('fairness_inference.csv'); display(inf[(inf.rule == 'top_20pct') & inf.metric.isin(['fnr', 'selection_rate', 'fpr'])]); display(A('fairness_tests.csv')); display(A('fairness_age_bands.csv')); display(A('fairness_frontier.csv').query(\"method == 'group_thresholds_equal_fnr'\"))"),
     md("### Fairness interpretability (FPDP) and mitigation\n\nFPDP varies one input and re-evaluates the equal-opportunity test for logistic and XGBoost (TabICLv2 is excluded for compute cost). Candidate variables are diagnostic associations, not causes; removal and re-estimation report the AUC cost alongside the fairness change."),
     code("display(A('fairness_candidates.csv')); display(A('fairness_mitigation.csv'))"),
     md("""### Fairness findings at the top-20% rule
 
-Each gap is classified with the pre-set ±5-point tolerance: **equivalent** (TOST rejects a gap of 5 points or more), **different** (the 95% bootstrap interval excludes 0 and TOST does not show equivalence), or **inconclusive** (neither). A gap can be both significant and equivalent: nonzero, but within the tolerance. The 90+ intervals in this section are not adjusted for multiple testing. The TOST uses an analytic variance and the intervals use the bootstrap, so borderline cases can disagree (e.g. logistic race predictive equality: chi-squared p ≈ 0.049, bootstrap interval includes 0)."""),
+Each gap is classified with the ±5-point tolerance described above (fixed before TOST ran, after the point estimates were seen): **equivalent** (TOST rejects a gap of 5 points or more), **different** (the 95% bootstrap interval excludes 0 and TOST does not show equivalence), or **inconclusive** (neither). A gap can be both significant and equivalent: nonzero, but within the tolerance. The 90+ intervals in this section are not adjusted for multiple testing. The TOST uses an analytic variance and the intervals use the bootstrap, so borderline cases can disagree (e.g. logistic race predictive equality: chi-squared p ≈ 0.049, bootstrap interval includes 0)."""),
     code("""inf = A('fairness_inference.csv')
 top = inf[(inf.rule == 'top_20pct') & inf.metric.isin(['selection_rate', 'fnr', 'fpr'])].copy()
 top['status'] = ['equivalent' if e else 'different' if s else 'inconclusive'
                  for e, s in zip(top.equivalent_within_delta, top.significant)]
 display(top.pivot_table(index=['attribute', 'metric'], columns='model', values='status', aggfunc='first'))
 display(top.pivot_table(index=['attribute', 'metric'], columns='model', values='gap').round(3))"""),
-    md("""- **Race:** selection-rate, FNR and FPR gaps are equivalent within ±5 points for all three models. For XGBoost and TabICLv2 the selection and FPR gaps (about +2 points, Black minus White) are also significant: real but small, and in the direction of more support offered to Black people.
+    md("""- **Race:** selection-rate, FNR and FPR gaps are equivalent within ±5 points for all three models. For XGBoost and TabICLv2 the selection and FPR gaps (about +2 points, Black minus White) have unadjusted bootstrap intervals that exclude zero, in the direction of more support offered to Black people. They do **not** survive Holm correction across the 54 course tests: after multiplicity control no race test is rejected for any model. Read them as small and unconfirmed, not as established disparities.
 - **Gender:** women who are later re-arrested miss support more often (FNR gap M − F about −0.10 to −0.12, different for all models). Every model over-predicts women (mean score about 0.52 vs observed 0.45; ECE about 0.07 vs about 0.01–0.02 for men), yet women are selected less at the top 20%. Sufficiency is also rejected for gender.
 - **Age:** the largest disparity. The FNR gap (under 33 minus 33+) is about −0.23 to −0.25; about 97% of re-arrested people aged 48+ are not selected, vs about 49% at 18–22. Age is a model input and a validated risk factor, but in a support programme that choice needs an explicit justification (need vs risk).
 - **FPDP (gender):** candidate variables are `Gang_Affiliated` and `Age_at_Release`. Gang affiliation is never recorded for women and is imputed as "No", so it acts as a gender-aligned measurement artefact (Cramér's V with gender = 1.0 on the raw field). Dropping it and re-estimating removes the equal-opportunity rejection (logistic p 0.000 → 0.995; XGBoost → 0.67) at about −0.014 AUC, roughly six times the XGBoost − logistic gap. Statistical parity is still rejected.
-- **Caveats:** candidate selection, the neutral value in Panel B and the mitigation are all evaluated on the same evaluation labels, so they are illustrative, not validated. A p-value above 0.05 after mitigation is not evidence of fairness; equivalence would be. Group-specific thresholds remain an analytic device only."""),
+- **Caveats:** the Panel A/B numbers above select the candidate *and* measure the improvement on the same evaluation labels, so on their own they show the mitigation can be fitted, not that it generalises. The nested check below separates the two. A p-value above 0.05 after mitigation is still not evidence of fairness; equivalence would be. Group-specific thresholds remain an analytic device only."""),
+    md("""### Does the mitigation survive out-of-sample?
+
+The headline result (drop `Gang_Affiliated`, equal-opportunity p from 0.000 to ≈0.99)
+was produced by choosing the variable and scoring the improvement on the same cohort.
+That is in-sample evidence. Following the scikit-learn guidance on separating selection
+from evaluation, the check below runs entirely inside the **training** partition:
+
+    for each outer fold
+        run the course FPDP candidate search on the outer-training part only
+        pick the candidate from that part alone
+        fit baseline and mitigated models on the outer-training part
+        measure accuracy AND disparity on the held-out outer fold
+
+The evaluation cohort is never touched. Two things matter in the output: how often the
+procedure selects the **same** variable when it has never seen the evaluation labels
+(selection stability), and how much of the disparity reduction survives out of fold."""),
+    code("""nested = ROOT / 'artifacts/mitigation_nested.csv'
+if nested.exists():
+    folds = pd.read_csv(nested)
+    display(folds[['fold','model','selected_feature','baseline_auc','mitigated_auc',
+                   'baseline_p_equal_opportunity','mitigated_p_equal_opportunity',
+                   'baseline_fnr_gap','mitigated_fnr_gap']].round(4))
+    display(pd.read_csv(ROOT / 'artifacts/mitigation_nested_summary.csv').round(4))
+else:
+    print('Run scripts/mitigation_nested.py to generate the out-of-fold evidence.')
+"""),
+    md("""The procedure selects `Gang_Affiliated` in every fold without ever seeing the
+evaluation labels, so the candidate is a property of the training data rather than an
+artefact of the cohort we audit. Out of fold the gender FNR gap shrinks substantially
+but not to zero, and the equal-opportunity p-value lands far below the in-sample 0.99 —
+the honest estimate of what this mitigation buys, at roughly one AUC point. Some folds
+still reject. Report the out-of-fold numbers; quote the in-sample ones only as the
+upper bound they are."""),
 ]
 for name in ["performance_calibration", "incumbent_benchmark", "learning_curve", "shap_individual",
              "pdp_ice", "structural_stability", "fairness_support_access", "fairness_operating_point", "fairness_frontier", "fairness_dependence",
              "tradeoff_matrix"]:
     nb.cells.append(code(f"display(Image(filename=str(ROOT / 'artifacts/figures/{name}.png'), width=1000))"))
 nb.cells.extend([
-    md("## Recommendation\n\nPilot XGBoost prospectively with logistic as a transparent challenger. Weigh errors, explanation cost, refit stability and runtime together. Small-sample results do not establish suitability for smaller agencies elsewhere. Require independent validation, benefit evidence, corrections/appeals and monitoring before real allocation. No adverse use."),
+    md("""## Recommendation
+
+**Pilot XGBoost prospectively, with logistic regression as a transparent challenger
+running in parallel on the same cohort.**
+
+This is a decision across four dimensions, not an accuracy ranking, so the reasoning
+has to survive the obvious challenge — *logistic is a serious alternative, why accept
+the extra complexity?*
+
+**What XGBoost buys.** It is the best-calibrated of the three (ECE 0.011 vs 0.013 and
+0.020), which matters because the score is spoken about to a supervisee and used to
+rank under a fixed capacity. It captures 1,297 of the re-arrested cohort at 20%
+capacity against logistic's 1,285, and the paired bootstrap puts the AUC difference at
++0.0025 with an interval excluding zero — small, but real rather than noise.
+
+**What it costs, stated plainly.** Its gender FNR gap is wider (−0.112 vs −0.096), its
+selected set is the least stable across refits (Jaccard 0.747 vs 0.772), it needs SHAP
+plus a depth-3 surrogate of moderate fidelity (R² = 0.61) where logistic is read
+directly, and it runs roughly nine times slower. Its race selection and FPR gaps have
+unadjusted intervals excluding zero where logistic's do not — though no race test
+survives Holm correction for either model, so this separates them less than it appears.
+
+**Why the trade is defensible.** The fairness gap between the two is smaller than the
+gap that the FPDP mitigation can close: dropping `Gang_Affiliated` moves the gender FNR
+gap by roughly 0.08 out of fold, against the 0.016 that separates XGBoost from logistic.
+The disparity is a property of the feature set, not of the estimator choice, so paying
+in calibration and captured events to buy 0.016 of gap would be solving the wrong
+problem. Calibration, by contrast, cannot be recovered by a later intervention.
+
+**What would reverse this.** Logistic is the right answer if the client weights any of
+these above calibration: a regulator or procurement process that requires a model
+readable without a second explanation tool; deployment at agencies too small to support
+SHAP infrastructure; an auditor who treats *any* unadjusted race interval excluding zero
+as disqualifying; or a stability requirement on who appears in the selected set between
+refits. Under the vendor framing used here — many differently-sized agencies, audit
+exposure, honest probabilities quoted to supervisees — those are live possibilities, and
+the challenger arrangement is what makes the choice reversible after the pilot.
+
+**Preconditions either way.** Independent prospective validation, evidence that the
+support programme actually benefits recipients, a corrections and appeals route,
+subgroup monitoring after deployment, and no adverse use. The learning-curve result is
+evidence about sample size in *this* cohort and does not establish suitability for
+smaller agencies elsewhere."""),
     code("display(json.loads((ROOT/'artifacts/validation_manifest.json').read_text()))"),
     md("## End-to-end audit\n\nA fresh three-model run exactly reproduced the published probabilities. See reports/end_to_end_review.md for the data boundaries, actual GPU checks and CPU/CUDA experiment. Holm correction of 54 course difference tests reduces rejections from 41 to 32; no race test survives, while gender and age equal-opportunity differences remain. This does not adjust TOST or mitigation selection."),
     code("adjusted = ROOT / 'artifacts/end_to_end/fairness_tests_holm.csv'\nif adjusted.exists(): display(pd.read_csv(adjusted))"),

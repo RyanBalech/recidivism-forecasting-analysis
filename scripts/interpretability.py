@@ -3,7 +3,8 @@
 - SHAP (global mean |SHAP| + one individual waterfall) for logistic and XGBoost.
 - Global surrogate: a depth-3 tree fitted to XGBoost's predictions, with fidelity.
 - PDP + ICE for all three models (model-agnostic, so TabICL is covered).
-- One LIME explanation for the same individual, to compare with SHAP.
+LIME moved to scripts/lime_local_fidelity.py, which perturbs real categories
+instead of one-hot columns and reports local fidelity beside every explanation.
 TabICL has no native attribution path; KernelSHAP over the full test set is impractical on CPU.
 That is reported as a deployment cost, not hidden.
 """
@@ -127,31 +128,15 @@ def main() -> None:
     fig.savefig(FIGURE_DIR / "global_surrogate.png", dpi=150, bbox_inches="tight")
     plt.close(fig)
 
-    # --- LIME: same individual, XGBoost, on the model's preprocessed feature space ---
-    try:
-        from lime.lime_tabular import LimeTabularExplainer
-        pipe = models["xgboost"]
-        transform = pipe[:-1]
-        dense = lambda a: a.toarray() if hasattr(a, "toarray") else a
-        train_arr = dense(transform.transform(X_train))
-        names = list(pipe[-2].get_feature_names_out())
-        explainer = LimeTabularExplainer(train_arr, feature_names=names, class_names=["no", "yes"],
-                                         discretize_continuous=True, random_state=RANDOM_SEED)
-        exp = explainer.explain_instance(dense(transform.transform(person))[0], pipe[-1].predict_proba,
-                                         num_features=10, num_samples=3000)
-        lime_rows = pd.DataFrame(exp.as_list(), columns=["condition", "weight"])
-        lime_rows.to_csv(ARTIFACT_DIR / "lime_individual.csv", index=False)
-        fig, ax = plt.subplots(figsize=(11, 6))
-        lr = lime_rows[::-1]
-        ax.barh(lr.condition.map(pretty), lr.weight, color=["#C1121F" if w > 0 else "#2A9D8F" for w in lr.weight])
-        ax.set(title="LIME (XGBoost), same individual: local linear surrogate", xlabel="Weight")
-        fig.tight_layout()
-        fig.savefig(FIGURE_DIR / "lime_individual.png", dpi=180, bbox_inches="tight")
-        plt.close(fig)
-        summary["lime"] = "ok (features shown in scaled, preprocessed space)"
-        summary["lime_local_surrogate_r2"] = float(exp.score)
-    except Exception as exc:
-        raise RuntimeError("LIME failed; refusing to retain stale explanation artifacts") from exc
+    # --- LIME lives in scripts/lime_local_fidelity.py ---
+    # It used to run here over the *transformed* one-hot space. Perturbing one-hot
+    # columns independently produces rows no person could occupy, so the local
+    # surrogate was fitted on a region the model never sees (R2 ~= 0.25). The
+    # replacement declares `categorical_features` on the raw frame, explains three
+    # predetermined cases under several seeds, and reports fidelity beside each
+    # explanation. It owns lime_individual.png and writes lime_fidelity.csv,
+    # lime_weights.csv and lime_seed_spread.csv.
+    summary["lime"] = "see scripts/lime_local_fidelity.py (category-aware; fidelity reported per case)"
 
     # --- PDP + ICE for all three models ---
     from recidivism.modeling import tabicl_model

@@ -1,10 +1,20 @@
 """Regression guards for clean-start leakage checks and stale deliverables."""
+import importlib.util
 import runpy
 
 import pandas as pd
 import pytest
 
 from recidivism.config import ARTIFACT_DIR, ROOT
+
+# end_to_end_audit.py imports torch for its TabICL device checks. On a CPU-only checkout
+# the tests that load it should report "skipped", not "failed": a red suite caused by a
+# missing optional GPU dependency is indistinguishable from a real regression. The
+# leakage-gate test below needs no GPU stack and always runs.
+needs_torch = pytest.mark.skipif(
+    importlib.util.find_spec("torch") is None,
+    reason="end_to_end_audit imports torch (TabICL device checks)",
+)
 
 
 def test_leakage_gate_does_not_need_prediction_artifacts(monkeypatch):
@@ -20,6 +30,7 @@ def test_leakage_gate_does_not_need_prediction_artifacts(monkeypatch):
     assert module["audit"](include_prediction_sensitivity=False)["auc_excluding_shared_patterns"] is None
 
 
+@needs_torch
 def test_artifact_audit_rejects_stale_performance(monkeypatch):
     monkeypatch.syspath_prepend(str(ROOT / "scripts"))
     module = runpy.run_path(str(ROOT / "scripts/end_to_end_audit.py"))
@@ -31,6 +42,7 @@ def test_artifact_audit_rejects_stale_performance(monkeypatch):
         module["verify_metrics"](pred, metrics)
 
 
+@needs_torch
 def test_holm_adjustment_restores_original_order(monkeypatch):
     import numpy as np
     monkeypatch.syspath_prepend(str(ROOT / "scripts"))
