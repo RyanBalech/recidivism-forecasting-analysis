@@ -13,7 +13,7 @@ Reviewed 23 September 2026 against the supplied two-page course brief, the NIJ p
 | Stability | Eight bootstrap refits per model, rank/probability drift, allocation overlap | No temporal validation; pairwise comparisons share refits |
 | Fairness | Race/gender and intersectional audits; two operating points; A/B race experiment | Multiple comparisons; threshold frontier fitted to evaluation labels |
 | Recommendation across dimensions | Trade-off matrix and shadow-pilot recommendation | Needs external/prospective validation |
-| Slides, code/notebook, app | Generated deck, executable notebook, Streamlit | Team must rehearse and submit deliverables |
+| Slides, code/notebook, app | Generated deck, root-level executed `Recidivism_Project_Submission.ipynb`, Streamlit | Team must rehearse and submit deliverables |
 
 The brief allocates 5 points each to technical skill, presentation and Q&A, and 10 to slides/code/app/notebook. No audit can guarantee a grade. Every team member must be able to defend every component.
 

@@ -32,13 +32,14 @@ The [fresh accuracy review](reports/deep_review.md) found no material improvemen
 
 ## Results and deliverables
 
+- **Professor submission notebook:** [`Recidivism_Project_Submission.ipynb`](Recidivism_Project_Submission.ipynb). It is fully executed and is the single readable entry point from data preparation and leakage controls through the three model families, performance, interpretability, stability, fairness and recommendation. Its saved outputs can be read as a standalone file; keep the repository folders beside it to rerun cells and resolve the relative data/source paths. Set `RUN_FULL_PIPELINE=True` inside the notebook only when a complete GPU-backed rebuild is required.
 - [End-to-end review](reports/end_to_end_review.md): fresh three-model reproduction, actual GPU checks, CPU/CUDA comparison, paired stability refits, leakage gates and artifact integrity. Run `python scripts/end_to_end_audit.py` to check published results.
 - [Fresh leakage and accuracy review](reports/deep_review.md): independent release checks, 144 inner-fold XGBoost fits, calibration, native categorical trees, and a fixed ensemble challenger. Reproduce with the commands in that report.
 - [Exact performance](artifacts/model_metrics.csv), [probability baselines and Brier skill](artifacts/validation_baselines.csv)
 - [Paired model differences with bootstrap intervals](artifacts/paired_comparisons.csv), [fixed-configuration training CV](artifacts/validation_cv.csv)
 - [Intersectional audit](artifacts/intersectional_audit.csv), [four-dimension trade-offs](artifacts/tradeoff_matrix.md)
 - [Technical report](reports/technical_report.md), [research and requirement review](reports/research_review.md)
-- [Executed notebook](notebooks/recidivism_analysis.ipynb), [interactive app](app.py)
+- [Canonical executed notebook copy](notebooks/recidivism_analysis.ipynb), [interactive app](app.py)
 - [Slide deck](reports/ISAF_Recidivism_Presentation.pptx), [presentation and Q&A notes](reports/presentation_notes.md)
 - [Data guide](reports/data_guide.md), [pre-validation brief](reports/dataset_prevalidation.md)
 - [Package versions, input/model hashes and consistency checks](artifacts/validation_manifest.json)

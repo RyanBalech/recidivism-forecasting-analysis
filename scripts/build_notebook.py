@@ -1,29 +1,43 @@
-"""Build and execute the evidence notebook from canonical artifacts."""
+"""Build and execute the professor-facing submission notebook.
+
+The notebook is the readable entry point for the complete project. Heavy fitting
+remains in versioned modules/scripts so the notebook and application use exactly
+the same implementation; a visible switch in the notebook runs the whole pipeline.
+"""
 from pathlib import Path
 import nbformat as nbf
 from nbclient import NotebookClient
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "notebooks" / "recidivism_analysis.ipynb"
+OUTS = [ROOT / "Recidivism_Project_Submission.ipynb",
+        ROOT / "notebooks" / "recidivism_analysis.ipynb"]
 md = nbf.v4.new_markdown_cell
 code = nbf.v4.new_code_cell
 nb = nbf.v4.new_notebook()
 nb.metadata.kernelspec = {"display_name": "Python 3", "language": "python", "name": "python3"}
 nb.cells = [
-    md("# Trustworthy recidivism forecasting\n\nClient: a community-supervision software vendor. Compare logistic regression, XGBoost and TabICLv2 for voluntary support prioritization. Target: three-year cumulative new arrest. This differs from NIJ annual conditional forecasting; challenge leaderboard comparisons are invalid."),
+    md("# Trustworthy recidivism forecasting — submission notebook\n\n**Client:** a community-supervision software vendor. **Decision:** prioritize voluntary re-entry support at supervision start. **Target:** cumulative new arrest within three years. **Models:** tuned L1 logistic regression, XGBoost and TabICLv2.\n\nThis notebook is the professor-facing entry point for the complete analysis required by the Interpretability, Stability and Algorithmic Fairness project brief. It covers data preparation, leakage controls, model configuration, predictive and economic performance, interpretability, stability, fairness, trade-offs and the deployment recommendation. The project source and generated evidence remain in versioned `src/`, `scripts/` and `artifacts/` directories so the notebook and interactive application use the same implementation.\n\nThe target differs from NIJ's annual conditional forecasting task; comparison with the challenge leaderboard would be invalid."),
     code("""from pathlib import Path
-import json, sys
+import inspect, json, runpy, subprocess, sys
+import numpy as np
 import pandas as pd
-from IPython.display import Image, display
+from IPython.display import Image, Markdown, display
 ROOT = Path.cwd()
 if not (ROOT / 'artifacts').exists(): ROOT = ROOT.parent
 sys.path.insert(0, str(ROOT / 'src'))
+sys.path.insert(0, str(ROOT / 'scripts'))
 from recidivism.data import load_official_split
 split = load_official_split()
 A = lambda name: pd.read_csv(ROOT / 'artifacts' / name)
 print(f'Training: {len(split.X_train):,}; evaluation: {len(split.X_test):,}; features: {split.X_train.shape[1]}')
 """),
-    md("## Reproduce\n\nRun scripts/reproduce.py for the complete pipeline. The evaluation partition is excluded from fitting, but was repeatedly inspected during development. It is not an untouched final holdout. This notebook executes the reporting layer; source scripts provide all fitting/audits."),
+    md("## Reproduce the complete project\n\nSet `RUN_FULL_PIPELINE=True` and execute this notebook from the repository root to regenerate model predictions, audits, figures, this notebook, the slide deck and the pre-validation PDF. The default is `False` because the checked-in notebook is already executed and the TabICLv2 stability/explanation passes are GPU-intensive. The fitting code is shown through its effective configuration below and is fully available in `src/recidivism/` and `scripts/`."),
+    code("""RUN_FULL_PIPELINE = False
+if RUN_FULL_PIPELINE:
+    subprocess.run([sys.executable, str(ROOT / 'scripts/reproduce.py')], cwd=ROOT, check=True)
+else:
+    print('Using checked-in, hash-audited artifacts. Set RUN_FULL_PIPELINE=True for a complete rebuild.')
+"""),
     md("## Data preparation\n\nOnly baseline fields are eligible. Outcomes, IDs, split flags, protected attributes, geography and post-release supervision activities are excluded from model inputs. Imputation and scaling are learned within training pipelines. Logistic uses tuned L1 with one-hot categories; XGBoost ordinal-encodes ordered fields; TabICL mode-imputes categorical missingness before its mixed-data encoder. This neutralizes the gender-aligned `Gang_Affiliated` missingness channel; `scripts/leakage_audit.py` enforces the check."),
     code("""from recidivism.config import FEATURE_COLUMNS, BASELINE_COLUMNS, DATA_PATH
 raw = pd.read_csv(DATA_PATH)
@@ -32,8 +46,54 @@ display(pd.DataFrame({'feature': raw.columns, 'used_for_scoring': [c in FEATURE_
 display(raw.assign(gang_missing=raw.Gang_Affiliated.isna()).groupby('Gender').gang_missing.agg(['mean','sum','count']))
 display(split.X_train.isna().mean().sort_values(ascending=False).head(10))
 """),
+    md("### Data integrity and leakage gate\n\nThis gate runs before model fitting and independently compares IDs, eligible feature values and training outcomes with NIJ's original releases. It rejects explicit targets, annual outcomes, IDs, split flags, protected attributes and post-release activity fields. Passing establishes the tested boundaries; it cannot prove the exact measurement time of every field or undo historical inspection of the evaluation labels."),
+    code("""from deep_leakage_audit import audit as leakage_audit
+leakage_result = leakage_audit(include_prediction_sensitivity=True)
+display(pd.Series({
+    'checks_passed': len(leakage_result['checks_passed']),
+    'cross_split_feature_patterns': leakage_result['cross_split_identical_feature_patterns'],
+    'evaluation_rows_in_shared_patterns': leakage_result['evaluation_rows_with_training_pattern'],
+}))
+display(pd.DataFrame(leakage_result['missingness']))
+print('Checks:', *leakage_result['checks_passed'], sep='\\n- ')
+print('\\nLimits:', *leakage_result['limitations'], sep='\\n- ')
+"""),
+    md("## Model definitions and training boundary\n\nAll three models receive the same 29 eligible raw fields and fit only the 18,028 training records. Learned preprocessing sits inside the conventional-model pipelines. TabICL receives no evaluation labels at inference. The cells below expose the effective hyperparameters and device evidence used by the shared application and scripts."),
+    code("""from recidivism.modeling import (
+    LOGIT_ENCODING, LOGIT_PARAMS, TABICL_CHECKPOINT, TABICL_ESTIMATORS, XGB_PARAMS,
+    logistic_model, tabicl_model, xgboost_model,
+)
+display(pd.DataFrame([
+    {'model': 'logistic', 'configuration': {'encoding': LOGIT_ENCODING, **LOGIT_PARAMS}},
+    {'model': 'xgboost', 'configuration': XGB_PARAMS},
+    {'model': 'tabicl', 'configuration': {'estimators': TABICL_ESTIMATORS, 'checkpoint': TABICL_CHECKPOINT}},
+]))
+run_manifest = json.loads((ROOT / 'artifacts/run_manifest.json').read_text())
+end_to_end = json.loads((ROOT / 'artifacts/end_to_end/audit.json').read_text())
+display(pd.Series({
+    'train_rows': run_manifest.get('train_rows'),
+    'evaluation_rows': run_manifest.get('test_rows'),
+    'tabicl_estimators': run_manifest.get('tabicl_estimators'),
+    'tabicl_device': run_manifest.get('tabicl_device'),
+    'tabicl_checkpoint': end_to_end['cached_checkpoint']['name'],
+    'tabicl_checkpoint_sha256': end_to_end['cached_checkpoint']['sha256'],
+    'xgboost_execution': 'CPU for published model; paired CPU/CUDA audit available',
+}))
+"""),
     md("## Performance and baselines\n\nThe incumbent is a historical recorded score, not evidence about tools agencies use today. Constant prevalence and incumbent calibration are learned on training records."),
-    code("display(A('model_metrics.csv')); display(A('validation_baselines.csv'))"),
+    code("""from recidivism.metrics import classification_metrics
+predictions = A('test_predictions.csv')
+recomputed = pd.DataFrame([
+    {'model': model, **classification_metrics(predictions.actual, predictions[f'p_{model}'])}
+    for model in ['logistic', 'xgboost', 'tabicl']
+])
+published = A('model_metrics.csv')
+check = published[['model','roc_auc','brier','average_precision']].merge(
+    recomputed[['model','roc_auc','brier','average_precision']], on='model', suffixes=('_published','_recomputed'))
+display(check)
+assert np.allclose(check.filter(like='_published'), check.filter(like='_recomputed').to_numpy(), atol=1e-7)
+display(A('validation_baselines.csv'))
+"""),
     md("## Foundation-model compute sensitivity\n\nThe 16-member TabICLv2 configuration is checked on a fixed stratified development slice carved only from the training partition. This is a compute/robustness sensitivity check, not final validation."),
     code("display(A('estimator_sweep.csv')); display(Image(filename=str(ROOT / 'artifacts/figures/estimator_sweep.png'), width=900))"),
     md("## Paired uncertainty and training CV\n\nDifferences are A minus B: positive AUC favors A, negative Brier favors A. Paired bootstrap preserves the correlation between model errors. Marginal intervals are exploratory and unadjusted for development selection or multiple comparisons. Fixed-configuration CV is not nested evaluation of the earlier search."),
@@ -44,7 +104,7 @@ display(split.X_train.isna().mean().sort_values(ascending=False).head(10))
     code("display(A('incumbent_economics.csv'))"),
     md("## Interpretability\n\nSHAP and LIME explain conventional models; XPER approximates performance attribution on a small sample. Surrogate fidelity is imperfect. TabICLv2 has PDP/ICE, permutation and interactive sensitivity, but no implemented native additive attribution. These are model-response explanations, not causal effects."),
     code("display(A('shap_importance.csv').groupby('model').head(8)); display(A('xper_values.csv')); display(json.loads((ROOT/'artifacts/interpretability_summary.json').read_text()))"),
-    md("The approximate XPER contributions do not exactly reconstruct the sample AUC; the discrepancy is reported below and its numerical cause has not been isolated."),
+    md("The approximate XPER contributions do not exactly reconstruct the sample AUC. Inspection of XPER 0.0.92 found that its kernel approximation uses unconstrained weighted regression without empty/full endpoint constraints, so exact reconstruction is not guaranteed. The residual remains visible rather than being presented as an exact decomposition."),
     code("diagnostics = ROOT / 'artifacts/xper_diagnostics.csv'\nif diagnostics.exists(): display(pd.read_csv(diagnostics))"),
     md("Logistic odds ratios below are per transformed unit (numeric inputs are standardized), not causal effects. Local sensitivity changes one field of the same explained person for all three models; it is not an additive attribution."),
     code("display(A('logistic_coefficients.csv')); display(A('local_sensitivity.csv'))"),
@@ -80,9 +140,10 @@ nb.cells.extend([
     code("display(json.loads((ROOT/'artifacts/validation_manifest.json').read_text()))"),
     md("## End-to-end audit\n\nA fresh three-model run exactly reproduced the published probabilities. See reports/end_to_end_review.md for the data boundaries, actual GPU checks and CPU/CUDA experiment. Holm correction of 54 course difference tests reduces rejections from 41 to 32; no race test survives, while gender and age equal-opportunity differences remain. This does not adjust TOST or mitigation selection."),
     code("adjusted = ROOT / 'artifacts/end_to_end/fairness_tests_holm.csv'\nif adjusted.exists(): display(pd.read_csv(adjusted))"),
-    md("References and requirement coverage: reports/research_review.md. Detailed methodological limits: reports/technical_report.md."),
+    md("## Submission checklist\n\n- Binary target and client decision defined\n- White-box, machine-learning and tabular-foundation model compared\n- Statistical and economic performance assessed\n- Local/global interpretability, structural stability and subgroup fairness analyzed\n- Trustworthy-AI trade-offs and an XGBoost shadow-pilot recommendation stated\n- Executed outputs included; no code-cell errors\n- Interactive application in `app.py`; presentation in `reports/ISAF_Recidivism_Presentation.pptx`\n\nReferences and requirement coverage: `reports/research_review.md`. Detailed methodological limits: `reports/technical_report.md`. End-to-end reproduction evidence: `reports/end_to_end_review.md`."),
 ])
-OUT.parent.mkdir(exist_ok=True)
 NotebookClient(nb, timeout=1200, kernel_name="python3", resources={"metadata": {"path": str(ROOT)}}).execute()
-nbf.write(nb, OUT)
-print(OUT)
+for out in OUTS:
+    out.parent.mkdir(exist_ok=True)
+    nbf.write(nb, out)
+    print(out)

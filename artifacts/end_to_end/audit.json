@@ -174,17 +174,18 @@
       "cpu": {
         "roc_auc": 0.7331431961747737,
         "brier": 0.20401751808535504,
-        "seconds": 1.5054571666793588
+        "seconds": 1.9033678333313826
       },
       "cuda": {
         "roc_auc": 0.733064460757491,
         "brier": 0.20401441330716374,
-        "seconds": 2.200167000022096
+        "seconds": 3.327084266677654
       }
     }
   },
   "deliverables": {
-    "executed_code_cells": 28,
+    "submission_notebook": "Recidivism_Project_Submission.ipynb",
+    "executed_code_cells": 31,
     "slides": 17
   },
   "checks_passed": [
@@ -202,19 +203,20 @@
     "artifacts\\fairness_inference.csv": "00bfb9e8b23b140d8070e15a64b70dd5b8de033aece9fdd747c3a829b9c27924",
     "artifacts\\models\\logistic.joblib": "a3d1d67429d3251ff334a0ebc6a359bc8fa37034d2e0debccbf9a3d95fc905c1",
     "artifacts\\models\\xgboost.joblib": "609cc8cc53a7937c84c822d10fef70bc41adaa71f8af9f10c0d9fe3a02e90e19",
-    "notebooks\\recidivism_analysis.ipynb": "8cdee1c204500751cd7347d36c62c769699dc16b97bab3e32bbcb994df3818ad",
+    "Recidivism_Project_Submission.ipynb": "701c032319faaeee0ef117317583ed5897ad4e3d60e3d8074406a39e4da228fb",
+    "notebooks\\recidivism_analysis.ipynb": "701c032319faaeee0ef117317583ed5897ad4e3d60e3d8074406a39e4da228fb",
     "reports\\ISAF_Recidivism_Presentation.pptx": "5585d9d24dce3329546ee919d36ac6d8daf8a0f7e0190ded6e53bac35da6ff38",
     "artifacts\\stability_pairs.csv": "942ac53452d1abfb441b362ebeb1e3307c2723cb7ac6121e6d227befd969d7eb",
     "artifacts\\stability_summary.csv": "9feb952a8372b932a831da02370c0011f43b4d266182e1698228db6fa48a0ee9"
   },
   "source_sha256": {
     "scripts\\accuracy_review.py": "1c5a5815d6aae833c5a10d9594309a6d40d0677d120bc694418363f30c3f0c41",
-    "scripts\\build_notebook.py": "e2b4ea83121ce3d32b679dcef00db795b20e0ba3529a1c0e27faa708e9937d07",
+    "scripts\\build_notebook.py": "32b10d64a58085ee8b783dbc393f15b68d358c1ec04e4ddcc09e9a0c592067c0",
     "scripts\\build_prevalidation_pdf.py": "fea499029a1473fc0b9b57cbb342f47d7dc4281d4e61b7b81381d880a14fe82e",
     "scripts\\build_slides.py": "cbf84449e9fc43bea9da0d82d8c8696dd30ede1098cfccc12c010a2b70baec03",
     "scripts\\compare_ml_models.py": "f21d55465b5140e2b842cd59c586c6ef004e810280e2abf0c27517cc1ba2c620",
     "scripts\\deep_leakage_audit.py": "a8c2e21dbf640291ff5d81193dba64c8a3a8e8943c0df6b1d70d983bea7e10b3",
-    "scripts\\end_to_end_audit.py": "cfdeff3cf8ae7ee9bd7b5f9f7a4460873d9fa9df26c325aa14310a94ae860410",
+    "scripts\\end_to_end_audit.py": "1fd90ff97ac0f1f98a4b76df025fe6dc602f0b4fd559c3b4d1353a0eb2f56752",
     "scripts\\estimator_sweep.py": "1fd088dc6b74344cf3ac1631f326d411f6a42b32640dee7c5a07accf547f89f7",
     "scripts\\fairness_audit.py": "06bc835a0e659bb847d35bb399c734e85a8751f5b37ecf7d71e39ec5f8b9fe62",
     "scripts\\fairness_interpretability.py": "11be62f01b7f55fd82b2f7ababbd429d2de06dbd013bad7f11b5846437123d4d",

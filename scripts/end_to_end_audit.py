@@ -86,6 +86,8 @@ def main():
     args = parser.parse_args()
     out = ARTIFACT_DIR / "end_to_end"
     out.mkdir(exist_ok=True)
+    audit_path = out / "audit.json"
+    previous = json.loads(audit_path.read_text(encoding="utf-8")) if audit_path.exists() else {}
     split = load_official_split()
     report = {"python": platform.python_version(), "leakage": leakage_audit(),
               "gpu_available_now": torch.cuda.is_available(),
@@ -160,8 +162,14 @@ def main():
         report["isolated_refit_max_probability_difference"] = {
             name: float(np.max(np.abs(fresh[f"p_{name}"] - pred[f"p_{name}"])))
             for name in ["logistic", "xgboost", "tabicl"]}
+    else:
+        for key in ["isolated_refit_manifest", "isolated_refit_max_probability_difference"]:
+            if key in previous:
+                report[key] = previous[key]
     if args.gpu_check:
         report["xgboost_gpu_benchmark"] = gpu_benchmark(split, out)
+    elif "xgboost_gpu_benchmark" in previous:
+        report["xgboost_gpu_benchmark"] = previous["xgboost_gpu_benchmark"]
     pairs = pd.read_csv(ARTIFACT_DIR / "stability_pairs.csv")
     stability = pd.read_csv(ARTIFACT_DIR / "stability_summary.csv").set_index("model")
     for name, part in pairs.groupby("model"):
@@ -170,28 +178,34 @@ def main():
         for metric in ["mean_abs_prob_diff", "rank_correlation", "top20_jaccard"]:
             if not np.isclose(part[metric].mean(), stability.loc[name, metric], atol=5.1e-5):
                 raise ValueError(f"Stale stability summary: {name}/{metric}")
+    submission_notebook = ROOT / "Recidivism_Project_Submission.ipynb"
     notebook_path = ROOT / "notebooks/recidivism_analysis.ipynb"
     slides_path = ROOT / "reports/ISAF_Recidivism_Presentation.pptx"
-    for path in [notebook_path, slides_path]:
+    for path in [submission_notebook, notebook_path, slides_path]:
         if not path.is_file() or path.stat().st_size == 0:
             raise ValueError(f"Missing deliverable: {path}")
+    if submission_notebook.read_bytes() != notebook_path.read_bytes():
+        raise ValueError("Root submission notebook and canonical notebook are out of sync")
     notebook = json.loads(notebook_path.read_text(encoding="utf-8"))
     code_cells = [c for c in notebook["cells"] if c["cell_type"] == "code"]
     if any(c["execution_count"] is None or any(o["output_type"] == "error" for o in c["outputs"]) for c in code_cells):
         raise ValueError("Notebook contains unexecuted cells or execution errors")
     from pptx import Presentation
-    report["deliverables"] = {"executed_code_cells": len(code_cells), "slides": len(Presentation(slides_path).slides)}
+    report["deliverables"] = {"submission_notebook": submission_notebook.name,
+                              "executed_code_cells": len(code_cells),
+                              "slides": len(Presentation(slides_path).slides)}
     report["checks_passed"] = ["original release and preprocessing boundaries", "prediction ID/label alignment",
                                "all published performance/economic metrics", "saved conventional model predictions",
                                "merged fairness point estimates", "paired stability summaries", "executed notebook and readable slide deck"]
     inputs = [ARTIFACT_DIR / name for name in ["test_predictions.csv", "model_metrics.csv", "fairness_inference.csv"]]
     inputs += list((ARTIFACT_DIR / "models").glob("*.joblib"))
-    inputs += [notebook_path, slides_path, ARTIFACT_DIR / "stability_pairs.csv", ARTIFACT_DIR / "stability_summary.csv"]
+    inputs += [submission_notebook, notebook_path, slides_path,
+               ARTIFACT_DIR / "stability_pairs.csv", ARTIFACT_DIR / "stability_summary.csv"]
     report["input_sha256"] = {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in inputs}
     report["source_sha256"] = {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest()
                                for folder in [ROOT / "scripts", ROOT / "src/recidivism"]
                                for p in sorted(folder.glob("*.py"))}
-    (out / "audit.json").write_text(json.dumps(report, indent=2, allow_nan=False), encoding="utf-8")
+    audit_path.write_text(json.dumps(report, indent=2, allow_nan=False), encoding="utf-8")
     print("Passed: " + "; ".join(report["checks_passed"]), flush=True)
     print("Full evidence: artifacts/end_to_end/audit.json", flush=True)
 
