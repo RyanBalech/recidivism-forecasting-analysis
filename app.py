@@ -118,7 +118,7 @@ with tab_ind:
     st.caption("Priority is a comparison to a historical cohort cutoff. Edited records are hypothetical; this is not a live allocation guarantee. Cohort audits allocate exactly round(n × capacity), breaking ties by row order.")
 
     st.markdown("**Why this score? Local explanation**")
-    explain_model = st.radio("Explain with", ["xgboost", "logistic", "tabicl"], format_func=LABELS.get, horizontal=True)
+    explain_model = st.radio("Explain with", ["logistic", "xgboost", "tabicl"], format_func=LABELS.get, horizontal=True)
     if explain_model == "tabicl":
         st.info("TabICLv2 has no native attribution method in this project. PDP/ICE describe model responses; "
                 "the feature edits above allow local sensitivity exploration. Neither identifies causal effects.")
@@ -228,6 +228,7 @@ with tab_econ:
 with tab_gov:
     st.subheader("Recommended operating policy")
     st.markdown("""
+    - Score with the L1 logistic model and run XGBoost as a shadow challenger: XGBoost's AUC edge (+0.0025) does not outweigh logistic's native explanations, lower refit drift and smaller subgroup gaps.
     - Use scores only to offer beneficial, capacity-limited support; never to increase surveillance, sanctions, or detention.
     - Keep race and gender out of the score and in the monitoring layer. Audit error rates and calibration by group every quarter, at the deployed operating point.
     - Require documented overrides, an appeal route, data-quality checks, and automatic suspension when drift or subgroup gaps exceed agreed limits.

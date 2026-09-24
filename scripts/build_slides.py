@@ -92,8 +92,10 @@ calib = pd.read_csv(ART / "fairness_impossibility.csv").set_index(["attribute", 
 mitigation = pd.read_csv(ART / "fairness_mitigation.csv")
 drop_gang = mitigation[(mitigation.attribute == "Gender") & (mitigation.feature == "Gang_Affiliated")
                        & mitigation.panel.str.startswith("A")].set_index("model")
-base_auc = mitigation[mitigation.panel == "baseline"].groupby("model").auc.first()
-gang_cost = base_auc["logistic"] - drop_gang.loc["logistic", "auc"]
+base_gender = mitigation[(mitigation.panel == "baseline") & (mitigation.attribute == "Gender")].set_index("model")
+gang_cost = base_gender.loc["logistic", "auc"] - drop_gang.loc["logistic", "auc"]
+by_group = pd.read_csv(ART / "fairness_by_group.csv").set_index(["model", "attribute", "group"])
+race_auc = [by_group.loc[(m, "Race", g), "roc_auc"] for m in ["logistic", "xgboost", "tabicl"] for g in ["BLACK", "WHITE"]]
 
 # Out-of-fold mitigation evidence: selection inside training folds, assessment on held-out folds.
 _nested_path = ART / "mitigation_nested_summary.csv"
@@ -152,7 +154,7 @@ s = make_slide(prs); title(s, "Comparison with the historical recorded score", "
 picture(s, FIG / "incumbent_benchmark.png", .35, 1.7, 9.1)
 card(s, "INCUMBENT AUC", f"{inc_auc['incumbent']:.2f}", 9.75, 1.9, RED)
 card(s, "OUR MODELS AUC", "0.73", 9.75, 3.5, TEAL)
-card(s, "NET VALUE GAIN", f"+${(inc_econ['xgboost']-inc_econ['incumbent'])/1e6:.1f}M", 9.75, 5.1, ORANGE)
+card(s, "NET VALUE GAIN", f"+${(inc_econ['logistic']-inc_econ['incumbent'])/1e6:.1f}M", 9.75, 5.1, ORANGE, "recommended logistic model")
 textbox(s, "This historical comparison does not establish superiority to current agency products. Dollar gains are scenarios.", 1.0, 6.85, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 5)
 
 # 6 — Predictive performance
@@ -167,24 +169,25 @@ textbox(s, "All three models are within ~0.003 AUC; ECE differences are not sign
 s = make_slide(prs); title(s, "Fairness at the proposed allocation rule", "06 · Subgroup audit")
 picture(s, FIG / "fairness_support_access.png", .4, 1.7, 8.5)
 card(s, "GENDER FNR GAP (M − F)", span(fnr20["Gender"]), 9.35, 1.9, RED, "women miss support more · all significant")
-card(s, "RACE: EQUIVALENT ±5 PTS", f"{int(race_equiv.sum())} / {len(race_equiv)} models", 9.35, 3.5, TEAL, "TOST on selection, FNR, FPR")
-card(s, "AGE FNR GAP (<33 − 33+)", span(fnr20["Age"]), 9.35, 5.1, ORANGE, "age is an input: needs a stated justification")
+card(s, "RACE: EQUIVALENT ±5 PTS", f"{int(race_equiv.sum())} / {len(race_equiv)} models", 9.35, 3.5, TEAL,
+     f"TOST on errors · AUC Black {min(race_auc[0::2]):.2f} vs White {min(race_auc[1::2]):.2f}")
+card(s, "AGE FNR GAP (<33 − 33+)", span(fnr20["Age"]), 9.35, 5.1, ORANGE, "persists with age fixed: carried by prior record")
 textbox(s, "Selection = support offered, so the harm is a missed offer: FNR is primary. Not significant ≠ fair; we test equivalence.", 1.0, 6.8, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 7)
 
 # 8 — Impossibility result
 s = make_slide(prs); title(s, "Fairness: probability scores and allocation rules", "07 · Fairness, sharpened")
-panel(s, "SCORE CALIBRATION", f"Women are over-predicted by every model: mean score {calib.loc[('Gender', 'F'), 'mean_score_xgboost']:.2f} vs observed {calib.loc[('Gender', 'F'), 'base_rate']:.2f}\n\nYet they are selected less at the top 20%\n\nChanging decision thresholds leaves probabilities unchanged", .7, 1.85, 5.75, 4.7, TEAL)
-panel(s, "ALLOCATION ERRORS", "FPR, TPR and selection rates depend on policy\n\nEqual FPR alone is not equalized odds\n\nOur threshold frontier uses evaluation labels: illustrative, not validated", 6.85, 1.85, 5.75, 4.7, RED)
+panel(s, "SCORE CALIBRATION", f"Women are over-predicted by every model: mean score {calib.loc[('Gender', 'F'), 'mean_score_xgboost']:.2f} vs observed {calib.loc[('Gender', 'F'), 'base_rate']:.2f}\n\nYet they are selected less at the top 20%\n\nFor support, over-prediction helps women: recalibrating would widen the FNR gap", .7, 1.85, 5.75, 4.7, TEAL)
+panel(s, "ALLOCATION ERRORS", "FPR, TPR and selection rates depend on policy\n\nChanging thresholds leaves probabilities unchanged\n\nOur threshold frontier uses evaluation labels: illustrative, not validated", 6.85, 1.85, 5.75, 4.7, RED)
 footer(s, 8)
 
 # 9 — Fairness interpretability: where the gender gap comes from
 s = make_slide(prs); title(s, "Where does the gender gap come from?", "08 · Fairness interpretability (FPDP)")
 picture(s, FIG / "fpdp_gender.png", .35, 1.65, 8.4)
 panel(s, "CANDIDATE: GANG", "Never recorded for women; imputed as \"No\"\n\n"
-      f"Drop + re-estimate: equal-opportunity p 0.000 → {drop_gang.loc['logistic', 'p_equal_opportunity']:.3f} (logistic)\n\n"
-      f"AUC cost ≈ {gang_cost:.3f}, ~{gang_cost / xgb_minus_logit:.0f}× the XGB − logistic gap\n\n"
-      "Statistical parity still rejected", 9.0, 1.65, 3.95, 5.0, RED)
-textbox(s, "FPDP identifies candidate variables: association, not causation.", 1.0, 6.82, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 9)
+      f"Drop + re-estimate (logistic): FNR gap {base_gender.loc['logistic', 'fnr_gap']:+.3f} → {drop_gang.loc['logistic', 'fnr_gap']:+.3f}\n\n"
+      f"Women FNR {base_gender.loc['logistic', 'fnr_b']:.2f} → {drop_gang.loc['logistic', 'fnr_b']:.2f}; men {base_gender.loc['logistic', 'fnr_a']:.2f} → {drop_gang.loc['logistic', 'fnr_a']:.2f}\n\n"
+      f"AUC −{gang_cost:.3f}; {base_gender.loc['logistic', 'captured_events'] - drop_gang.loc['logistic', 'captured_events']:.0f} fewer re-arrests captured", 9.0, 1.65, 3.95, 5.0, RED)
+textbox(s, "Logistic FPDP is flat under a top-20% rule (a constant shifts every score equally), so it measures removing the feature, not a value.", 1.0, 6.82, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 9)
 
 # 10 — Does the mitigation survive out-of-sample?
 s = make_slide(prs); title(s, "Selecting and testing the fix on different data", "09 · Mitigation, validated")
@@ -202,13 +205,15 @@ s = make_slide(prs); title(s, "Which model should the client deploy?", "10 · Tr
 picture(s, FIG / "tradeoff_matrix.png", 2.2, 1.62, 8.9); footer(s, 11)
 
 # 12 — Recommendation
-s = make_slide(prs); title(s, "Pilot XGBoost; retain logistic as a transparent challenger", "11 · Recommendation")
-panel(s, "WHY XGBOOST", "Best calibrated (ECE 0.011)\n\n+12 events captured at 20% capacity\n\n"
-      f"AUC edge +{xgb_minus_logit:.4f}, interval excludes 0\n\nSHAP + surrogate available", .7, 1.8, 3.85, 4.65, TEAL)
-panel(s, "WHAT IT COSTS", "Wider gender FNR gap (−0.11 vs −0.10)\n\nLeast stable selected set (J 0.75)\n\n"
-      "Needs a second tool to explain\n\n~9× slower", 4.75, 1.8, 3.85, 4.65, RED)
-panel(s, "WHAT REVERSES IT", "Audit requires a directly readable model\n\nAgencies too small for SHAP infrastructure\n\n"
-      "Stability of the selected set is contractual\n\nThen: ship logistic", 8.8, 1.8, 3.85, 4.65, PURPLE)
+s = make_slide(prs); title(s, "Pilot logistic regression; run XGBoost as the challenger", "11 · Recommendation")
+panel(s, "WHY LOGISTIC", "Native, coefficient-level explanations\n\nLowest refit drift\n\n"
+      f"Smaller gender FNR gap ({fnr20.loc['logistic', 'Gender']:+.3f} vs {fnr20.loc['xgboost', 'Gender']:+.3f})\n\n"
+      "No significant race gap · fastest", .7, 1.8, 3.85, 4.65, TEAL)
+panel(s, "WHAT WE GIVE UP", f"XGBoost AUC edge +{xgb_minus_logit:.4f}\n\nBest calibration (ECE 0.011 vs 0.013)\n\n"
+      "+12 captured re-arrests per 1,561 offers\n\nDetectable, operationally small", 4.75, 1.8, 3.85, 4.65, RED)
+panel(s, "WHAT REVERSES IT", "The score is quoted numerically to supervisees\n\n"
+      "Capacity large enough that +12 offers matters\n\nA feature set that widens the margin\n\nThen: promote the challenger",
+      8.8, 1.8, 3.85, 4.65, PURPLE)
 textbox(s, "The gap the mitigation closes (0.08) dwarfs the gap between the two models (0.016): disparity is a feature-set property, not an estimator choice.",
         .8, 6.75, 11.7, .4, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 12)
 
@@ -235,7 +240,8 @@ textbox(s, "Subsamples of one Georgia cohort test sample-size sensitivity; they 
 
 # A2 — Economic performance
 s = make_slide(prs); title(s, "Model value is a scenario, stress-tested", "A2 · Economic performance")
-card(s, "SERVICE CAPACITY", "20%", .8, 1.9); card(s, "XGBOOST NET", f"${inc_econ['xgboost']/1e6:.2f}M", 3.75, 1.9, TEAL)
+card(s, "SERVICE CAPACITY", "20%", .8, 1.9)
+card(s, "LOGISTIC NET", f"${inc_econ['logistic']/1e6:.2f}M", 3.75, 1.9, TEAL, f"XGBoost ${inc_econ['xgboost']/1e6:.2f}M")
 card(s, "INCUMBENT NET", f"${inc_econ['incumbent']/1e6:.2f}M", 6.7, 1.9, RED); card(s, "RANDOM NET", f"${inc_econ.get('random', 1.46e6)/1e6:.2f}M", 9.65, 1.9, GREY)
 bullets(s, ["$5,000 support cost · $50,000 event cost · 20% assumed effectiveness — all editable in the app",
             "Models beat the incumbent at every capacity from 5% to 50% (sensitivity sweep)",
@@ -263,8 +269,10 @@ textbox(s, "Category-aware perturbation raised local fidelity from R² 0.25 to �
 # A6 — Stability
 s = make_slide(prs); title(s, "Structural stability across refits on resampled data", "A6 · Stability")
 picture(s, FIG / "structural_stability.png", .5, 1.75, 8.3)
-card(s, "SCORE DRIFT · TABICL", f"{stability.loc['tabicl','mean_abs_prob_diff']:.3f}", 9.35, 1.9, PURPLE)
-card(s, "TABICL JACCARD", f"{stability.loc['tabicl','top20_jaccard']:.1%}", 9.35, 3.5, TEAL)
+card(s, "SCORE DRIFT · LOGISTIC", f"{stability.loc['logistic','mean_abs_prob_diff']:.3f}", 9.35, 1.9, ORANGE,
+     f"lowest · XGB {stability.loc['xgboost','mean_abs_prob_diff']:.3f} · TabICL {stability.loc['tabicl','mean_abs_prob_diff']:.3f}")
+card(s, "TOP-20% JACCARD", f"{stability.top20_jaccard.min():.0%}–{stability.top20_jaccard.max():.0%}", 9.35, 3.5, TEAL,
+     f"logit {stability.loc['logistic','top20_jaccard']:.3f} · XGB {stability.loc['xgboost','top20_jaccard']:.3f} · TabICL {stability.loc['tabicl','top20_jaccard']:.3f}")
 textbox(s, "Jaccard is intersection / union, not the share of people switching. Refit sensitivity is not temporal validation.", 1.0, 6.75, 11, .4, 11, GREY, True, PP_ALIGN.CENTER)
 
 # A7 — Improvement journey

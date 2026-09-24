@@ -328,7 +328,7 @@ ever applies."""),
     code("display(A('fairness_inference.csv')); display(A('intersectional_audit.csv')); display(A('race_ab_test.csv'))"),
     md("### Equivalence tests and course test table\n\nFor a support programme the harm is a missed offer, so FNR (equal opportunity) and selection rate (statistical parity) are primary; FPR is secondary. A difference test that fails to reject does not show fairness: `equivalent_within_delta` is a TOST at a ±5-point tolerance (fixed in code before TOST ran, but after the gap point estimates had been seen — so it is a stated tolerance, not a pre-registered one), and an interval that is neither significant nor equivalent is inconclusive. The course table gives p-values at the top-20% rule; conditional statistical parity conditions on the historical supervision score."),
     code("inf = A('fairness_inference.csv'); display(inf[(inf.rule == 'top_20pct') & inf.metric.isin(['fnr', 'selection_rate', 'fpr'])]); display(A('fairness_tests.csv')); display(A('fairness_age_bands.csv')); display(A('fairness_frontier.csv').query(\"method == 'group_thresholds_equal_fnr'\"))"),
-    md("### Fairness interpretability (FPDP) and mitigation\n\nFPDP varies one input and re-evaluates the equal-opportunity test for logistic and XGBoost (TabICLv2 is excluded for compute cost). Candidate variables are diagnostic associations, not causes; removal and re-estimation report the AUC cost alongside the fairness change."),
+    md("### Fairness interpretability (FPDP) and mitigation\n\nFPDP varies one input and re-evaluates the equal-opportunity test for logistic and XGBoost (TabICLv2 is excluded for compute cost). Candidate variables are diagnostic associations, not causes. The mitigation table reports effect sizes next to the p-values: group FNRs and their gap, captured events, and the protected group's mean score against its base rate. Under the top-20% rule the logistic FPDP is flat: fixing a feature to any constant shifts every logit equally, so the selected set does not depend on the value, and Panel B is labelled value-independent."),
     code("display(A('fairness_candidates.csv')); display(A('fairness_mitigation.csv'))"),
     md("""### Fairness findings at the top-20% rule
 
@@ -339,17 +339,17 @@ top['status'] = ['equivalent' if e else 'different' if s else 'inconclusive'
                  for e, s in zip(top.equivalent_within_delta, top.significant)]
 display(top.pivot_table(index=['attribute', 'metric'], columns='model', values='status', aggfunc='first'))
 display(top.pivot_table(index=['attribute', 'metric'], columns='model', values='gap').round(3))"""),
-    md("""- **Race:** selection-rate, FNR and FPR gaps are equivalent within ±5 points for all three models. For XGBoost and TabICLv2 the selection and FPR gaps (about +2 points, Black minus White) have unadjusted bootstrap intervals that exclude zero, in the direction of more support offered to Black people. They do **not** survive Holm correction across the 54 course tests: after multiplicity control no race test is rejected for any model. Read them as small and unconfirmed, not as established disparities.
-- **Gender:** women who are later re-arrested miss support more often (FNR gap M − F about −0.10 to −0.12, different for all models). Every model over-predicts women (mean score about 0.52 vs observed 0.45; ECE about 0.07 vs about 0.01–0.02 for men), yet women are selected less at the top 20%. Sufficiency is also rejected for gender.
-- **Age:** the largest disparity. The FNR gap (under 33 minus 33+) is about −0.23 to −0.25; about 97% of re-arrested people aged 48+ are not selected, vs about 49% at 18–22. Age is a model input and a validated risk factor, but in a support programme that choice needs an explicit justification (need vs risk).
-- **FPDP (gender):** candidate variables are `Gang_Affiliated` and `Age_at_Release`. Gang affiliation is never recorded for women and is imputed as "No", so it acts as a gender-aligned measurement artefact (Cramér's V with gender = 1.0 on the raw field). Dropping it and re-estimating removes the equal-opportunity rejection (logistic p 0.000 → 0.995; XGBoost → 0.67) at about −0.014 AUC, roughly six times the XGBoost − logistic gap. Statistical parity is still rejected.
+    md("""- **Race:** selection-rate, FNR and FPR gaps are equivalent within ±5 points for all three models; the selection-rate ratio is 0.87–0.93. The ±5-point tolerance is absolute, so on a 20% selection rate it alone would admit a ratio near 0.78; the ratio is the stricter check. For XGBoost and TabICLv2 the selection and FPR gaps (about +2 points, Black minus White) have unadjusted bootstrap intervals that exclude zero, in the direction of more support offered to Black people — but they do **not** survive Holm correction across the 54 course tests: after multiplicity control no race test is rejected for any model. Read them as small and unconfirmed, not as established disparities. Equivalence also concerns allocation errors, not predictive quality: within-group AUC is lower for Black people (0.718–0.721 vs 0.746–0.748).
+- **Gender:** women who are later re-arrested miss support more often (FNR gap M − F about −0.10 to −0.12, different for all models). Every model over-predicts women (mean score about 0.52 vs observed 0.45; ECE about 0.07 vs about 0.01–0.02 for men), yet women are selected about half as often at the top 20%. Sufficiency is also rejected for gender, but the two findings point in opposite directions: in a support programme over-prediction favours women, and recalibrating by gender would widen the FNR gap. The harm for this use is the FNR gap.
+- **Age:** the largest disparity. The FNR gap (under 33 minus 33+) is about −0.23 to −0.25; about 97% of re-arrested people aged 48+ are not selected, vs about 49% at 18–22. Age is a model input and a validated risk factor, but in a support programme that choice needs an explicit justification (need vs risk). The FPDP finds no candidate variable for the age gap: with `Age_at_Release` fixed for everyone the test still rejects, because criminal-history inputs and the Georgia score carry age. Dropping age would not remove the gap.
+- **FPDP (gender):** candidate variables are `Gang_Affiliated` and `Age_at_Release`. Gang affiliation is never recorded for women and is imputed as "No", so it acts as a gender-aligned measurement artefact (Cramér's V with gender = 1.0 on the raw field). Dropping it and re-estimating shrinks the gender FNR gap from −0.096 to 0.000 (logistic) and from −0.112 to −0.010 (XGBoost). Women's FNR falls about 8 points while men's rises about 2 (partly levelling down); captured events fall by 27–41, AUC by about 0.014 (five to six times the XGBoost − logistic gap), and women's over-prediction worsens. Statistical parity is still rejected.
 - **Caveats:** the Panel A/B numbers above select the candidate *and* measure the improvement on the same evaluation labels, so on their own they show the mitigation can be fitted, not that it generalises. The nested check below separates the two. A p-value above 0.05 after mitigation is still not evidence of fairness; equivalence would be. Group-specific thresholds remain an analytic device only."""),
     md("""### Does the mitigation survive out-of-sample?
 
-The headline result (drop `Gang_Affiliated`, equal-opportunity p from 0.000 to ≈0.99)
-was produced by choosing the variable and scoring the improvement on the same cohort.
-That is in-sample evidence. Following the scikit-learn guidance on separating selection
-from evaluation, the check below runs entirely inside the **training** partition:
+The Panel A/B result above was produced by choosing the variable and scoring the
+improvement on the same cohort. That is in-sample evidence. Following the scikit-learn
+guidance on separating selection from evaluation, the check below runs entirely inside
+the **training** partition:
 
     for each outer fold
         run the course FPDP candidate search on the outer-training part only
@@ -370,13 +370,13 @@ if nested.exists():
 else:
     print('Run scripts/mitigation_nested.py to generate the out-of-fold evidence.')
 """),
-    md("""The procedure selects `Gang_Affiliated` in every fold without ever seeing the
-evaluation labels, so the candidate is a property of the training data rather than an
-artefact of the cohort we audit. Out of fold the gender FNR gap shrinks substantially
-but not to zero, and the equal-opportunity p-value lands far below the in-sample 0.99 —
-the honest estimate of what this mitigation buys, at roughly one AUC point. Some folds
-still reject. Report the out-of-fold numbers; quote the in-sample ones only as the
-upper bound they are."""),
+    md("""The procedure selects `Gang_Affiliated` in every fold for both models without ever
+seeing the evaluation labels, so the candidate is a property of the training data rather
+than an artefact of the cohort we audit. Out of fold the gender FNR gap shrinks by about
+70% — from −0.118 to −0.035 (logistic) and −0.127 to −0.034 (XGBoost) — rather than to
+zero, and the mean equal-opportunity p-value reaches 0.32 and 0.27 against the in-sample
+0.99, at roughly 0.01 AUC. Two of five folds still reject. Report the out-of-fold
+numbers; quote the in-sample ones only as the upper bound they are."""),
 ]
 for name in ["performance_calibration", "incumbent_benchmark", "learning_curve", "shap_individual",
              "pdp_ice", "structural_stability", "fairness_support_access", "fairness_operating_point", "fairness_frontier", "fairness_dependence",
@@ -385,51 +385,46 @@ for name in ["performance_calibration", "incumbent_benchmark", "learning_curve",
 nb.cells.extend([
     md("""## Recommendation
 
-**Pilot XGBoost prospectively, with logistic regression as a transparent challenger
-running in parallel on the same cohort.**
+**Pilot L1 logistic regression prospectively, with XGBoost as the challenger running in
+parallel on the same cohort.**
 
-This is a decision across four dimensions, not an accuracy ranking, so the reasoning
-has to survive the obvious challenge — *logistic is a serious alternative, why accept
-the extra complexity?*
+This is a decision across four dimensions, not an accuracy ranking, so it is stated with
+the counter-case attached.
 
-**What XGBoost buys.** It is the best-calibrated of the three (ECE 0.011 vs 0.013 and
-0.020), which matters because the score is spoken about to a supervisee and used to
-rank under a fixed capacity. It captures 1,297 of the re-arrested cohort at 20%
-capacity against logistic's 1,285, and the paired bootstrap puts the AUC difference at
-+0.0025 with an interval excluding zero — small, but real rather than noise.
+**What the challenger buys.** XGBoost's AUC edge is +0.0025 with a paired 95% interval of
+0.0006 to 0.0044 — detectable, not noise. It is the best calibrated of the three
+(ECE 0.011 against 0.013 and 0.020) and captures 1,297 re-arrested people at 20% capacity
+against logistic's 1,285: twelve more out of 1,561 offers.
 
-**What it costs, stated plainly.** Its gender FNR gap is wider (−0.112 vs −0.096), its
-selected set is the least stable across refits (Jaccard 0.747 vs 0.772), it needs SHAP
-plus a depth-3 surrogate of moderate fidelity (R² = 0.61) where logistic is read
-directly, and it runs roughly nine times slower. Its race selection and FPR gaps have
-unadjusted intervals excluding zero where logistic's do not — though no race test
-survives Holm correction for either model, so this separates them less than it appears.
+**Why logistic is still the recommendation.** Everything else points the other way.
+Coefficient-level explanations with no second tool and no surrogate fidelity loss — the
+depth-3 surrogate of XGBoost reaches only R² = 0.61. The smallest refit drift
+(mean |Δp| 0.032 against 0.035) at comparable top-20% overlap. The smallest gender FNR gap
+(−0.096 against −0.112). No race test significant even before Holm correction, where
+XGBoost has two. And roughly a ninth of the runtime. For a product whose value proposition
+is auditability, trading all of that for 0.0025 AUC and twelve offers is the wrong trade.
 
-**Why the trade is defensible.** The fairness gap between the two is smaller than the
-gap that the FPDP mitigation can close: dropping `Gang_Affiliated` moves the gender FNR
-gap by roughly 0.08 out of fold, against the 0.016 that separates XGBoost from logistic.
-The disparity is a property of the feature set, not of the estimator choice, so paying
-in calibration and captured events to buy 0.016 of gap would be solving the wrong
-problem. Calibration, by contrast, cannot be recovered by a later intervention.
+**Why the accuracy gap is not the decisive number.** The disparity the FPDP mitigation
+closes is far larger than the disparity separating the two models: dropping
+`Gang_Affiliated` moves the gender FNR gap by about 0.08 out of fold, five times the 0.016
+between XGBoost and logistic. The gap is a property of the feature set, not of the
+estimator, so neither model choice resolves it and neither should be justified by it.
 
-**What would reverse this.** Logistic is the right answer if the client weights any of
-these above calibration: a regulator or procurement process that requires a model
-readable without a second explanation tool; deployment at agencies too small to support
-SHAP infrastructure; an auditor who treats *any* unadjusted race interval excluding zero
-as disqualifying; or a stability requirement on who appears in the selected set between
-refits. Under the vendor framing used here — many differently-sized agencies, audit
-exposure, honest probabilities quoted to supervisees — those are live possibilities, and
-the challenger arrangement is what makes the choice reversible after the pilot.
+**What would reverse this.** XGBoost becomes correct if the client quotes the probability
+numerically to supervisees rather than using it only to rank, in which case calibration
+dominates; if capacity is large enough that twelve extra captured events per 1,561 offers
+is material at their scale; or if a future feature set widens the margin. The challenger
+arrangement is what keeps that reversible after the pilot.
 
 **Preconditions either way.** Independent prospective validation, evidence that the
-support programme actually benefits recipients, a corrections and appeals route,
-subgroup monitoring after deployment, and no adverse use. The learning-curve result is
-evidence about sample size in *this* cohort and does not establish suitability for
-smaller agencies elsewhere."""),
+support programme actually benefits recipients, a corrections and appeals route, subgroup
+monitoring after deployment, and no adverse use. The learning-curve result is evidence
+about sample size in *this* cohort and does not establish suitability for smaller agencies
+elsewhere."""),
     code("display(json.loads((ROOT/'artifacts/validation_manifest.json').read_text()))"),
     md("## End-to-end audit\n\nA fresh three-model run exactly reproduced the published probabilities. See reports/end_to_end_review.md for the data boundaries, actual GPU checks and CPU/CUDA experiment. Holm correction of 54 course difference tests reduces rejections from 41 to 32; no race test survives, while gender and age equal-opportunity differences remain. This does not adjust TOST or mitigation selection."),
     code("adjusted = ROOT / 'artifacts/end_to_end/fairness_tests_holm.csv'\nif adjusted.exists(): display(pd.read_csv(adjusted))"),
-    md("## Submission checklist\n\n- Binary target and client decision defined\n- White-box, machine-learning and tabular-foundation model compared\n- Statistical and economic performance assessed\n- Local/global interpretability, structural stability and subgroup fairness analyzed\n- Trustworthy-AI trade-offs and an XGBoost shadow-pilot recommendation stated\n- Executed outputs included; no code-cell errors\n- Interactive application in `app.py`; presentation in `reports/ISAF_Recidivism_Presentation.pptx`\n\nReferences and requirement coverage: `reports/research_review.md`. Detailed methodological limits: `reports/technical_report.md`. End-to-end reproduction evidence: `reports/end_to_end_review.md`."),
+    md("## Submission checklist\n\n- Binary target and client decision defined\n- White-box, machine-learning and tabular-foundation model compared\n- Statistical and economic performance assessed\n- Local/global interpretability, structural stability and subgroup fairness analyzed\n- Trustworthy-AI trade-offs and a logistic-regression shadow-pilot recommendation stated\n- Executed outputs included; no code-cell errors\n- Interactive application in `app.py`; presentation in `reports/ISAF_Recidivism_Presentation.pptx`\n\nReferences and requirement coverage: `reports/research_review.md`. Detailed methodological limits: `reports/technical_report.md`. End-to-end reproduction evidence: `reports/end_to_end_review.md`."),
 ])
 NotebookClient(nb, timeout=1200, kernel_name="python3", resources={"metadata": {"path": str(ROOT)}}).execute()
 for out in OUTS:

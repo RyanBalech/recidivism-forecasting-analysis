@@ -10,7 +10,15 @@ Which features *generate* the unfairness found by fairness_audit.py, and what do
    with the outcome Y. High X/D with low X/Y is a proxy that buys little accuracy. This is also
    the proxy-variable analysis (are gang affiliation or prior arrests proxies for race?).
 3. Mitigation (p261-262): for each candidate, Panel A drops it and re-estimates the model; Panel B
-   keeps the model and neutralizes the feature at its best FPDP value. Report fairness p-values and AUC.
+   keeps the model and neutralizes the feature at its best FPDP value. Report fairness p-values, AUC,
+   and the effect sizes the p-values stand in for: group FNRs and their gap, captured events, and the
+   protected group's mean score against its base rate (calibration cost).
+
+Rank rule caveat. The course FPDP uses a fixed probability threshold. Under our top-20% capacity
+rule, fixing a feature to a constant in an *additive* model (logistic) shifts every logit by the
+same amount, so the ranking and the selected set do not depend on the value chosen: the logistic
+FPDP is flat and amounts to removing that feature's variation. Panel B then has no "best" value;
+it is labelled as value-independent. XGBoost varies only through interactions.
 
 Attributes: Gender and Age, where the fairness null is rejected for every model. Race is included
 for the X/D scatter (proxy question) and for FPDP only where a race test rejects. TabICL is left out
@@ -60,6 +68,24 @@ def fairness_p(y: np.ndarray, sel: np.ndarray, d: np.ndarray) -> dict[str, float
     pos = y == 1
     return {"p_equal_opportunity": _chi2_p(pd.crosstab(d[pos], sel[pos]).to_numpy())[1],
             "p_statistical_parity": _chi2_p(pd.crosstab(d, sel).to_numpy())[1]}
+
+
+def outcomes(y: np.ndarray, p: np.ndarray, d: np.ndarray) -> dict[str, float]:
+    """AUC, course p-values, and the effect sizes behind them at the top-20% rule (d = protected group)."""
+    sel, pos = top_k(p), y == 1
+    fnr_a, fnr_b = 1 - sel[pos & ~d].mean(), 1 - sel[pos & d].mean()
+    return {"auc": roc_auc_score(y, p), **fairness_p(y, sel, d),
+            "fnr_a": fnr_a, "fnr_b": fnr_b, "fnr_gap": fnr_a - fnr_b,
+            "selection_rate_b": sel[d].mean(), "captured_events": int(y[sel].sum()),
+            "mean_score_b": p[d].mean(), "base_rate_b": y[d].mean()}
+
+
+def neutralized(X: pd.DataFrame, feat: str, value: str) -> pd.DataFrame:
+    """Copy of X with feature `feat` set to the grid value whose string form is `value`."""
+    c = next(v for v in grid(X[feat]) if str(v) == value)
+    Xc = X.copy()
+    Xc[feat] = pd.Series([c] * len(X), index=X.index).astype(X[feat].dtype)
+    return Xc
 
 
 def grid(values: pd.Series) -> list:
@@ -120,7 +146,7 @@ def mitigation(models: dict, split, y: np.ndarray, groups: dict[str, np.ndarray]
         p = model.predict_proba(split.X_test)[:, 1]
         for attr, d in groups.items():
             rows.append({"model": name, "attribute": attr, "panel": "baseline", "feature": "(none)",
-                         "value": "", "auc": roc_auc_score(y, p), **fairness_p(y, top_k(p), d)})
+                         "value": "", **outcomes(y, p, d)})
         for attr in groups:
             cands = candidates[(candidates.model == name) & (candidates.attribute == attr)]
             for feat in cands.feature:
@@ -131,14 +157,16 @@ def mitigation(models: dict, split, y: np.ndarray, groups: dict[str, np.ndarray]
                 refit = builder(split.X_train[keep]).fit(split.X_train[keep], split.y_train)
                 pa = refit.predict_proba(split.X_test[keep])[:, 1]
                 rows.append({"model": name, "attribute": attr, "panel": "A: drop + re-estimate", "feature": feat,
-                             "value": "", "auc": roc_auc_score(y, pa), **fairness_p(y, top_k(pa), d)})
-                # Panel B: best neutral value from the FPDP, model unchanged.
-                best = fp[(fp.model == name) & (fp.attribute == attr) & (fp.feature == feat)] \
-                    .sort_values("p_equal_opportunity", ascending=False).iloc[0]
+                             "value": "", **outcomes(y, pa, d)})
+                # Panel B: best neutral value from the FPDP, model unchanged. If every value gives the
+                # same result (additive model under the rank rule), no value is "best".
+                curve = fp[(fp.model == name) & (fp.attribute == attr) & (fp.feature == feat)]
+                best = curve.sort_values("p_equal_opportunity", ascending=False).iloc[0]
+                invariant = np.ptp(curve.p_equal_opportunity) < 1e-12 and np.ptp(curve.auc) < 1e-12
+                pb = model.predict_proba(neutralized(split.X_test, feat, best.value))[:, 1]
                 rows.append({"model": name, "attribute": attr, "panel": "B: neutralize, no re-estimation",
-                             "feature": feat, "value": best.value, "auc": best.auc,
-                             "p_equal_opportunity": best.p_equal_opportunity,
-                             "p_statistical_parity": best.p_statistical_parity})
+                             "feature": feat, "value": "any (ranking unchanged)" if invariant else best.value,
+                             **outcomes(y, pb, d)})
     return pd.DataFrame(rows)
 
 

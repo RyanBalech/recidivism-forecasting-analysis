@@ -43,6 +43,8 @@ ATTRIBUTES = {"Race": ("BLACK", "WHITE"), "Gender": ("M", "F"), "Age": ("Under 3
 CAPACITY = 0.20
 BOOT = 500
 # TOST tolerance: a gap within +/- 5 percentage points is treated as practically equivalent.
+# It is absolute: on a ~20% selection rate it still admits a group ratio near 0.78 (below the
+# four-fifths rule), so selection-rate conclusions must also be read against rate_a / rate_b.
 DELTA = 0.05
 ALPHA = 0.05
 AGE_ORDER = ["18-22", "23-27", "28-32", "33-37", "38-42", "43-47", "48 or older"]
@@ -109,8 +111,11 @@ def audit(pred: pd.DataFrame) -> pd.DataFrame:
                 for metric in ra:
                     lo, hi = draws[metric].quantile([0.025, 0.975])
                     p_tost = tost(ra[metric], na[metric], rb[metric], nb[metric])
+                    # Group rates are kept so relative scale (e.g. selection-rate ratio) is traceable:
+                    # the absolute ±DELTA tolerance means very different things at 0.2 and at 0.7.
                     rows.append({"model": model, "attribute": attr, "comparison": f"{a} minus {b}",
-                                 "rule": rule, "metric": metric, "gap": ra[metric] - rb[metric],
+                                 "rule": rule, "metric": metric, "rate_a": ra[metric], "rate_b": rb[metric],
+                                 "gap": ra[metric] - rb[metric],
                                  "ci_low": lo, "ci_high": hi, "significant": not (lo <= 0 <= hi),
                                  "n_a": na[metric], "n_b": nb[metric],
                                  "tost_p": p_tost, "equivalent_within_delta": p_tost < ALPHA})

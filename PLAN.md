@@ -15,7 +15,7 @@ mitigation validation, recommendation defence, wording and deck length.
 | 2 | LIME fidelity | ✅ `lime_local_fidelity.py`: category-aware perturbation on raw features, 3 fixed cases × 3 seeds, fidelity reported per explanation. R² 0.25 → 0.41–0.43; 63/63 conditions sign-stable. Old one-hot block removed from `interpretability.py` |
 | 3 | Missing course comparisons | ✅ `logistic_effects.py` (average marginal effects + categorical probability contrasts, slides 33–38); `explanation_agreement.py` (SHAP vs PI vs XPER rank agreement + disagreement discussion, slides 175–181). XPER reconstruction residual stays visible |
 | 4 | Mitigation validated out-of-sample | ✅ `mitigation_nested.py`: FPDP candidate re-selected inside each of 5 training folds, assessed on held-out folds. `Gang_Affiliated` selected 5/5 for both models; gender FNR gap −0.118 → −0.035 (logistic) and −0.127 → −0.034 (XGBoost) at ≈0.01 AUC. Evaluation cohort untouched |
-| 5 | Recommendation withstands challenge | ✅ report, notebook and deck slide 12 now state what XGBoost buys, what it costs, why the trade is defensible (mitigation closes 0.08 vs the 0.016 between models) and the four conditions that would make logistic correct |
+| 5 | Recommendation withstands challenge | ✅ merged with the team's P0.3 decision (**logistic** in the pilot, XGBoost as challenger). Report, notebook and deck slide 12 state what the challenger buys, why logistic still wins, why the 0.0025 AUC gap is not decisive (the mitigation closes 0.08, five times the 0.016 between models) and the three conditions that would promote XGBoost |
 | 6 | Wording inconsistencies | ✅ "pre-set" tolerance → stated-but-not-pre-registered, with the ordering made explicit; race "real but small" → reconciled with Holm (no race test survives correction) |
 | 7 | Deck built on three findings | ✅ 13 core slides + marked appendix (7 slides: learning curve, economics, interpretability, explanation disagreement, LIME fidelity, stability, process). Talk sequence in presentation notes rewritten with per-slide timings |
 
@@ -29,8 +29,7 @@ but not re-executed, because its PDP/ICE pass fits TabICLv2. `artifacts/interpre
 was synced by hand to what the changed code now writes — the next full `reproduce.py` regenerates
 it properly. Nothing else in `artifacts/` was hand-edited.
 
-**Still open:** P0.3 recommendation sign-off by the team (documents currently all say XGBoost, and
-the report now carries the counter-case); visual check of the rebuilt deck; PDF export of the deck;
+**Still open:** visual check of the rebuilt deck; PDF export of the deck;
 Q&A rehearsal; readable labels in `surrogate_tree.txt` and raw CSVs; package versions in
 `run_manifest.json`.
 
@@ -174,9 +173,8 @@ below, not that historical section.
   everyone" — an in-sample artefact, not a rule.
 
 **Inconsistencies — status after the documentation pass (24 Sep):**
-- 🟡 Recommendation: this plan says OPEN, but the report, deck (slide 16), notebook and README still
-  say "pilot XGBoost, logistic as challenger". Left unchanged pending the team decision (P0.3);
-  the Q&A notes now flag it.
+- ✅ Recommendation decided (24 Sep): **logistic in the shadow pilot, XGBoost as challenger**.
+  Report, deck (slides 5, 8, 16), notebook, README, Q&A notes and app now say the same thing.
 - ✅ Deck slide 11 now headlines gender FNR gap, race TOST equivalence and age FNR gap.
 - ✅ Deck slide 6: the ECE "winner" card is replaced by the paired XGBoost − logistic AUC gap.
 - ✅ New deck slide 13 (FPDP: gang affiliation as the gender-gap candidate); later slides renumbered.
@@ -200,7 +198,7 @@ Status: ✅ done · 🟡 partial · ❌ not started · ⚠️ code done, outputs
    fixed in code before TOST ran but after the gap point estimates had been seen, the analytic-vs-
    bootstrap variance caveat, and the equivalent / different / inconclusive classification (the
    notebook now prints it). Optional [CPU]: switch TOST to the bootstrap 90% CI rule for consistency.
-3. **[TEXT] Team decision on the recommendation, derived from the 3 × 4 matrix,** then make
+3. ✅ **[TEXT] Team decision on the recommendation (decided 24 Sep: logistic, XGBoost challenger), derived from the 3 × 4 matrix,** then make
    PLAN, report, deck and notebook say the same thing. Current evidence to weigh: XGBoost beats
    logistic by only +0.0025 AUC, has a larger gender FNR gap (−0.112 vs −0.096), the lowest
    top-20% overlap (0.755 vs 0.772), and significant (small) race selection/FPR gaps where logistic
@@ -218,9 +216,10 @@ Status: ✅ done · 🟡 partial · ❌ not started · ⚠️ code done, outputs
    Current evidence: XGBoost Panel B neutralizes gang to "Yes" for everyone, and dropping gang still
    leaves statistical parity rejected — both are already disclosed in the report.
 6. **[CPU] Gang_Affiliated as a gender measurement problem.** It is missing for every woman and
-   mode-imputed as "No", which pushes women's scores down. Make this the main FPDP story. Compare:
-   drop the feature, or add an explicit "not recorded" level, each with AUC, calibration, captured
-   events and gender FNR gap.
+   mode-imputed as "No", which pushes women's scores down. Make this the main FPDP story. The
+   mitigation table now reports AUC, group FNRs and gap, captured events and women's mean score for
+   dropping the feature. Do **not** add an explicit "not recorded" level: it is identical to gender
+   (Cramér's V = 1.0), i.e. the leak we removed.
 7. ❌ **[CPU] XAI disagreement audit.** SHAP vs permutation importance vs XPER (vs LIME where
    meaningful): Spearman rank correlation, top-5 overlap, sign agreement. Example already visible:
    SHAP ranks gang affiliation #2, XPER (logistic) puts it after misdemeanor arrests. Repeat XPER
@@ -230,8 +229,7 @@ Status: ✅ done · 🟡 partial · ❌ not started · ⚠️ code done, outputs
    marginal effects, bootstrap intervals, and the share of refits in which L1 keeps each
    coefficient non-zero. Note that L1 invalidates textbook standard errors; no causal wording.
 9. ❌ **[CPU for logistic/XGBoost, GPU for TabICL] Stability, aligned with the course (§7):**
-   - use the **same** bootstrap resamples for all three models (now one shared rng draws different
-     resamples per model, so cross-model comparison is not paired);
+   - ✅ same bootstrap resamples for all three models (done in 1abf221; `stability_protocol.json`);
    - separate sampling from estimator randomness: data-only refits with a fixed seed, and seed-only
      refits on fixed data (XGBoost subsampling; TabICL ensemble seed);
    - two **disjoint halves** of the training set, next to the bootstrap refits;
@@ -272,7 +270,7 @@ Status: ✅ done · 🟡 partial · ❌ not started · ⚠️ code done, outputs
 | 4. Stability: course distances, disjoint halves, TabICL seed-only | ❌ → P1.9 |
 | 5. Paired model tests artifact | ✅ `paired_comparisons.csv` |
 | 6. Full re-run + app update | ✅ GPU run + CPU fairness re-run on the same predictions; app now finds all fairness figures |
-| 7. Recommendation decision | ⚠️ documents already say XGBoost while this plan says OPEN → P0.3 |
+| 7. Recommendation decision | ✅ logistic, XGBoost challenger; all deliverables aligned |
 | 8. Q&A rehearsal | ❌ → P2.16 |
 
 ## Previous to-do order (validated 23 Sep, kept for history)
@@ -443,7 +441,7 @@ for all three, XPER. Readable feature labels everywhere (`config.pretty`; no mor
 
 ## Recommendation to the client (trustworthy-AI wording)
 
-**[OPEN — see P0.3; report/deck/notebook currently already say XGBoost]** The current deck says "deploy XGBoost" because it
+**[DECIDED 24 Sep: logistic in production, XGBoost as challenger — first option below.]** The earlier deck said "deploy XGBoost" because it
 "calibrates best" and has "the smallest gender FPR gap". Neither holds up: ECE differences are not
 significant, and at top-20% logistic has *no* significant race gap while XGBoost's is borderline
 significant. The reviewer's #8: in a justice setting with an appeal process, transparency and
