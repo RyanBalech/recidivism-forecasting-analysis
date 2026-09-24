@@ -383,6 +383,90 @@ for name in ["performance_calibration", "incumbent_benchmark", "learning_curve",
              "tradeoff_matrix"]:
     nb.cells.append(code(f"display(Image(filename=str(ROOT / 'artifacts/figures/{name}.png'), width=1000))"))
 nb.cells.extend([
+    md("""### How much of the protected attribute survives exclusion?
+
+Every version of this project states that removing race, gender and geography takes
+away the direct input but not the proxies. That is asserted throughout and measured
+nowhere. The test is direct: try to predict the protected attribute **from the model's
+own feature set**. The AUC of that attempt is the amount of protected information still
+available to anything trained on these columns — 0.50 means genuinely unavailable, 1.00
+means exclusion is cosmetic.
+
+Three feature sets are compared, so the size of the channel the team closed is visible
+rather than argued: the shipped 29 fields, the same fields plus explicit missing-value
+indicators, and the shipped set minus `Gang_Affiliated` (the FPDP mitigation)."""),
+    code("""display(A('proxy_recovery.csv').round(4))
+display(Image(filename=str(ROOT / 'artifacts/figures/proxy_recovery.png'), width=1300))
+"""),
+    md("""Three findings, in order of importance.
+
+**The leak was total.** With missingness indicators, gender is recovered at
+**AUC = 1.0000**. `Gang_Affiliated` is missing for every woman and no man, so any model
+that encodes NaN as a category — which is exactly what TabICLv2 does — had gender
+available in full. That is the defect the mode-fill closed, now with a number on it
+rather than an argument.
+
+**Exclusion is not removal.** Even in the shipped feature set, gender is recovered at
+AUC 0.776 and race at 0.708: 55% and 41% of the way from chance to perfect. The models
+never see these attributes, but the information is there for the taking. This is the
+measured version of the caveat attached to the race A/B test — the twins score
+identically, and the group gaps persist anyway.
+
+**The mitigation helps less than the headline suggests.** Dropping gang affiliation
+moves gender recovery only from 0.776 to 0.747. It removes the strongest single proxy
+and leaves most of the channel intact, which is consistent with the nested result that
+the gap narrows without closing.
+
+The named proxies are worth reading aloud: for gender, gun charges, mental-health and
+substance-abuse conditions, and violent arrests; for race, mental-health and
+substance-abuse conditions, age at release, violent arrests and dependents. None of them
+can simply be dropped — they are the substance of the risk assessment, not incidental
+fields. That is the honest ceiling on proxy removal as a mitigation strategy."""),
+    md("""### Stability at the level of one person
+
+Everything in the stability section so far is a cohort summary: mean |Δp| between
+refits, Jaccard of the selected sets. Those cannot answer the question a caseworker
+asks, which is about an individual:
+
+> *Would this person still be offered support if we had drawn a slightly different
+> training sample?*
+
+The same eight bootstrap resamples are reused here (identical seed and draw order,
+so the protocol hashes match), but the per-person predictions are kept instead of
+collapsed. For each person that gives a spread of scores and a count of how many of
+the eight refits would have selected them under the deployed top-20% rule.
+
+Someone selected by 8/8 refits is a decision the product can stand behind. Someone
+selected by 4/8 is a coin flip that happened to land one way in the published run."""),
+    code("""stab = A('individual_stability.csv')
+display(A('individual_stability_summary.csv').round(4))
+display(Image(filename=str(ROOT / 'artifacts/figures/individual_stability.png'), width=1300))
+"""),
+    md("""About one person in seven has a **contested** decision, and — the number that
+matters — roughly a third of the people the published run actually selects are
+borderline rather than clearly above the line.
+
+A natural response is selective prediction: abstain where the refits disagree and
+send those cases to human review. The table below asks what that policy costs in
+coverage and what it buys."""),
+    code("""curve = A('abstention_curve.csv')
+display(curve[['model','max_contested_votes','coverage','precision_at_capacity',
+               'fnr_gap_gender','fnr_gap_race','abstained_share_F']].round(4))
+"""),
+    md("""**It buys reliability and costs equity, and that is the finding.** Keeping only
+unanimous decisions raises precision at capacity from 0.822 to 0.846 (logistic) while
+deciding 87% of the cohort. But the gender FNR gap *widens*, from −0.090 to −0.119.
+
+The mechanism is visible in the data rather than assumed. Contested decisions are
+spread evenly across gender (11.9% of women, 12.9% of men). The asymmetry is among
+the people who are **selected**: 47% of the 118 selected women sit at the margin
+against 30% of the 1,490 selected men. Abstaining therefore removes a larger share of
+the few women who were being offered support, and the gap grows.
+
+This is a second trade-off of the same family as the impossibility result: a standard
+trustworthiness intervention — refuse to decide when uncertain — is not fairness-neutral.
+If the client adopts abstention, the referred cases need a review process that is itself
+audited, or the policy simply moves the disparity out of the model and into a queue."""),
     md("""### Testing the comparison instead of asserting it
 
 Three claims about the model comparison are easy to carry as point estimates and hard to

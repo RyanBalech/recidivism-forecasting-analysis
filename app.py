@@ -35,6 +35,10 @@ def load_results():
         "fairness_impossibility", "fairness_frontier", "incumbent_discrimination", "incumbent_economics",
         "race_ab_test", "stability_summary", "learning_curve", "shap_importance", "permutation_importance",
         "validation_baselines", "paired_comparisons", "intersectional_audit",
+        "individual_stability", "individual_stability_summary", "abstention_curve",
+        "proxy_recovery", "proxy_features", "calibration_tests", "calibration_paired_tests",
+        "selected_set_overlap", "lime_fidelity", "explanation_agreement",
+        "logistic_marginal_effects", "probability_contrasts", "mitigation_nested_summary",
     ]}
 
 
@@ -134,6 +138,43 @@ with tab_ind:
                      title=f"SHAP contributions (log-odds), {LABELS[explain_model]}")
         st.plotly_chart(fig, width="stretch")
 
+    st.markdown("**How robust is this decision?**")
+    stability_rows = data["individual_stability"]
+    if stability_rows is None:
+        st.caption("Run `python scripts/individual_stability.py` to add per-person decision stability.")
+    else:
+        record_id = int(split.audit_test.iloc[source_row].ID)
+        person_rows = stability_rows[stability_rows.ID == record_id]
+        if person_rows.empty:
+            st.caption("No refit record for this person.")
+        else:
+            st.caption(
+                "The same person scored by models refitted on eight bootstrap resamples of the training "
+                "data. A decision selected by 8/8 refits is robust; 4/8 is a coin flip that happened to "
+                "land one way in the published run. These figures describe the original record, not your edits."
+            )
+            cols = st.columns(len(person_rows))
+            for col, (_, r) in zip(cols, person_rows.iterrows()):
+                votes = int(r.times_selected); total = int(r.n_refits)
+                verdict = ("Robust: prioritised in every refit" if votes == total
+                           else "Robust: never prioritised" if votes == 0
+                           else f"Contested: prioritised in {votes} of {total}")
+                col.metric(LABELS.get(r.model, r.model),
+                           f"{r.min_probability:.1%}–{r.max_probability:.1%}",
+                           verdict, delta_color="off")
+            if (person_rows.times_selected.between(1, person_rows.n_refits - 1)).any():
+                st.warning(
+                    "This decision flips between refits. In a deployment with a review route, this is the "
+                    "kind of case to refer to a human rather than to act on automatically.", icon="⚠️")
+
+    summary = data["individual_stability_summary"]
+    if summary is not None:
+        st.caption(
+            f"Across the cohort, {1 - float(summary.share_decision_unanimous.iloc[0]):.0%} of decisions are "
+            f"contested, and about {float(summary.contested_share_of_selected.iloc[0]):.0%} of the people "
+            "actually prioritised sit at that margin."
+        )
+
     st.markdown("**Race twin test**")
     st.caption("Race, gender and residence geography are not model inputs, so two people identical except for race "
                "always receive the same score (difference = 0 by construction). The A/B test in the fairness tab shows "
@@ -170,6 +211,35 @@ with tab_cmp:
 with tab_fair:
     st.subheader("Fairness audit by race, gender, and age")
     st.write("For beneficial support, missed access matters: inspect FNR (1 − TPR) and selection rates first. Arrest is only a proxy for need; these errors do not identify treatment benefit.")
+
+    recovery = data["proxy_recovery"]
+    if recovery is not None:
+        with st.expander("Does excluding race and gender actually remove them?", expanded=False):
+            st.write(
+                "Predict the protected attribute **from the model's own feature set**. The AUC is how much "
+                "of that attribute is still available to anything trained on these columns: 0.50 means "
+                "genuinely unavailable, 1.00 means exclusion is cosmetic."
+            )
+            st.dataframe(recovery.round(4), width="stretch", hide_index=True)
+            figure("proxy_recovery.png")
+            def auc_for(attribute, feature_set):
+                match = recovery[(recovery.attribute == attribute)
+                                 & (recovery.feature_set == feature_set)]
+                return float(match.recovery_auc.iloc[0]) if not match.empty else None
+
+            leaked = auc_for("Gender", "with_missingness")
+            gender_shipped = auc_for("Gender", "shipped")
+            race_shipped = auc_for("Race", "shipped")
+            if None not in (leaked, gender_shipped, race_shipped):
+                st.warning(
+                    f"With missing-value indicators, gender is recovered at AUC {leaked:.4f} — perfectly. "
+                    f"`Gang_Affiliated` is missing for every woman and no man, so any model encoding NaN as "
+                    f"a category had gender in full. Mode-filling closes that channel. In the shipped "
+                    f"feature set gender is still recovered at {gender_shipped:.3f} and race at "
+                    f"{race_shipped:.3f}: exclusion is not removal.", icon="⚠️")
+            if data["proxy_features"] is not None:
+                st.caption("Strongest proxies, by permutation importance of the attacker:")
+                st.dataframe(data["proxy_features"].round(4), width="stretch", hide_index=True)
     figure("fairness_support_access.png", "FNR and selection-rate gaps at the proposed capacity rule and at 0.5; signed group differences, dotted lines = ±5-point TOST tolerance.")
     inf = data["fairness_inference"]
     if inf is not None:
@@ -204,6 +274,48 @@ with tab_stab:
     if data["stability_summary"] is not None:
         st.dataframe(data["stability_summary"].round(4), width="stretch", hide_index=True)
     figure("structural_stability.png")
+
+    st.markdown("### From the cohort to one person")
+    st.write(
+        "The summary above says how much the *model* moves between refits. It cannot say whether a "
+        "particular person's offer would survive a different training sample. Keeping the per-person "
+        "predictions answers that."
+    )
+    if data["individual_stability_summary"] is not None:
+        st.dataframe(data["individual_stability_summary"].round(4), width="stretch", hide_index=True)
+    figure("individual_stability.png",
+           "Left: how many of the eight refits select each person. Middle: spread of one person's score. "
+           "Right: what abstaining on contested decisions does to coverage and to the subgroup gaps.")
+
+    curve = data["abstention_curve"]
+    if curve is not None:
+        st.markdown("**Selective prediction: abstain where the refits disagree**")
+        model_choice = st.selectbox("Model", sorted(curve.model.unique()),
+                                    format_func=lambda m: LABELS.get(m, m), key="abstain_model")
+        part = curve[curve.model == model_choice]
+        limit = st.select_slider(
+            "Abstain when more than this many refits disagree",
+            options=sorted(part.max_contested_votes.unique()),
+            value=int(part.max_contested_votes.max()),
+        )
+        row = part[part.max_contested_votes == limit].iloc[0]
+        full = part[part.max_contested_votes == part.max_contested_votes.max()].iloc[0]
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Coverage", f"{row.coverage:.1%}", f"{row.coverage - 1:+.1%} vs deciding everyone", delta_color="off")
+        c2.metric("Precision at capacity", f"{row.precision_at_capacity:.3f}",
+                  f"{row.precision_at_capacity - full.precision_at_capacity:+.3f}")
+        c3.metric("Gender FNR gap", f"{row.fnr_gap_gender:+.3f}",
+                  f"{abs(row.fnr_gap_gender) - abs(full.fnr_gap_gender):+.3f} vs full coverage",
+                  delta_color="inverse")
+        c4.metric("Race FNR gap", f"{row.fnr_gap_race:+.3f}",
+                  f"{abs(row.fnr_gap_race) - abs(full.fnr_gap_race):+.3f} vs full coverage",
+                  delta_color="inverse")
+        st.caption(
+            "Abstention buys reliability and costs equity. Contested decisions are spread evenly across "
+            "gender, but among the people actually prioritised a far larger share of women sit at the "
+            "margin, so abstaining removes more of the few offers women receive and the gap widens. "
+            "A referral route would itself need auditing, or the disparity simply moves into a queue."
+        )
 
 with tab_econ:
     st.subheader("Resource-allocation scenario")

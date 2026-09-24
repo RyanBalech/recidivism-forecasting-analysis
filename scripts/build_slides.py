@@ -97,6 +97,23 @@ gang_cost = base_gender.loc["logistic", "auc"] - drop_gang.loc["logistic", "auc"
 by_group = pd.read_csv(ART / "fairness_by_group.csv").set_index(["model", "attribute", "group"])
 race_auc = [by_group.loc[(m, "Race", g), "roc_auc"] for m in ["logistic", "xgboost", "tabicl"] for g in ["BLACK", "WHITE"]]
 
+# Proxy recovery and per-person decision stability.
+_proxy_path = ART / "proxy_recovery.csv"
+if _proxy_path.exists():
+    _proxy = pd.read_csv(_proxy_path)
+    _get = lambda a, f: float(_proxy[(_proxy.attribute == a) & (_proxy.feature_set == f)].recovery_auc.iloc[0])
+    leak_auc, gender_proxy_auc, race_proxy_auc = _get("Gender", "with_missingness"), _get("Gender", "shipped"), _get("Race", "shipped")
+else:
+    leak_auc = gender_proxy_auc = race_proxy_auc = float("nan")
+
+_indiv_path = ART / "individual_stability_summary.csv"
+if _indiv_path.exists():
+    _indiv = pd.read_csv(_indiv_path).set_index("model")
+    contested_share = float(_indiv.share_contested.mean())
+    contested_of_selected = float(_indiv.contested_share_of_selected.mean())
+else:
+    contested_share = contested_of_selected = float("nan")
+
 # Tested comparison: calibration, captured events and the selected-set overlap.
 _cal_path = ART / "calibration_paired_tests.csv"
 if _cal_path.exists():
@@ -151,7 +168,7 @@ s = make_slide(prs); title(s, "Original split, with explicit validation limits",
 card(s, "TRAIN", "18,028", .8, 1.9); card(s, "EVALUATION", "7,807", 3.75, 1.9, PURPLE)
 card(s, "BASELINE FIELDS", "29", 6.7, 1.9); card(s, "TEST TARGET RATE", f"{pred.actual.mean():.1%}", 9.65, 1.9, PURPLE)
 bullets(s, ["Post-release variables excluded; race, gender and geography retained only for audit",
-            "Found and fixed a representation leak: missing gang affiliation exactly marked women; mode-fill plus a regression audit now blocks it",
+            f"Found and fixed a representation leak: gang affiliation is missing for every woman and no man, so with missingness indicators gender is recoverable at AUC {leak_auc:.2f} — mode-fill plus a regression audit now blocks it",
             "Evaluation data were repeatedly inspected during development; fresh validation is still needed"], y=3.62, h=2.65, size=18); footer(s, 3)
 
 # 4 — Three models
@@ -294,6 +311,23 @@ textbox(s, "Jaccard is intersection / union, not the share of people switching. 
 s = make_slide(prs); title(s, "How we got here: what we tried, where we landed", "A7 · Process")
 picture(s, FIG / "improvement_journey.png", .55, 1.75, 12.2)
 textbox(s, "Full log in JOURNEY.md — every step measured, including the attempts we rejected.", 1.0, 6.82, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER)
+
+# A8 — proxy recovery
+s = make_slide(prs); title(s, "Does excluding an attribute remove it?", "A8 · Proxy recovery")
+picture(s, FIG / "proxy_recovery.png", .4, 1.7, 8.4)
+panel(s, "MEASURED", f"Predict the attribute from our own features\n\n"
+      f"With missingness: gender AUC {leak_auc:.2f} — the leak, quantified\n\n"
+      f"Shipped set: gender {gender_proxy_auc:.2f}, race {race_proxy_auc:.2f}\n\n"
+      "Exclusion is not removal", 9.1, 1.7, 3.8, 4.9, RED)
+textbox(s, "Proxies are gun charges, mental-health/substance conditions, violent arrests, age — the substance of the assessment, not incidental fields.",
+        .8, 6.78, 11.7, .4, 11, ORANGE, True, PP_ALIGN.CENTER)
+
+# A9 — per-person stability and abstention
+s = make_slide(prs); title(s, "Would this person's offer survive a different sample?", "A9 · Decision stability")
+picture(s, FIG / "individual_stability.png", .35, 1.7, 12.6)
+textbox(s, f"{contested_share:.0%} of decisions flip between refits, and about {contested_of_selected:.0%} of those actually prioritised sit at that margin. "
+        f"Abstaining on them raises precision and WIDENS the gender gap: women are concentrated at the margin.",
+        .8, 6.72, 11.7, .45, 11, ORANGE, True, PP_ALIGN.CENTER)
 
 REPORTS.mkdir(exist_ok=True)
 prs.save(OUT)

@@ -160,3 +160,64 @@ def test_models_mostly_select_the_same_people():
     row = overlap.query("model_a == 'logistic' and model_b == 'xgboost'").iloc[0]
     assert row.selected_a == row.selected_b, "capacity rule must select equal-sized sets"
     assert row.jaccard > 0.8, "the recommendation text claims ~85% overlap"
+
+
+@pytest.mark.skipif(not (ARTIFACT_DIR / "individual_stability.csv").exists(),
+                    reason="run scripts/individual_stability.py first")
+def test_individual_stability_uses_the_shared_bootstrap_protocol():
+    """Per-person refits must reuse the structural script's resamples, not new ones."""
+    individual = _load("individual_stability")
+    structural_seed = 7
+    assert individual.BOOTSTRAP_SEED == structural_seed
+    a = individual.bootstrap_samples(1000)
+    b = individual.bootstrap_samples(1000)
+    assert all((x == y).all() for x, y in zip(a, b)), "resamples must be deterministic"
+    assert len(a) == individual.N_REFITS
+
+
+@pytest.mark.skipif(not (ARTIFACT_DIR / "individual_stability.csv").exists(),
+                    reason="run scripts/individual_stability.py first")
+def test_decision_stability_counts_are_coherent():
+    people = pd.read_csv(ARTIFACT_DIR / "individual_stability.csv")
+    n = people.n_refits.iloc[0]
+    assert people.times_selected.between(0, n).all()
+    # Unanimous means selected by none or all of the refits, nothing else.
+    unanimous = people.times_selected.isin([0, n])
+    assert (people.decision_unanimous == unanimous).all()
+    assert (people.max_probability >= people.min_probability).all()
+    # Roughly a fifth of the cohort is selected by any single refit.
+    for model, part in people.groupby("model"):
+        assert 0.15 < (part.times_selected >= n / 2).mean() < 0.25
+
+
+@pytest.mark.skipif(not (ARTIFACT_DIR / "abstention_curve.csv").exists(),
+                    reason="run scripts/individual_stability.py first")
+def test_abstention_trades_coverage_against_the_gender_gap():
+    """The finding: abstaining buys precision and widens the gender gap."""
+    curve = pd.read_csv(ARTIFACT_DIR / "abstention_curve.csv")
+    for model, part in curve.groupby("model"):
+        part = part.sort_values("max_contested_votes")
+        strictest, full = part.iloc[0], part.iloc[-1]
+        assert full.coverage == pytest.approx(1.0), "the last row must decide everyone"
+        assert strictest.coverage < full.coverage
+        assert strictest.precision_at_capacity > full.precision_at_capacity, (
+            f"{model}: abstention should improve precision on what remains")
+        assert abs(strictest.fnr_gap_gender) > abs(full.fnr_gap_gender), (
+            f"{model}: the reported finding is that the gender gap WIDENS under abstention")
+
+
+@pytest.mark.skipif(not (ARTIFACT_DIR / "proxy_recovery.csv").exists(),
+                    reason="run scripts/proxy_inference_audit.py first")
+def test_proxy_recovery_quantifies_the_leak_and_the_residual():
+    recovery = pd.read_csv(ARTIFACT_DIR / "proxy_recovery.csv")
+    get = lambda a, f: float(recovery[(recovery.attribute == a)
+                                      & (recovery.feature_set == f)].recovery_auc.iloc[0])
+    # The missingness channel reconstructed gender essentially perfectly.
+    assert get("Gender", "with_missingness") > 0.99
+    # Exclusion is not removal: both attributes stay well above chance in the shipped set.
+    assert get("Gender", "shipped") > 0.6
+    assert get("Race", "shipped") > 0.6
+    # Dropping the strongest proxy helps, but does not close the channel.
+    assert get("Gender", "without_gang") < get("Gender", "shipped")
+    assert get("Gender", "without_gang") > 0.6
+    assert recovery.recoverable_share.between(0, 1).all()

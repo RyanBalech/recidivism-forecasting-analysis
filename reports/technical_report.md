@@ -64,6 +64,19 @@ TabICLv2 has permutation importance, PDP/ICE and interactive feature edits for l
 
 Local sensitivity for the same person across all three models and a transformed-unit logistic coefficient/odds-ratio table complement the explanations.
 
+## Proxy recovery: what exclusion actually removes
+
+Race, gender and residence geography are excluded from model inputs, and the race A/B test shows that two people differing only in race receive identical scores. That establishes invariance to the direct input, not the absence of the attribute. `scripts/proxy_inference_audit.py` measures the difference by predicting the protected attribute from the model's own feature set; the cross-validated AUC is how much of that attribute remains available.
+
+| Attribute | Shipped features | Plus missingness indicators | Minus `Gang_Affiliated` |
+|---|---:|---:|---:|
+| Gender | 0.776 | **1.000** | 0.747 |
+| Race | 0.708 | 0.718 | 0.705 |
+
+Three readings. First, the leak the team found was total: with missingness indicators gender is recovered perfectly, because `Gang_Affiliated` is missing for every woman and no man and any model encoding NaN as a category — TabICLv2 does — had gender in full. The mode-fill closes that channel, and this puts a number on what it was worth. Second, exclusion is not removal: in the shipped set gender is still recovered at 0.776 and race at 0.708, so the information remains available to anything trained on these columns even though no model receives the attribute. Third, the FPDP mitigation moves gender recovery only from 0.776 to 0.747: it removes the strongest single proxy and leaves most of the channel, consistent with the nested finding that the gap narrows without closing.
+
+The named proxies are the substance of the assessment rather than incidental fields — for gender, gun charges, mental-health and substance-abuse conditions and violent arrests; for race, mental-health and substance-abuse conditions, age at release, violent arrests and dependents. None can simply be dropped, which is the honest ceiling on proxy removal as a strategy.
+
 ## Stability
 
 Bootstrap refits compare probability drift, rank correlation and top-capacity Jaccard overlap. All three models use the same eight bootstrap samples and fixed algorithm seeds, isolating training-data sensitivity. Sample hashes are recorded in `stability_protocol.json`. Pairwise comparisons share refits and are not independent samples.
@@ -71,6 +84,14 @@ Bootstrap refits compare probability drift, rank correlation and top-capacity Ja
 Jaccard is intersection divided by union, **not the fraction of all people changing status**. For equal-size selected sets, Jaccard J implies a replaced fraction `(1-J)/(1+J)` of each selected set. The paired rerun gives mean Jaccard 0.7725 (logistic), 0.7468 (XGBoost), and 0.7758 (TabICL). These correspond approximately to 13–15% replacement among selected people. Logistic has the smallest probability drift (0.032 vs 0.035 for both others); TabICL and logistic have nearly identical overlap, XGBoost the lowest. Neither difference establishes a population ranking from eight refits.
 
 Refit sensitivity does not measure temporal drift. Random subsets of one historical cohort do not prove suitability for smaller agencies elsewhere.
+
+### Decision stability for one person, and selective prediction
+
+The structural measures above describe the model. `scripts/individual_stability.py` reuses the same eight bootstrap resamples but keeps the per-person predictions, so the question becomes whether a particular offer would survive a different training sample. About 13% of decisions (logistic) and 15% (XGBoost) flip between refits, and roughly a third of the people the published run actually prioritises sit at that margin.
+
+Abstaining on contested cases and referring them to human review is a selective-prediction policy, evaluated here as one. Keeping only unanimous decisions covers 87% of the cohort and raises precision at capacity from 0.822 to 0.846. It also **widens** the gender FNR gap, from −0.090 to −0.119.
+
+The mechanism is measured rather than assumed. Contested decisions are spread evenly across gender: 12.1% of women and 12.9% of men. The asymmetry is among the people prioritised — 47% of the 118 selected women sit at the margin against 30% of the 1,490 selected men — so abstention removes a larger share of the few offers women receive. This is a trade-off of the same family as the impossibility result: refusing to decide when uncertain is not fairness-neutral. A client adopting abstention needs the referral route audited, or the disparity moves out of the model and into a queue.
 
 ## Fairness
 

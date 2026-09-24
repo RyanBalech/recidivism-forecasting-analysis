@@ -18,7 +18,8 @@ ROOT = Path(__file__).resolve().parents[1]
 STEPS = ["leakage_audit", "estimator_sweep", "train_evaluate", "incumbent_benchmark", "fairness_audit",
          "fairness_interpretability", "mitigation_nested", "validate_project", "learning_curve",
          "interpretability", "lime_local_fidelity", "logistic_effects", "explanation_agreement", "calibration_tests",
-         "stability_structural", "race_ab_test", "xper_attribution",
+         "stability_structural", "individual_stability", "proxy_inference_audit",
+         "race_ab_test", "xper_attribution",
          "tradeoff_matrix", "improvement_journey", "refresh_readme", "build_notebook",
          "build_slides", "build_prevalidation_pdf", "end_to_end_audit"]
 

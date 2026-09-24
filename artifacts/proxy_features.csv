@@ -1,0 +1,17 @@
+attribute,feature,importance
+Gender,Gang_Affiliated,0.10294337052413083
+Gender,Prior_Arrest_Episodes_GunCharges,0.04841966139076279
+Gender,Condition_MH_SA,0.03548707511676177
+Gender,Prior_Arrest_Episodes_Violent,0.022475836792942405
+Gender,Prison_Offense,0.013218814867669937
+Gender,Education_Level,0.01150428126621692
+Gender,Prison_Years,0.010018000778412039
+Gender,Prior_Arrest_Episodes_Drug,0.008721052802283347
+Race,Condition_MH_SA,0.04773561811505502
+Race,Age_at_Release,0.03760333650664125
+Race,Prior_Arrest_Episodes_Violent,0.02670402103449838
+Race,Dependents,0.02199265605875147
+Race,Prior_Arrest_Episodes_GunCharges,0.017168321320096068
+Race,Prison_Offense,0.009896550160931984
+Race,Prior_Arrest_Episodes_Drug,0.009468062922163244
+Race,Gang_Affiliated,0.008644997506686614

@@ -39,6 +39,27 @@ What does separate them: logistic has lower refit drift on all 28 resample pairs
 interpretability. The recommendation now rests on those rather than on fairness or
 calibration, both of which are ties. Tests 38 → 41.
 
+**Additions after the corrections pass (24 Sep).** Two analyses that the project asserted
+but never measured:
+
+- **Proxy recovery** (`proxy_inference_audit.py`). Predicting the protected attribute from
+  our own feature set recovers gender at AUC 0.776 and race at 0.708; **with missingness
+  indicators gender reaches 1.000**, which puts an exact number on the `Gang_Affiliated`
+  leak. Dropping gang moves gender recovery only to 0.747, so the FPDP mitigation removes
+  the strongest proxy and leaves most of the channel. Named proxies are gun charges,
+  mental-health/substance conditions, violent arrests, age and dependents.
+- **Per-person decision stability and abstention** (`individual_stability.py`). Reusing the
+  same eight resamples, 13% (logistic) / 15% (XGBoost) of decisions flip between refits, and
+  about a third of those actually prioritised sit at that margin. Abstaining on contested
+  cases covers 87% of the cohort and lifts precision 0.822 → 0.846, but **widens** the gender
+  FNR gap −0.090 → −0.119: contested cases are evenly spread across gender, yet 47% of the
+  118 selected women are at the margin against 30% of 1,490 men. A second trade-off of the
+  impossibility family, empirically demonstrated.
+
+Both are in the notebook, the report, the Q&A notes, appendix slides A8/A9, and the app
+(individual tab shows a per-person score range and refit vote count; stability tab has the
+abstention policy; fairness tab has proxy recovery). Tests 41 → 45.
+
 **Environment note.** This pass ran on CPU with packages pinned to `validation_manifest.json`
 (xgboost 3.0.5, pandas 2.3.1, scikit-learn 1.7.2, shap 0.52.0, lime 0.2.0.1). Saved models
 reproduce the published predictions to 7e-08, so the new artifacts are consistent with the
