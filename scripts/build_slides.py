@@ -143,6 +143,10 @@ def span(values):
     lo, hi = sorted(values, key=abs)[0], sorted(values, key=abs)[-1]
     return f"{lo:+.2f} to {hi:+.2f}".replace("+-", "-")
 pred = pd.read_csv(ART / "test_predictions.csv")
+interp = json.loads((ART / "interpretability_summary.json").read_text())
+surrogate_r2 = float(interp["surrogate_fidelity_r2_test"])
+_agree = pd.read_csv(ART / "explanation_agreement.csv")
+agree_lo, agree_hi = _agree.spearman_rank_correlation.min(), _agree.spearman_rank_correlation.max()
 stability = pd.read_csv(ART / "stability_summary.csv").set_index("model")
 
 prs = Presentation()
@@ -194,32 +198,52 @@ card(s, "BRIER · TABICL", f"{metrics.loc['tabicl','brier']:.4f}", 9.25, 3.5, PU
 card(s, "AUC GAP · XGB − LOGIT", f"+{xgb_minus_logit:.4f}", 9.25, 5.1, ORANGE, "paired bootstrap: significant, small")
 textbox(s, "All three models are within ~0.003 AUC; ECE differences are not significant. Performance alone cannot pick the model.", 1.0, 6.85, 11, .3, 11, GREY, True, PP_ALIGN.CENTER); footer(s, 6)
 
-# 7 — Fairness at the deployed point
-s = make_slide(prs); title(s, "Fairness at the proposed allocation rule", "06 · Subgroup audit")
+# 7 — Interpretability (brief: explain individual predictions and the main drivers)
+s = make_slide(prs); title(s, "Can each model explain a decision?", "06 · Interpretability")
+picture(s, FIG / "shap_individual.png", .4, 1.7, 8.3)
+panel(s, "THREE ROUTES", "LOGISTIC\nCoefficients and marginal effects, read directly\n\n"
+      f"XGBOOST\nNeeds SHAP; a depth-3 surrogate tree reproduces only R² = {surrogate_r2:.2f}\n\n"
+      "TABICLv2\nNo native attribution: PDP/ICE only", 9.0, 1.7, 3.9, 4.9, PURPLE)
+textbox(s, f"SHAP, permutation importance and XPER agree on the drivers (Spearman {agree_lo:.2f}–{agree_hi:.2f}), "
+        "not on their order: quote the set, not the rank.", 1.0, 6.82, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 7)
+
+# 8 — Structural stability (course §7: same population, approximately the same model)
+s = make_slide(prs); title(s, "Would a different sample give the same model?", "07 · Stability")
+picture(s, FIG / "structural_stability.png", .5, 1.75, 8.3)
+card(s, "SCORE DRIFT · LOGISTIC", f"{stability.loc['logistic','mean_abs_prob_diff']:.3f}", 9.35, 1.9, ORANGE,
+     f"lowest on all 28 pairs · XGB {stability.loc['xgboost','mean_abs_prob_diff']:.3f} · TabICL {stability.loc['tabicl','mean_abs_prob_diff']:.3f}")
+card(s, "TOP-20% JACCARD", f"{stability.top20_jaccard.min():.0%}–{stability.top20_jaccard.max():.0%}", 9.35, 3.5, TEAL,
+     f"logit {stability.loc['logistic','top20_jaccard']:.3f} · XGB {stability.loc['xgboost','top20_jaccard']:.3f} · TabICL {stability.loc['tabicl','top20_jaccard']:.3f}")
+card(s, "DECISIONS THAT FLIP", f"{contested_share:.0%}", 9.35, 5.1, RED, "per person, across 8 refits (appendix A7)")
+textbox(s, "Eight bootstrap refits per model, same resamples for all three. Jaccard is intersection / union, not the share switching.",
+        1.0, 6.82, 11, .3, 11, GREY, True, PP_ALIGN.CENTER); footer(s, 8)
+
+# 9 — Fairness at the deployed point
+s = make_slide(prs); title(s, "Fairness at the proposed allocation rule", "08 · Subgroup audit")
 picture(s, FIG / "fairness_support_access.png", .4, 1.7, 8.5)
 card(s, "GENDER FNR GAP (M − F)", span(fnr20["Gender"]), 9.35, 1.9, RED, "women miss support more · all significant")
 card(s, "RACE: EQUIVALENT ±5 PTS", f"{int(race_equiv.sum())} / {len(race_equiv)} models", 9.35, 3.5, TEAL,
      f"TOST on errors · AUC Black {min(race_auc[0::2]):.2f} vs White {min(race_auc[1::2]):.2f}")
 card(s, "AGE FNR GAP (<33 − 33+)", span(fnr20["Age"]), 9.35, 5.1, ORANGE, "persists with age fixed: carried by prior record")
-textbox(s, "Selection = support offered, so the harm is a missed offer: FNR is primary. Not significant ≠ fair; we test equivalence.", 1.0, 6.8, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 7)
+textbox(s, "Selection = support offered, so the harm is a missed offer: FNR is primary. Not significant ≠ fair; we test equivalence.", 1.0, 6.8, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 9)
 
-# 8 — Impossibility result
-s = make_slide(prs); title(s, "Fairness: probability scores and allocation rules", "07 · Fairness, sharpened")
+# 10 — Impossibility result
+s = make_slide(prs); title(s, "Fairness: probability scores and allocation rules", "09 · Fairness, sharpened")
 panel(s, "SCORE CALIBRATION", f"Women are over-predicted by every model: mean score {calib.loc[('Gender', 'F'), 'mean_score_xgboost']:.2f} vs observed {calib.loc[('Gender', 'F'), 'base_rate']:.2f}\n\nYet they are selected less at the top 20%\n\nFor support, over-prediction helps women: recalibrating would widen the FNR gap", .7, 1.85, 5.75, 4.7, TEAL)
 panel(s, "ALLOCATION ERRORS", "FPR, TPR and selection rates depend on policy\n\nChanging thresholds leaves probabilities unchanged\n\nOur threshold frontier uses evaluation labels: illustrative, not validated", 6.85, 1.85, 5.75, 4.7, RED)
-footer(s, 8)
+footer(s, 10)
 
-# 9 — Fairness interpretability: where the gender gap comes from
-s = make_slide(prs); title(s, "Where does the gender gap come from?", "08 · Fairness interpretability (FPDP)")
+# 11 — Fairness interpretability: where the gender gap comes from
+s = make_slide(prs); title(s, "Where does the gender gap come from?", "10 · Fairness interpretability (FPDP)")
 picture(s, FIG / "fpdp_gender.png", .35, 1.65, 8.4)
 panel(s, "CANDIDATE: GANG", "Never recorded for women; imputed as \"No\"\n\n"
       f"Drop + re-estimate (logistic): FNR gap {base_gender.loc['logistic', 'fnr_gap']:+.3f} → {drop_gang.loc['logistic', 'fnr_gap']:+.3f}\n\n"
       f"Women FNR {base_gender.loc['logistic', 'fnr_b']:.2f} → {drop_gang.loc['logistic', 'fnr_b']:.2f}; men {base_gender.loc['logistic', 'fnr_a']:.2f} → {drop_gang.loc['logistic', 'fnr_a']:.2f}\n\n"
       f"AUC −{gang_cost:.3f}; {base_gender.loc['logistic', 'captured_events'] - drop_gang.loc['logistic', 'captured_events']:.0f} fewer re-arrests captured", 9.0, 1.65, 3.95, 5.0, RED)
-textbox(s, "Logistic FPDP is flat under a top-20% rule (a constant shifts every score equally), so it measures removing the feature, not a value.", 1.0, 6.82, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 9)
+textbox(s, "Logistic FPDP is flat under a top-20% rule (a constant shifts every score equally), so it measures removing the feature, not a value.", 1.0, 6.82, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 11)
 
-# 10 — Does the mitigation survive out-of-sample?
-s = make_slide(prs); title(s, "Selecting and testing the fix on different data", "09 · Mitigation, validated")
+# 12 — Does the mitigation survive out-of-sample?
+s = make_slide(prs); title(s, "Selecting and testing the fix on different data", "11 · Mitigation, validated")
 panel(s, "IN-SAMPLE", "Candidate chosen AND scored on the same cohort\n\n"
       f"Equal-opportunity p 0.000 → {drop_gang.loc['logistic', 'p_equal_opportunity']:.2f}\n\n"
       "An upper bound, not evidence of generalisation", .7, 1.85, 5.75, 4.7, GREY)
@@ -227,14 +251,14 @@ panel(s, "OUT-OF-FOLD", "Candidate re-selected inside each training fold, scored
       f"Same variable selected in {int(nested_sel * 100)}% of folds\n\n"
       f"Gender FNR gap {nested_base:+.3f} → {nested_mit:+.3f}  ·  AUC {nested_auc:+.3f}", 6.85, 1.85, 5.75, 4.7, TEAL)
 textbox(s, "The evaluation cohort is never touched. About 70% of the gap closes out of fold, for roughly one AUC point.",
-        1.0, 6.82, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 10)
+        1.0, 6.82, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 12)
 
-# 11 — Trade-off matrix (required)
-s = make_slide(prs); title(s, "Which model should the client deploy?", "10 · Trade-offs across four dimensions")
-picture(s, FIG / "tradeoff_matrix.png", 2.2, 1.62, 8.9); footer(s, 11)
+# 13 — Trade-off matrix (required)
+s = make_slide(prs); title(s, "Which model should the client deploy?", "12 · Trade-offs across four dimensions")
+picture(s, FIG / "tradeoff_matrix.png", 2.2, 1.62, 8.9); footer(s, 13)
 
-# 12 — Recommendation
-s = make_slide(prs); title(s, "Pilot logistic regression; run XGBoost as the challenger", "11 · Recommendation")
+# 14 — Recommendation
+s = make_slide(prs); title(s, "Pilot logistic regression; run XGBoost as the challenger", "13 · Recommendation")
 panel(s, "WHY LOGISTIC", "Native, coefficient-level explanations — no second tool\n\n"
       f"Lower refit drift on all 28 pairs ({stability.loc['logistic','mean_abs_prob_diff']:.4f} vs {stability.loc['xgboost','mean_abs_prob_diff']:.4f})\n\n"
       f"More stable selected set (J {stability.loc['logistic','top20_jaccard']:.3f} vs {stability.loc['xgboost','top20_jaccard']:.3f})\n\n"
@@ -247,22 +271,22 @@ panel(s, "WHAT REVERSES IT", "The score is quoted numerically to supervisees\n\n
       "Capacity large enough that +12 offers matters\n\nA feature set that widens the margin\n\nThen: promote the challenger",
       8.8, 1.8, 3.85, 4.65, PURPLE)
 textbox(s, f"Both models select {overlap_share:.0%} of the same people at the top-20% rule. Fairness and calibration differences between them are not significant.",
-        .8, 6.75, 11.7, .4, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 12)
+        .8, 6.75, 11.7, .4, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 14)
 
-# 13 — App
-s = make_slide(prs); title(s, "The application makes every trade-off testable", "12 · Client experience")
+# 15 — App
+s = make_slide(prs); title(s, "The application makes every trade-off testable", "14 · Client experience")
 panel(s, "ASSESS", "Score one person, all 3 models + SHAP", .75, 1.75, 5.7, 1.72, ORANGE)
 panel(s, "AUDIT", "Race, gender, age at the deployed point + FPDP", 6.85, 1.75, 5.7, 1.72, PURPLE)
 panel(s, "COMPARE", "Incumbent, learning curve, matrix", .75, 3.8, 5.7, 1.72, ORANGE)
 panel(s, "SIMULATE", "Costs, capacity, sensitivity", 6.85, 3.8, 5.7, 1.72, PURPLE)
-textbox(s, "streamlit run app.py", 4.4, 6.25, 4.5, .4, 17, PALE, True, PP_ALIGN.CENTER, "Consolas"); footer(s, 13)
+textbox(s, "streamlit run app.py", 4.4, 6.25, 4.5, .4, 17, PALE, True, PP_ALIGN.CENTER, "Consolas"); footer(s, 15)
 
 # ---------------------------------------------------------------- APPENDIX
 # Everything below is reference material for Q&A, not part of the 15-minute talk.
 s = make_slide(prs)
 textbox(s, "APPENDIX", .72, 2.6, 8, .5, 14, ORANGE, True)
 textbox(s, "Supporting evidence\nfor questions", .72, 3.15, 9, 1.5, 34, WHITE, True)
-textbox(s, "Learning curve · economic sensitivity · interpretability methods · explanation disagreement · LIME fidelity · stability · process log",
+textbox(s, "Learning curve · economic sensitivity · explanation disagreement · LIME fidelity · process log · proxy recovery · decision stability",
         .76, 4.95, 9.5, .9, 15, PALE)
 
 # A1 — Learning curve
@@ -279,41 +303,26 @@ bullets(s, ["$5,000 support cost · $50,000 event cost · 20% assumed effectiven
             "Models beat the incumbent at every capacity from 5% to 50% (sensitivity sweep)",
             "A randomized or quasi-experimental pilot must estimate real intervention impact"], y=3.72, size=20)
 
-# A3 — Interpretability
-s = make_slide(prs); title(s, "Prediction explanations and their limits", "A3 · Interpretability")
-picture(s, FIG / "shap_individual.png", .4, 1.7, 8.3)
-panel(s, "METHODS", "SHAP + LIME (local)\n\nXPER on AUC (Pérignon)\n\nGlobal surrogate: imperfect fidelity\n\nPDP/ICE for all three", 9.0, 1.7, 3.9, 4.9, PURPLE)
-textbox(s, "TabICLv2 has no native explanation path — a real deployment cost, covered only by model-agnostic PDP/ICE.", 1.0, 6.75, 11, .3, 11, RED, True, PP_ALIGN.CENTER)
-
-# A4 — Explanations disagree
-s = make_slide(prs); title(s, "SHAP, permutation importance and XPER rank differently", "A4 · Explanation disagreement")
+# A3 — Explanations disagree
+s = make_slide(prs); title(s, "SHAP, permutation importance and XPER rank differently", "A3 · Explanation disagreement")
 picture(s, FIG / "explanation_agreement.png", .5, 1.7, 8.4)
 panel(s, "WHY", "SHAP explains the prediction\n\nPermutation importance explains loss\n\nXPER decomposes AUC\n\n"
       "Different questions, so different rankings", 9.1, 1.7, 3.8, 4.9, PURPLE)
 textbox(s, "Top-10 sets largely coincide; ordering is method-dependent. Quote the set, not the rank.", 1.0, 6.75, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER)
 
-# A5 — LIME fidelity
-s = make_slide(prs); title(s, "Is the local explanation faithful?", "A5 · LIME fidelity")
+# A4 — LIME fidelity
+s = make_slide(prs); title(s, "Is the local explanation faithful?", "A4 · LIME fidelity")
 picture(s, FIG / "lime_individual.png", .4, 1.75, 12.5)
 textbox(s, "Category-aware perturbation raised local fidelity from R² 0.25 to ≈0.41. Three fixed cases × three seeds; every condition keeps its sign.",
         1.0, 6.75, 11, .4, 12, ORANGE, True, PP_ALIGN.CENTER)
 
-# A6 — Stability
-s = make_slide(prs); title(s, "Structural stability across refits on resampled data", "A6 · Stability")
-picture(s, FIG / "structural_stability.png", .5, 1.75, 8.3)
-card(s, "SCORE DRIFT · LOGISTIC", f"{stability.loc['logistic','mean_abs_prob_diff']:.3f}", 9.35, 1.9, ORANGE,
-     f"lowest · XGB {stability.loc['xgboost','mean_abs_prob_diff']:.3f} · TabICL {stability.loc['tabicl','mean_abs_prob_diff']:.3f}")
-card(s, "TOP-20% JACCARD", f"{stability.top20_jaccard.min():.0%}–{stability.top20_jaccard.max():.0%}", 9.35, 3.5, TEAL,
-     f"logit {stability.loc['logistic','top20_jaccard']:.3f} · XGB {stability.loc['xgboost','top20_jaccard']:.3f} · TabICL {stability.loc['tabicl','top20_jaccard']:.3f}")
-textbox(s, "Jaccard is intersection / union, not the share of people switching. Refit sensitivity is not temporal validation.", 1.0, 6.75, 11, .4, 11, GREY, True, PP_ALIGN.CENTER)
-
-# A7 — Improvement journey
-s = make_slide(prs); title(s, "How we got here: what we tried, where we landed", "A7 · Process")
+# A5 — Improvement journey
+s = make_slide(prs); title(s, "How we got here: what we tried, where we landed", "A5 · Process")
 picture(s, FIG / "improvement_journey.png", .55, 1.75, 12.2)
 textbox(s, "Full log in docs/JOURNEY.md — every step measured, including the attempts we rejected.", 1.0, 6.82, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER)
 
-# A8 — proxy recovery
-s = make_slide(prs); title(s, "Does excluding an attribute remove it?", "A8 · Proxy recovery")
+# A6 — proxy recovery
+s = make_slide(prs); title(s, "Does excluding an attribute remove it?", "A6 · Proxy recovery")
 picture(s, FIG / "proxy_recovery.png", .4, 1.7, 8.4)
 panel(s, "MEASURED", f"Predict the attribute from our own features\n\n"
       f"With missingness: gender AUC {leak_auc:.2f} — the leak, quantified\n\n"
@@ -322,8 +331,8 @@ panel(s, "MEASURED", f"Predict the attribute from our own features\n\n"
 textbox(s, "Proxies are gun charges, mental-health/substance conditions, violent arrests, age — the substance of the assessment, not incidental fields.",
         .8, 6.78, 11.7, .4, 11, ORANGE, True, PP_ALIGN.CENTER)
 
-# A9 — per-person stability and abstention
-s = make_slide(prs); title(s, "Would this person's offer survive a different sample?", "A9 · Decision stability")
+# A7 — per-person stability and abstention
+s = make_slide(prs); title(s, "Would this person's offer survive a different sample?", "A7 · Decision stability")
 picture(s, FIG / "individual_stability.png", .35, 1.7, 12.6)
 textbox(s, f"{contested_share:.0%} of decisions flip between refits, and about {contested_of_selected:.0%} of those actually prioritised sit at that margin. "
         f"Abstaining on them raises precision and WIDENS the gender gap: women are concentrated at the margin.",
@@ -331,7 +340,7 @@ textbox(s, f"{contested_share:.0%} of decisions flip between refits, and about {
 
 # ---------------------------------------------------------------- SPEAKER NOTES
 # Written into the notes pane so they appear in presenter view and travel with the
-# file. Timings total 13 minutes across the 13 core slides, leaving a two-minute
+# file. Timings total 14 minutes across the 15 core slides, leaving a one-minute
 # buffer in the 15-minute slot. Appendix slides carry the cue for when to jump to them.
 NOTES = {
  1: """[0:00 · 30s] Opening.
@@ -355,7 +364,7 @@ is wrong often — at the top 20%, about one in six people offered support are n
 re-arrested. For OFFERING HELP that is an acceptable cost. For punishment it
 would not be. If a juror later challenges the error rate, this is the answer.""",
 
- 3: """[1:15 · 1m30s] Data design, and the leak.
+ 3: """[1:15 · 1m15s] Data design, and the leak.
 
 NIJ's own split — we did not make a new one. 18,028 train, 7,807 evaluation,
 29 fields available at supervision start.
@@ -372,7 +381,7 @@ a category, so it could read the attribute we thought we had excluded. We measur
 the cost: with missingness indicators, gender is recoverable at AUC 1.00.
 Perfectly. We fixed it with mode-filling and a regression test.""",
 
- 4: """[2:45 · 1m00s] Three model families.
+ 4: """[2:30 · 45s] Three model families.
 
 White-box, machine learning, foundation model — as the brief requires. Same 29
 fields, same held-out people, same metrics.
@@ -384,7 +393,7 @@ a 16-member GPU ensemble.
 Flag the one that matters for later: TabICL has NO native attribution path. That
 is a deployment cost, and it comes back on the recommendation slide.""",
 
- 5: """[3:45 · 1m00s] The client's real question.
+ 5: """[3:15 · 1m00s] The client's real question.
 
 Not "which of your three models" — that is our question. Theirs is: is any of this
 better than what we already run?
@@ -397,7 +406,7 @@ Give the caveat in the same breath: this is a HISTORICAL recorded score. It does
 not tell us how today's commercial products perform. And the dollars are a
 scenario — effectiveness is assumed, not measured.""",
 
- 6: """[4:45 · 1m30s] FINDING ONE. Performance cannot pick the model.
+ 6: """[4:15 · 1m15s] FINDING ONE. Performance cannot pick the model.
 
 All three are within 0.003 AUC. XGBoost beats logistic by +0.0025 with a paired
 interval excluding zero — real, but tiny.
@@ -414,7 +423,41 @@ both indistinguishable from perfect calibration. TabICL is the exception — slo
 
 So: performance does not discriminate. Interpretability, stability and fairness do.""",
 
- 7: """[6:15 · 2m00s] FINDING TWO. Unequal access to support.
+ 7: """[5:30 · 1m00s] Interpretability: can we explain a decision to the person it affects?
+
+The brief asks for two things: explain individual predictions, and the main
+drivers of the model. Left: one person, explained by logistic and by XGBoost.
+Red raises risk, green lowers it.
+
+Then the three routes, because they differ in kind, not degree:
+Logistic: the coefficients ARE the explanation, plus marginal effects in
+probability points. No second tool.
+XGBoost: needs SHAP. A depth-3 surrogate tree only reproduces part of it, so a
+"simple summary" of XGBoost would mislead.
+TabICL: no native attribution at all. Only model-agnostic PDP/ICE. That is a
+deployment cost, and it comes back on the recommendation.
+
+Honest line: SHAP, permutation importance and XPER agree on WHICH variables drive
+the model, not on their order. Quote the set, not the rank. Appendix A3 and A4
+have the disagreement and the LIME fidelity check.""",
+
+ 8: """[6:30 · 45s] Stability: would a different sample give the same model?
+
+The course definition: two samples from the same population should give roughly
+the same model. We refit every model on the same eight bootstrap resamples and
+compare all 28 pairs.
+
+Logistic drifts least on every one of the 28 pairs, and its selected top 20%
+changes least. This is one of the two reasons we recommend it.
+
+Then one person at a time: about one decision in seven flips between refits.
+Appendix A7 shows why sending those borderline cases to a human would widen the
+gender gap.
+
+Caveat if asked: Jaccard is intersection over union, not the share of people who
+switch, and refit sensitivity is not validation on a new cohort.""",
+
+ 9: """[7:15 · 1m45s] FINDING TWO. Unequal access to support.
 
 Slow down here. This is the centre of the talk.
 
@@ -437,7 +480,7 @@ The results:
 Say the honest line: not significant does NOT mean fair. That is why we test
 equivalence, not just difference.""",
 
- 8: """[8:15 · 1m00s] The impossibility result, both sides.
+10: """[9:00 · 45s] The impossibility result, both sides.
 
 Our data demonstrates both halves of the theorem within one project.
 
@@ -454,7 +497,7 @@ And for THIS use, the direction matters. In a support programme over-prediction
 works in women's favour. Recalibrating by gender would select even fewer women and
 widen the gap. The harm here is the missed offer, not the miscalibration.""",
 
- 9: """[9:15 · 1m00s] Where the gender gap comes from.
+11: """[9:45 · 1m00s] Where the gender gap comes from.
 
 We did not stop at measuring. The course sequence is test, identify the variable,
 mitigate — and fairness partial dependence names the candidate.
@@ -467,7 +510,7 @@ Dropping it and re-estimating shrinks the gender FNR gap from -0.10 to about zer
 for logistic — partly by raising men's FNR, so say that too — at roughly 0.014 AUC
 and 27 to 41 fewer captured re-arrests. Statistical parity is still rejected.""",
 
-10: """[10:15 · 1m00s] Did the fix generalise, or did we just fit it?
+12: """[10:45 · 1m00s] Did the fix generalise, or did we just fit it?
 
 This is the slide that separates us from a project that stops at the p-value.
 
@@ -486,7 +529,7 @@ reaches 0.27, not the in-sample 0.99 — and two of five folds still reject.
 
 We report the out-of-fold numbers. The in-sample figure is an upper bound.""",
 
-11: """[11:15 · 1m00s] The four dimensions together.
+13: """[11:45 · 45s] The four dimensions together.
 
 Read across the rows, not down the columns.
 
@@ -502,7 +545,7 @@ age gaps are shared by all three.
 
 That is the shape of the decision: accuracy does not discriminate here.""",
 
-12: """[12:15 · 1m00s] FINDING THREE. The recommendation, with its counter-case.
+14: """[12:30 · 1m00s] FINDING THREE. The recommendation, with its counter-case.
 
 Logistic regression for the shadow pilot. XGBoost as challenger, running in
 parallel on the same cohort.
@@ -522,7 +565,7 @@ And what would reverse it: if the client quotes probabilities numerically to
 supervisees, calibration starts to dominate. If their capacity is large enough that
 twelve extra offers matters. That is why the challenger runs in parallel.""",
 
-13: """[13:15 · 45s] The app, and close.
+15: """[13:30 · 30s] The app, and close.
 
 The application makes every trade-off testable: score one person with all three
 models, see the explanation, audit by race, gender and age at the deployed point,
@@ -537,10 +580,10 @@ Close on the frame: we are not trading accuracy for interpretability. The accura
 difference does not change who gets help.
 
 [APPENDIX CUES — jump to these on the matching question]
-A1 learning curve · A2 economics and sensitivity · A3 interpretability methods
-A4 why SHAP, permutation importance and XPER disagree · A5 LIME fidelity
-A6 stability detail · A7 what we tried and rejected · A8 proxy recovery
-A9 per-person stability and the abstention finding""",
+A1 learning curve · A2 economics and sensitivity
+A3 why SHAP, permutation importance and XPER disagree · A4 LIME fidelity
+A5 what we tried and rejected · A6 proxy recovery
+A7 per-person stability and the abstention finding""",
 }
 
 for index, slide in enumerate(prs.slides, start=1):

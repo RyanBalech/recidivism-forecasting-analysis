@@ -1,13 +1,15 @@
 # Presentation and Q&A notes
 
-Aim for 13 minutes plus a two-minute buffer. Every team member should rehearse every section. Use the rebuilt artifact values; historical JOURNEY.md numbers are not the current run.
+Aim for 14 minutes plus a one-minute buffer. Every team member should rehearse every section. Use the rebuilt artifact values; historical JOURNEY.md numbers are not the current run.
 
 ## Talk sequence
 
-The deck is **13 core slides plus a marked appendix**. Present the 13; the appendix
-(learning curve, economic sensitivity, interpretability methods, explanation
-disagreement, LIME fidelity, stability, process log) exists to answer questions, not
-to be walked through. Budget 13 minutes plus a two-minute buffer.
+The deck is **15 core slides plus a marked appendix**. The core covers all four dimensions the
+brief names, in its order: performance (6), interpretability (7), stability (8), fairness (9-12),
+then the trade-off matrix and the recommendation. The appendix (learning curve, economic
+sensitivity, explanation disagreement, LIME fidelity, process log, proxy recovery, decision
+stability) exists to answer questions, not to be walked through. Budget 14 minutes plus a
+one-minute buffer.
 
 Three findings carry the talk. Say each of them out loud at least twice:
 
@@ -21,18 +23,20 @@ Three findings carry the talk. Say each of them out loud at least twice:
 
 | # | Slide | Time | The point to land |
 |---|---|---|---|
-| 1-2 | Title, engagement | 1.0 | A vendor allocating voluntary support. Recorded arrest is the outcome, not inherent offending. |
-| 3 | Data design | 1.5 | Original 18,028/7,807 split, baseline-only fields; the cumulative target differs from NIJ's annual forecasting. Say plainly that the evaluation set was repeatedly inspected during development, and that we found and removed a gender-aligned missingness leak. |
-| 4-5 | Model design, incumbent | 2.0 | Three families, same fields, 16-member TabICLv2. The incumbent historical score reaches 0.60 against our 0.73 - the client's real question, answered first. Prevalence and calibrated-incumbent baselines with Brier skill. |
-| 6 | Predictive performance | 1.5 | **Finding 1.** All within ~0.003 AUC; ECE differences not significant. Use the paired bootstrap; do not infer "no difference" from overlapping individual intervals. |
-| 7 | Subgroup audit | 2.0 | **Finding 2.** Selection means being offered support, so FNR is primary. Gender FNR gap -0.10 to -0.12, age -0.23 to -0.25, race equivalent within ±5 points. The age gap is **not** removed by fixing the age field: it runs through criminal-history inputs. |
-| 8 | Fairness, sharpened | 1.0 | Women are over-predicted yet selected less. Thresholds change decisions, not the calibration of unchanged scores. |
-| 9 | FPDP | 1.0 | Gang affiliation is never recorded for women - the gap has a named source. Dropping it shrinks the gender FNR gap from -0.10 to about 0.00 (logistic), partly by raising men's FNR, at about -0.014 AUC. |
-| 10 | Mitigation, validated | 1.0 | Candidate re-selected inside every training fold; ~70% of the gap closes out of fold for ~0.01 AUC. Selection and assessment are separated; the evaluation cohort is untouched. |
-| 11-12 | Trade-off matrix, recommendation | 2.0 | **Finding 3.** Walk the 3x4 matrix, then logistic for the shadow pilot with XGBoost as challenger - and say what would reverse it. |
-| 13 | App | 1.0 | Demo one person end to end: score, explanation, support decision, editable assumptions; missing-value preservation and optional TFM inference. |
+| 1-2 | Title, engagement | 1.25 | A vendor allocating voluntary support. Recorded arrest is the outcome, not inherent offending. |
+| 3 | Data design | 1.25 | Original 18,028/7,807 split, baseline-only fields; the cumulative target differs from NIJ's annual forecasting. Say plainly that the evaluation set was repeatedly inspected during development, and that we found and removed a gender-aligned missingness leak. |
+| 4-5 | Model design, incumbent | 1.75 | Three families, same fields, 16-member TabICLv2. The incumbent historical score reaches 0.60 against our 0.73 - the client's real question, answered first. Prevalence and calibrated-incumbent baselines with Brier skill. |
+| 6 | Predictive performance | 1.25 | **Finding 1.** All within ~0.003 AUC; ECE differences not significant. Use the paired bootstrap; do not infer "no difference" from overlapping individual intervals. |
+| 7 | Interpretability | 1.0 | One person explained by logistic and XGBoost. Three routes: coefficients read directly; SHAP plus a surrogate that reproduces only R² 0.61; no native attribution for TabICLv2. The methods agree on the drivers, not on their order. |
+| 8 | Stability | 0.75 | Same eight resamples for all three models. Logistic drifts least on all 28 pairs and keeps the most stable top 20%. About one decision in seven flips between refits (A7). |
+| 9 | Subgroup audit | 1.75 | **Finding 2.** Selection means being offered support, so FNR is primary. Gender FNR gap -0.10 to -0.12, age -0.23 to -0.25, race equivalent within ±5 points. The age gap is **not** removed by fixing the age field: it runs through criminal-history inputs. |
+| 10 | Fairness, sharpened | 0.75 | Women are over-predicted yet selected less. Thresholds change decisions, not the calibration of unchanged scores. |
+| 11 | FPDP | 1.0 | Gang affiliation is never recorded for women - the gap has a named source. Dropping it shrinks the gender FNR gap from -0.10 to about 0.00 (logistic), partly by raising men's FNR, at about -0.014 AUC. |
+| 12 | Mitigation, validated | 1.0 | Candidate re-selected inside every training fold; ~70% of the gap closes out of fold for ~0.01 AUC. Selection and assessment are separated; the evaluation cohort is untouched. |
+| 13-14 | Trade-off matrix, recommendation | 1.75 | **Finding 3.** Walk the 3x4 matrix, then logistic for the shadow pilot with XGBoost as challenger - and say what would reverse it. |
+| 15 | App | 0.5 | Demo one person end to end: score, explanation, support decision, editable assumptions; missing-value preservation and optional TFM inference. |
 
-If time runs short, compress slides 4-5 and 9; do not compress 7, 10 or 12.
+If time runs short, compress slides 4-5 and 11; do not compress 9, 12 or 14.
 
 ## Questions to rehearse
 
