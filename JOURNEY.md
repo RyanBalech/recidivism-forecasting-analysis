@@ -65,8 +65,8 @@ current `main`.
 |---|---|
 | **Started** | Bootstrap CI widths + a feature-shuffle test — these measure *performance uncertainty*, not structural stability. |
 | **Replaced with** | **Structural stability**: refit each model on bootstrap resamples of the training data, then measure distance between refits (mean \|Δp\|), decision overlap (top-20% Jaccard), and drift in feature contributions (SHAP rank correlation). |
-| **Landed** | Logistic/XGBoost most stable; TabICLv2 drifts most (0.045 vs ~0.034) and has the lowest decision overlap (73%). ~1 person in 4 changes priority status across refits — scores need governance. |
-| **Disclosed** | TabICL uses 4 refits vs 8 for the others (each TabICL refit ≈73s on CPU — a stated cost trade-off, not a methodological slip). |
+| **Landed** | Historical (pre-fix, CPU, 4 TabICL refits): TabICLv2 drifted most (0.045) with 73% overlap. **Current run (GPU, 8 refits for every model):** mean \|Δp\| 0.032 / 0.035 / 0.036 and top-20% Jaccard 0.77 / 0.75 / 0.77 (logistic / XGBoost / TabICLv2) — the three models are close. Jaccard ≈ 0.76 means about 14% of the selected set is replaced between refits, not 1 person in 4. |
+| **Disclosed** | Resamples are not shared across models, and data and seed vary together; separating sampling from estimator randomness is still open (PLAN.md P1.9). |
 
 ## Fairness — the deepest iteration
 | Step | What changed | Result |
@@ -77,10 +77,12 @@ current `main`.
 | Fix 3 | **Impossibility result, split by attribute** | race base rates ≈equal (0.582/0.564) → gap **fixable**; gender differ 13.7 pts (0.591/0.454) → theorem **binds** |
 | Fix 4 | **Mitigation frontier**, first race-only | group thresholds drive race gap → ~0 keeping ~all events |
 | Fix 5 | **Extended exploratory threshold search to gender** | Historical gap 0.072 → 0.002 on the same labels used to optimize; unchanged probabilities retain unchanged calibration |
-| Fix 6 | **Race A/B + twin test** | adding race changes AUC ≤0.0007 but makes twins differ up to 4.8 pts; removing it is free + fairer, though TabICL shows proxy leakage |
+| Fix 6 | **Race A/B + twin test** | adding race changes AUC by at most about 0.001; twins differ by up to about 4.6 pts. (The earlier "TabICL proxy leakage" reading predated the gang-missingness fix and no longer holds.) |
+| Fix 7 | **FNR primary + TOST equivalence + course test table + age audit** | race gaps equivalent within ±5 pts for all models; gender FNR gap −0.10 to −0.12; age FNR gap −0.23 to −0.25 |
+| Fix 8 | **FPDP + mitigation** (course §8.2) | gender-gap candidates: gang affiliation (never recorded for women) and age; dropping gang removes the equal-opportunity rejection at about −0.014 AUC; statistical parity still rejected |
 
 - **Landed:** fairness is the centerpiece, audited at the right operating point, with inference tests,
-  a per-attribute theorem story, mitigation for both attributes, and a documented legal caveat
+  equivalence tests, FPDP diagnosis of the gender gap, a per-attribute theorem story, mitigation, and a documented legal caveat
   (group-specific policy needs independent validation and policy/legal review — shown as an analytic device,
   not a shipping option).
 - Figure: `artifacts/figures/improvement_journey.png` (left panel) shows the gender-gap path.

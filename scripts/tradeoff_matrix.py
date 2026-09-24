@@ -26,8 +26,7 @@ def main() -> None:
     m = pd.read_csv(ARTIFACT_DIR / "model_metrics.csv").set_index("model")
     st = pd.read_csv(ARTIFACT_DIR / "stability_summary.csv").set_index("model")
     inf = pd.read_csv(ARTIFACT_DIR / "fairness_inference.csv")
-    fpr = inf[(inf.rule == "top_20pct") & (inf.metric == "fpr")].pivot_table(
-        index="model", columns="attribute", values="gap")
+    # FNR = missed support, the primary fairness metric (selection means being offered help).
     fnr = inf[(inf.rule == "top_20pct") & (inf.metric == "fnr")].pivot_table(
         index="model", columns="attribute", values="gap")
     surrogate = json.loads((ARTIFACT_DIR / "interpretability_summary.json").read_text())["surrogate_fidelity_r2_test"]
@@ -47,10 +46,9 @@ def main() -> None:
         ("Score drift across refits", {x: (f"{st.loc[x,'mean_abs_prob_diff']:.3f}", None) for x in MODELS}),
         ("Top-20% overlap", {x: (f"{st.loc[x,'top20_jaccard']:.0%}", None) for x in MODELS}),
         ("FAIRNESS (top-20%)", None),
-        ("Race FNR gap", {x: (f"{fnr.loc[x,'Race']:.3f}", None) for x in MODELS}),
-        ("Gender FNR gap", {x: (f"{fnr.loc[x,'Gender']:.3f}", None) for x in MODELS}),
-        ("Race FPR gap", {x: (f"{fpr.loc[x,'Race']:.3f}", None) for x in MODELS}),
-        ("Gender FPR gap", {x: (f"{fpr.loc[x,'Gender']:.3f}", None) for x in MODELS}),
+        ("Race FNR gap (B − W)", {x: (f"{fnr.loc[x,'Race']:+.3f}", None) for x in MODELS}),
+        ("Gender FNR gap (M − F)", {x: (f"{fnr.loc[x,'Gender']:+.3f}", None) for x in MODELS}),
+        ("Age FNR gap (<33 − 33+)", {x: (f"{fnr.loc[x,'Age']:+.3f}", None) for x in MODELS}),
         ("COST", None),
         ("Train+predict (s)", {x: (f"{m.loc[x,'fit_predict_seconds']:.1f}", None) for x in MODELS}),
         ("Auditability", {"logistic": ("high", GREEN), "xgboost": ("medium", AMBER), "tabicl": ("low", RED)}),
@@ -63,12 +61,15 @@ def main() -> None:
         "Net value @20% ($M)": m.economic_assumed_net_value,
         "Score drift across refits": st.mean_abs_prob_diff,
         "Top-20% overlap": st.top20_jaccard,
-        "Race FNR gap": fnr.Race.abs(), "Gender FNR gap": fnr.Gender.abs(),
-        "Race FPR gap": fpr.Race.abs(), "Gender FPR gap": fpr.Gender.abs(),
+        "Race FNR gap (B − W)": fnr.Race.abs(),
+        "Gender FNR gap (M − F)": fnr.Gender.abs(),
+        "Age FNR gap (<33 − 33+)": fnr.Age.abs(),
         "Train+predict (s)": m.fit_predict_seconds,
     }
-    lower_better = {"Brier loss", "Score drift across refits", "Race FPR gap",
-                    "Gender FPR gap", "Race FNR gap", "Gender FNR gap", "Train+predict (s)"}
+    lower_better = {
+        "Brier loss", "Score drift across refits", "Race FNR gap (B − W)",
+        "Gender FNR gap (M − F)", "Age FNR gap (<33 − 33+)", "Train+predict (s)",
+    }
     for label, cells in rows:
         if cells is None or any(c[1] for c in cells.values()):
             continue
@@ -116,8 +117,7 @@ def main() -> None:
         else:
             md.append(f"| {label} | " + " | ".join(cells[x][0] for x in MODELS) + " |")
     (ARTIFACT_DIR / "tradeoff_matrix.md").write_text("\n".join(md), encoding="utf-8")
-    print("\n".join(md))
-    print("\nSaved artifacts/figures/tradeoff_matrix.png and artifacts/tradeoff_matrix.md")
+    print("Saved artifacts/figures/tradeoff_matrix.png and artifacts/tradeoff_matrix.md")
 
 
 if __name__ == "__main__":

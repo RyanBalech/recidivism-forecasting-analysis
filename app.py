@@ -168,21 +168,21 @@ with tab_cmp:
     figure("pdp_ice.png", "Partial dependence (black) and individual curves, all three models")
 
 with tab_fair:
-    st.subheader("Fairness audit by race and gender")
+    st.subheader("Fairness audit by race, gender, and age")
     st.write("For beneficial support, missed access matters: inspect FNR (1 − TPR) and selection rates first. Arrest is only a proxy for need; these errors do not identify treatment benefit.")
-    figure("fairness_support_access.png", "False-negative-rate gaps at the proposed capacity rule and at 0.5; signed group differences.")
+    figure("fairness_support_access.png", "FNR and selection-rate gaps at the proposed capacity rule and at 0.5; signed group differences, dotted lines = ±5-point TOST tolerance.")
     inf = data["fairness_inference"]
     if inf is not None:
         rule = st.radio("Operating point", ["top_20pct", "threshold_0.5"], horizontal=True,
                         format_func={"top_20pct": "Deployed: top 20% by risk", "threshold_0.5": "Threshold 0.5"}.get)
-        attr = st.radio("Attribute", ["Race", "Gender"], horizontal=True)
+        attr = st.radio("Attribute", ["Race", "Gender", "Age"], horizontal=True)
         view = inf[(inf.rule == rule) & (inf.attribute == attr)].copy()
         view["Model"] = view.model.map(LABELS)
         fig = px.scatter(view, x="metric", y="gap", color="Model", error_y=view.ci_high - view.gap,
                          error_y_minus=view.gap - view.ci_low, title=f"{view.comparison.iloc[0]} gaps with 95% bootstrap CI")
         fig.add_hline(y=0, line_color="grey")
         st.plotly_chart(fig, width="stretch")
-        st.caption("A gap whose interval crosses 0 is not statistically distinguishable from no gap.")
+        st.caption("FNR = share of people who were later re-arrested but not selected for support: the harm that matters for a support programme. A gap whose interval crosses 0 is not significant; TOST in `fairness_inference.csv` tests whether it is within ±5 points.")
     if data["fairness_impossibility"] is not None:
         st.markdown("**Base rates and within-group calibration**")
         st.dataframe(data["fairness_impossibility"].round(3), width="stretch", hide_index=True)
@@ -193,7 +193,8 @@ with tab_fair:
             st.caption("Inspect subgroup sample sizes; small intersections have greater uncertainty. These point estimates do not establish fairness.")
         with st.expander("Age-group audit (descriptive, threshold 0.5)"):
             st.dataframe(data["intersectional_audit"].query("attribute == 'Age at release'").round(4), width="stretch", hide_index=True)
-    figure("fairness_frontier.png", "Group thresholds were optimized using these evaluation labels: exploratory illustration only. Thresholds change decisions, not probability calibration.")
+    figure("fairness_frontier.png", "Group-blind operating points vs group thresholds equalizing FNR. Group thresholds were optimized using these evaluation labels: exploratory illustration only, not a shipping option. Thresholds change decisions, not probability calibration.")
+    figure("fairness_dependence.png", "Which features carry the protected attribute (proxy check; association, not causation)")
     if data["race_ab_test"] is not None:
         st.markdown("**A/B test: model trained with race vs without race**")
         st.dataframe(data["race_ab_test"].round(4), width="stretch", hide_index=True)

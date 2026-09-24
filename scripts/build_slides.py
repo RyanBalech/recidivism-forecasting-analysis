@@ -82,7 +82,24 @@ metrics = pd.read_csv(ART / "model_metrics.csv").set_index("model")
 inc_auc = pd.read_csv(ART / "incumbent_discrimination.csv").set_index("ranker")["roc_auc"]
 inc_econ = pd.read_csv(ART / "incumbent_economics.csv").set_index("ranker")["assumed_net_value"]
 inf = pd.read_csv(ART / "fairness_inference.csv")
-fpr20 = inf[(inf.rule == "top_20pct") & (inf.metric == "fpr")].pivot_table(index="model", columns="attribute", values="gap")
+top20 = inf[inf.rule == "top_20pct"]
+fnr20 = top20[top20.metric == "fnr"].pivot_table(index="model", columns="attribute", values="gap")
+race_equiv = top20[(top20.attribute == "Race") & top20.metric.isin(["selection_rate", "fnr", "fpr"])] \
+    .groupby("model").equivalent_within_delta.all()
+paired = pd.read_csv(ART / "paired_comparisons.csv").set_index(["model_a", "model_b", "metric"])
+xgb_minus_logit = -paired.loc[("logistic", "xgboost", "roc_auc"), "difference_a_minus_b"]
+calib = pd.read_csv(ART / "fairness_impossibility.csv").set_index(["attribute", "group"])
+mitigation = pd.read_csv(ART / "fairness_mitigation.csv")
+drop_gang = mitigation[(mitigation.attribute == "Gender") & (mitigation.feature == "Gang_Affiliated")
+                       & mitigation.panel.str.startswith("A")].set_index("model")
+base_auc = mitigation[mitigation.panel == "baseline"].groupby("model").auc.first()
+gang_cost = base_auc["logistic"] - drop_gang.loc["logistic", "auc"]
+
+
+def span(values):
+    """Range across the three models, e.g. '-0.10 to -0.12'."""
+    lo, hi = sorted(values, key=abs)[0], sorted(values, key=abs)[-1]
+    return f"{lo:+.2f} to {hi:+.2f}".replace("+-", "-")
 pred = pd.read_csv(ART / "test_predictions.csv")
 stability = pd.read_csv(ART / "stability_summary.csv").set_index("model")
 
@@ -132,8 +149,8 @@ s = make_slide(prs); title(s, "Compare ranking, probability loss and calibration
 picture(s, FIG / "performance_calibration.png", .45, 1.72, 8.05)
 card(s, "AUC · TABICL", f"{metrics.loc['tabicl','roc_auc']:.4f}", 9.25, 1.9, PURPLE)
 card(s, "BRIER · TABICL", f"{metrics.loc['tabicl','brier']:.4f}", 9.25, 3.5, PURPLE)
-card(s, "ECE · XGBOOST", f"{metrics.loc['xgboost','ece_10']:.4f}", 9.25, 5.1, ORANGE)
-textbox(s, "Paired bootstrap compares differences directly; see paired_comparisons.csv. Results remain exploratory.", 1.0, 6.85, 11, .3, 11, GREY, True, PP_ALIGN.CENTER); footer(s, 6)
+card(s, "AUC GAP · XGB − LOGIT", f"+{xgb_minus_logit:.4f}", 9.25, 5.1, ORANGE, "paired bootstrap: significant, small")
+textbox(s, "All three models are within ~0.003 AUC; ECE differences are not significant. Performance alone cannot pick the model.", 1.0, 6.85, 11, .3, 11, GREY, True, PP_ALIGN.CENTER); footer(s, 6)
 
 # 7 — Learning curve
 s = make_slide(prs); title(s, "Which model for which agency size?", "06 · Learning curve")
@@ -164,38 +181,47 @@ textbox(s, "Jaccard is intersection / union, not the share of people switching. 
 # 11 — Fairness at the deployed point
 s = make_slide(prs); title(s, "Fairness at the proposed allocation rule", "10 · Subgroup audit")
 picture(s, FIG / "fairness_support_access.png", .4, 1.7, 8.5)
-card(s, "GENDER FPR · XGB", f"{fpr20.loc['xgboost','Gender']:.3f}", 9.35, 1.9, TEAL)
-card(s, "GENDER FPR · TABICL", f"{fpr20.loc['tabicl','Gender']:.3f}", 9.35, 3.5, RED)
-card(s, "RACE FPR · XGB", f"{fpr20.loc['xgboost','Race']:.3f}", 9.35, 5.1, ORANGE)
-textbox(s, "Different operating points produce different allocations and errors. Audit the proposed policy.", 1.0, 6.8, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 11)
+card(s, "GENDER FNR GAP (M − F)", span(fnr20["Gender"]), 9.35, 1.9, RED, "women miss support more · all significant")
+card(s, "RACE: EQUIVALENT ±5 PTS", f"{int(race_equiv.sum())} / {len(race_equiv)} models", 9.35, 3.5, TEAL, "TOST on selection, FNR, FPR")
+card(s, "AGE FNR GAP (<33 − 33+)", span(fnr20["Age"]), 9.35, 5.1, ORANGE, "age is an input: needs a stated justification")
+textbox(s, "Selection = support offered, so the harm is a missed offer: FNR is primary. Not significant ≠ fair; we test equivalence.", 1.0, 6.8, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 11)
 
 # 12 — Impossibility result
 s = make_slide(prs); title(s, "Fairness: probability scores and allocation rules", "11 · Fairness, sharpened")
-panel(s, "SCORE CALIBRATION", "Do probabilities match observed rates?\n\nReport group calibration and uncertainty\n\nChanging decision thresholds leaves probabilities unchanged", .7, 1.85, 5.75, 4.7, TEAL)
+panel(s, "SCORE CALIBRATION", f"Women are over-predicted by every model: mean score {calib.loc[('Gender', 'F'), 'mean_score_xgboost']:.2f} vs observed {calib.loc[('Gender', 'F'), 'base_rate']:.2f}\n\nYet they are selected less at the top 20%\n\nChanging decision thresholds leaves probabilities unchanged", .7, 1.85, 5.75, 4.7, TEAL)
 panel(s, "ALLOCATION ERRORS", "FPR, TPR and selection rates depend on policy\n\nEqual FPR alone is not equalized odds\n\nOur threshold frontier uses evaluation labels: illustrative, not validated", 6.85, 1.85, 5.75, 4.7, RED)
 footer(s, 12)
 
-# 13 — Improvement journey (process)
-s = make_slide(prs); title(s, "How we got here: what we tried, where we landed", "12 · Process")
+# 13 — Fairness interpretability: where the gender gap comes from
+s = make_slide(prs); title(s, "Where does the gender gap come from?", "12 · Fairness interpretability (FPDP)")
+picture(s, FIG / "fpdp_gender.png", .35, 1.65, 8.4)
+panel(s, "CANDIDATE: GANG", "Never recorded for women; imputed as \"No\"\n\n"
+      f"Drop + re-estimate: equal-opportunity p 0.000 → {drop_gang.loc['logistic', 'p_equal_opportunity']:.3f} (logistic)\n\n"
+      f"AUC cost ≈ {gang_cost:.3f}, ~{gang_cost / xgb_minus_logit:.0f}× the XGB − logistic gap\n\n"
+      "Statistical parity still rejected", 9.0, 1.65, 3.95, 5.0, RED)
+textbox(s, "FPDP identifies candidate variables (association, not causation). Mitigation is evaluated on the same labels: illustrative.", 1.0, 6.82, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 13)
+
+# 14 — Improvement journey (process)
+s = make_slide(prs); title(s, "How we got here: what we tried, where we landed", "13 · Process")
 picture(s, FIG / "improvement_journey.png", .55, 1.75, 12.2)
-textbox(s, "Full log in JOURNEY.md — every step measured, including the attempts we rejected.", 1.0, 6.82, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 13)
+textbox(s, "Full log in JOURNEY.md — every step measured, including the attempts we rejected.", 1.0, 6.82, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 14)
 
-# 14 — Trade-off matrix (required)
-s = make_slide(prs); title(s, "Which model should the client deploy?", "13 · Trade-offs across four dimensions")
-picture(s, FIG / "tradeoff_matrix.png", 2.2, 1.62, 8.9); footer(s, 14)
+# 15 — Trade-off matrix (required)
+s = make_slide(prs); title(s, "Which model should the client deploy?", "14 · Trade-offs across four dimensions")
+picture(s, FIG / "tradeoff_matrix.png", 2.2, 1.62, 8.9); footer(s, 15)
 
-# 15 — Recommendation
-s = make_slide(prs); title(s, "Pilot XGBoost; retain logistic as a transparent challenger", "14 · Recommendation")
+# 16 — Recommendation (team decision pending: see PLAN.md P0.3)
+s = make_slide(prs); title(s, "Pilot XGBoost; retain logistic as a transparent challenger", "15 · Recommendation")
 panel(s, "WHY XGBOOST", "Competitive probability loss\n\nAudit subgroup errors\n\nSHAP explanations available\n\nLow inference cost", .8, 1.8, 5.75, 4.65, TEAL)
-panel(s, "CONDITIONS", "Benefit-only allocation\n\nLogistic as transparent challenger\n\nProspective shadow validation\n\nAppeal route, logs, quarterly audits, stop rules", 6.8, 1.8, 5.75, 4.65, PURPLE); footer(s, 15)
+panel(s, "CONDITIONS", "Benefit-only allocation\n\nLogistic as transparent challenger\n\nProspective shadow validation\n\nAppeal route, logs, quarterly audits, stop rules", 6.8, 1.8, 5.75, 4.65, PURPLE); footer(s, 16)
 
-# 15 — App + roadmap
-s = make_slide(prs); title(s, "The application makes every trade-off testable", "15 · Client experience")
+# 17 — App + roadmap
+s = make_slide(prs); title(s, "The application makes every trade-off testable", "16 · Client experience")
 panel(s, "ASSESS", "Score one person, all 3 models + SHAP", .75, 1.75, 5.7, 1.72, ORANGE)
-panel(s, "AUDIT", "Race + gender, at the deployed point", 6.85, 1.75, 5.7, 1.72, PURPLE)
+panel(s, "AUDIT", "Race, gender, age at the deployed point + FPDP", 6.85, 1.75, 5.7, 1.72, PURPLE)
 panel(s, "COMPARE", "Incumbent, learning curve, matrix", .75, 3.8, 5.7, 1.72, ORANGE)
 panel(s, "SIMULATE", "Costs, capacity, sensitivity", 6.85, 3.8, 5.7, 1.72, PURPLE)
-textbox(s, "streamlit run app.py", 4.4, 6.25, 4.5, .4, 17, PALE, True, PP_ALIGN.CENTER, "Consolas"); footer(s, 16)
+textbox(s, "streamlit run app.py", 4.4, 6.25, 4.5, .4, 17, PALE, True, PP_ALIGN.CENTER, "Consolas"); footer(s, 17)
 
 REPORTS.mkdir(exist_ok=True)
 prs.save(OUT)

@@ -24,6 +24,8 @@ Models achieve approximately **0.73 ROC AUC and 0.20 Brier loss**, compared with
 Current run: TabICLv2 on **NVIDIA GeForce RTX 4050 Laptop GPU**, conventional models on CPU. Timings are hardware-specific. XGBoost minus TabICLv2 AUC is -0.00044, with paired 95% interval [-0.00230, 0.00127]; this does not establish superiority or equivalence. XGBoost reduces Brier loss by 16.4% relative to training-prevalence probabilities.
 <!-- RESULTS:END -->
 
+**Fairness at the proposed top-20% support rule** (FNR = re-arrested but not offered support): race gaps are equivalent within a ±5-point tolerance for all three models (TOST); women who are re-arrested miss support more often (FNR gap about 10–12 points), and age is the largest disparity (about 23–25 points, older people selected far less). A fairness partial dependence analysis traces the gender gap mainly to gang affiliation, which is never recorded for women; removing it costs about 0.014 AUC. See the [technical report](reports/technical_report.md#fairness).
+
 **Recommend XGBoost for a prospective shadow pilot, with logistic regression as the transparent challenger.** Model choice weighs explanation cost, subgroup errors, runtime and refit sensitivity. Small-sample TabICLv2 results do not establish transferability to smaller agencies elsewhere. Economic values are scenarios, not measured savings.
 
 The [fresh accuracy review](reports/deep_review.md) found no material improvement from deeper trees, alternate encoding, native categorical trees or sigmoid calibration. A fixed XGBoost–TabICL average is a promising research challenger (evaluation AUC 0.7332, Brier 0.2042), but its paired improvement intervals include zero and its top-capacity capture is lower. The review also measured thread-dependent XGBoost fitting differences larger than the original model-family AUC gap.
@@ -48,7 +50,7 @@ Use Python **3.11–3.13** (verified on 3.13). Version ranges are not a complete
 
 ```powershell
 python -m venv .venv
-.venv\Scripts\Activate.ps1
+.venv\Scripts\Activate.ps1              # macOS/Linux: source .venv/bin/activate
 python -m pip install -r requirements.txt
 python -m pytest -q
 python scripts/reproduce.py
@@ -56,6 +58,8 @@ streamlit run app.py
 ```
 
 The complete run regenerates dependent analyses, validates saved-model/prediction agreement, and builds notebook/slides. Allow tens of minutes or longer depending on hardware. It runs a leakage gate and a training-only [TabICLv2 ensemble sensitivity check](scripts/estimator_sweep.py); the shared 16-member configuration is then fitted on all training rows. It does not repeat historical hyperparameter search. The merged team additions include [logistic tuning](scripts/tune_logistic.py), [six-candidate ML comparison](scripts/compare_ml_models.py), and readable feature labels; their historical search artifacts are retained. Run `scripts/tune_xgboost.py` separately to explore new configurations; its output is not automatically adopted.
+
+`reproduce.py` first checks that scikit-learn matches the version pinned in `requirements.txt` (saved `.joblib` models only load with that version). It stops at the first failed step and prints how to resume (`--from-step <step>`); `--only <step> ...` reruns a subset whose inputs already exist. The fairness steps are [`fairness_audit.py`](scripts/fairness_audit.py) (FNR/selection gaps, bootstrap CIs, TOST equivalence at ±5 points, course test table, age audit, frontier) and [`fairness_interpretability.py`](scripts/fairness_interpretability.py) (FPDP, proxy dependence, candidate-variable removal and re-estimation; logistic and XGBoost only).
 
 `python scripts/train_evaluate.py --skip-tabicl` writes a conventional-model smoke run to `artifacts/smoke/`, preserving published three-model artifacts. `--output-dir PATH` supports isolated training outputs. The app reads `artifacts/`; live TabICLv2 inference is opt-in. `python scripts/validate_project.py` audits existing predictions and runs conventional-model CV.
 

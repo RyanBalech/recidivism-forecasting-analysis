@@ -52,9 +52,28 @@ display(split.X_train.isna().mean().sort_values(ascending=False).head(10))
     code("stability = A('stability_summary.csv'); stability['selected_set_replacement'] = (1-stability.top20_jaccard)/(1+stability.top20_jaccard); display(stability)"),
     md("## Fairness\n\nThresholds change decisions, not calibration of unchanged probabilities. Equal FPR alone is not equalized odds. The group-threshold frontier optimizes using evaluation labels: an optimistic in-sample illustration, not validated mitigation. Removing race does not remove proxies or prove counterfactual fairness."),
     code("display(A('fairness_inference.csv')); display(A('intersectional_audit.csv')); display(A('race_ab_test.csv'))"),
+    md("### Equivalence tests and course test table\n\nFor a support programme the harm is a missed offer, so FNR (equal opportunity) and selection rate (statistical parity) are primary; FPR is secondary. A difference test that fails to reject does not show fairness: `equivalent_within_delta` is a TOST at a pre-set ±5-point tolerance, and an interval that is neither significant nor equivalent is inconclusive. The course table gives p-values at the top-20% rule; conditional statistical parity conditions on the historical supervision score."),
+    code("inf = A('fairness_inference.csv'); display(inf[(inf.rule == 'top_20pct') & inf.metric.isin(['fnr', 'selection_rate', 'fpr'])]); display(A('fairness_tests.csv')); display(A('fairness_age_bands.csv')); display(A('fairness_frontier.csv').query(\"method == 'group_thresholds_equal_fnr'\"))"),
+    md("### Fairness interpretability (FPDP) and mitigation\n\nFPDP varies one input and re-evaluates the equal-opportunity test for logistic and XGBoost (TabICLv2 is excluded for compute cost). Candidate variables are diagnostic associations, not causes; removal and re-estimation report the AUC cost alongside the fairness change."),
+    code("display(A('fairness_candidates.csv')); display(A('fairness_mitigation.csv'))"),
+    md("""### Fairness findings at the top-20% rule
+
+Each gap is classified with the pre-set ±5-point tolerance: **equivalent** (TOST rejects a gap of 5 points or more), **different** (the 95% bootstrap interval excludes 0 and TOST does not show equivalence), or **inconclusive** (neither). A gap can be both significant and equivalent: nonzero, but within the tolerance. The 90+ intervals in this section are not adjusted for multiple testing. The TOST uses an analytic variance and the intervals use the bootstrap, so borderline cases can disagree (e.g. logistic race predictive equality: chi-squared p ≈ 0.049, bootstrap interval includes 0)."""),
+    code("""inf = A('fairness_inference.csv')
+top = inf[(inf.rule == 'top_20pct') & inf.metric.isin(['selection_rate', 'fnr', 'fpr'])].copy()
+top['status'] = ['equivalent' if e else 'different' if s else 'inconclusive'
+                 for e, s in zip(top.equivalent_within_delta, top.significant)]
+display(top.pivot_table(index=['attribute', 'metric'], columns='model', values='status', aggfunc='first'))
+display(top.pivot_table(index=['attribute', 'metric'], columns='model', values='gap').round(3))"""),
+    md("""- **Race:** selection-rate, FNR and FPR gaps are equivalent within ±5 points for all three models. For XGBoost and TabICLv2 the selection and FPR gaps (about +2 points, Black minus White) are also significant: real but small, and in the direction of more support offered to Black people.
+- **Gender:** women who are later re-arrested miss support more often (FNR gap M − F about −0.10 to −0.12, different for all models). Every model over-predicts women (mean score about 0.52 vs observed 0.45; ECE about 0.07 vs about 0.01–0.02 for men), yet women are selected less at the top 20%. Sufficiency is also rejected for gender.
+- **Age:** the largest disparity. The FNR gap (under 33 minus 33+) is about −0.23 to −0.25; about 97% of re-arrested people aged 48+ are not selected, vs about 49% at 18–22. Age is a model input and a validated risk factor, but in a support programme that choice needs an explicit justification (need vs risk).
+- **FPDP (gender):** candidate variables are `Gang_Affiliated` and `Age_at_Release`. Gang affiliation is never recorded for women and is imputed as "No", so it acts as a gender-aligned measurement artefact (Cramér's V with gender = 1.0 on the raw field). Dropping it and re-estimating removes the equal-opportunity rejection (logistic p 0.000 → 0.995; XGBoost → 0.67) at about −0.014 AUC, roughly six times the XGBoost − logistic gap. Statistical parity is still rejected.
+- **Caveats:** candidate selection, the neutral value in Panel B and the mitigation are all evaluated on the same evaluation labels, so they are illustrative, not validated. A p-value above 0.05 after mitigation is not evidence of fairness; equivalence would be. Group-specific thresholds remain an analytic device only."""),
 ]
 for name in ["performance_calibration", "incumbent_benchmark", "learning_curve", "shap_individual",
-             "pdp_ice", "structural_stability", "fairness_support_access", "fairness_operating_point", "fairness_frontier", "tradeoff_matrix"]:
+             "pdp_ice", "structural_stability", "fairness_support_access", "fairness_operating_point", "fairness_frontier", "fairness_dependence",
+             "tradeoff_matrix"]:
     nb.cells.append(code(f"display(Image(filename=str(ROOT / 'artifacts/figures/{name}.png'), width=1000))"))
 nb.cells.extend([
     md("## Recommendation\n\nPilot XGBoost prospectively with logistic as a transparent challenger. Weigh errors, explanation cost, refit stability and runtime together. Small-sample results do not establish suitability for smaller agencies elsewhere. Require independent validation, benefit evidence, corrections/appeals and monitoring before real allocation. No adverse use."),
