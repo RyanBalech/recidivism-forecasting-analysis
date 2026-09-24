@@ -44,15 +44,19 @@ Local sensitivity for the same person across all three models and a transformed-
 
 ## Stability
 
-Bootstrap refits compare probability drift, rank correlation and top-capacity Jaccard overlap. All three models use eight refits. Pairwise comparisons share refits and are not independent samples.
+The [end-to-end review](end_to_end_review.md) adds exact three-model reproduction evidence, a paired CPU/CUDA benchmark and a supplementary Holm correction of the 54 course fairness difference tests. Raw fairness results below remain exploratory. Inspection of XPER's installed kernel implementation found unconstrained weighted regression without endpoint constraints, explaining why reconstruction of sample AUC is not guaranteed.
 
-Jaccard is intersection divided by union, **not the fraction of all people changing status**. For equal-size selected sets, Jaccard J implies a replaced fraction `(1-J)/(1+J)` of each selected set. Overlap around 0.73–0.77 implies about 13–15% replacement among selected people, not one quarter of the cohort changing status.
+Bootstrap refits compare probability drift, rank correlation and top-capacity Jaccard overlap. All three models use the same eight bootstrap samples and fixed algorithm seeds, isolating training-data sensitivity. Sample hashes are recorded in `stability_protocol.json`. Pairwise comparisons share refits and are not independent samples.
+
+Jaccard is intersection divided by union, **not the fraction of all people changing status**. For equal-size selected sets, Jaccard J implies a replaced fraction `(1-J)/(1+J)` of each selected set. The paired rerun gives mean Jaccard 0.7725 (logistic), 0.7468 (XGBoost), and 0.7758 (TabICL). These correspond approximately to 13–15% replacement among selected people. TabICL has the highest overlap point estimate; logistic has the smallest probability drift. Neither difference establishes a population ranking from eight refits.
 
 Refit sensitivity does not measure temporal drift. Random subsets of one historical cohort do not prove suitability for smaller agencies elsewhere.
 
 ## Fairness
 
 Report FPR, TPR, selection rates, precision, Brier and calibration by race, gender and age (under 33 vs 33 or older), plus descriptive race-by-gender intersections and denominators. Small intersections and single-class groups have less reliable or undefined statistics. The section contains more than 90 intervals and tests with no multiple-testing correction; read them as an exploratory audit.
+
+The supplementary [Holm sensitivity analysis](../artifacts/end_to_end/fairness_tests_holm.csv) adjusts the family of 54 course difference tests: rejections decrease from 41 to 32. No race test survives; gender and age equal-opportunity differences remain. Subsequent significance statements describe the original unadjusted results. This correction does not cover TOST or the evaluation-driven mitigation search.
 
 For beneficial support, prioritize missed access (FNR = 1 − TPR) and selection rates; retain FPR as a secondary allocation-error measure. In the course notation, selection is the favorable output and a re-arrested person is the one who needs it, so the course's equal opportunity is our equal FNR. Arrest is only a proxy for need and does not identify who benefits from support.
 

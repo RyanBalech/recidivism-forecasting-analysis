@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 from recidivism.config import ARTIFACT_DIR, FIGURE_DIR, RANDOM_SEED
 from recidivism.data import load_official_split
-from recidivism.modeling import TABICL_ESTIMATORS, tabicl_frames
+from recidivism.modeling import TABICL_CHECKPOINT, TABICL_ESTIMATORS, tabicl_frames
 
 GRID = [1, 2, 4, 8, 16, 32, 64]
 CHOSEN = TABICL_ESTIMATORS
@@ -42,6 +42,7 @@ def main() -> None:
     for n in GRID:
         start = time.perf_counter()
         m = TabICLClassifier(
+            checkpoint_version=TABICL_CHECKPOINT,
             n_estimators=n,
             batch_size=1,
             kv_cache="repr",

@@ -1,4 +1,4 @@
 model,mean_abs_prob_diff,p95_abs_prob_diff,rank_correlation,top20_jaccard,refits
 logistic,0.0322,0.0836,0.9754,0.7725,8
-tabicl,0.0362,0.0931,0.9711,0.7698,8
-xgboost,0.0346,0.09,0.9713,0.7548,8
+tabicl,0.035,0.0903,0.9723,0.7758,8
+xgboost,0.0351,0.091,0.9714,0.7468,8

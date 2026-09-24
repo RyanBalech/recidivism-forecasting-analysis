@@ -1,6 +1,6 @@
 """Structural stability: does the model itself stay the same when the training data wiggles?
 
-Each model is refitted on bootstrap resamples of the training set (different seed each time).
+Each model is refitted on the same bootstrap resamples with its algorithm seed fixed.
 Between every pair of refits we measure, on the fixed test set:
 - distance among models: mean |p_i - p_j| and Spearman rank correlation of scores;
 - decision stability: overlap (Jaccard) of the top-20% selected individuals;
@@ -12,6 +12,8 @@ ensemble practical on supported hardware.
 from __future__ import annotations
 
 import itertools
+import hashlib
+import json
 import sys
 import time
 from pathlib import Path
@@ -58,16 +60,22 @@ def shap_importance(pipe, X_sample: pd.DataFrame, kind: str) -> pd.Series:
 def main() -> None:
     split = load_official_split()
     rng = np.random.default_rng(7)
+    # Paired data perturbations across model families, with algorithm seeds fixed.
+    samples = [rng.integers(0, len(split.X_train), len(split.X_train))
+               for _ in range(max(REFITS.values()))]
+    protocol = {"bootstrap_seed": 7, "model_seed": 42, "paired_across_models": True,
+                "scope": "Training-data sensitivity with fixed algorithm seeds; pairwise summaries are dependent",
+                "sample_sha256": [hashlib.sha256(i.astype("<i8").tobytes()).hexdigest() for i in samples]}
+    (ARTIFACT_DIR / "stability_protocol.json").write_text(json.dumps(protocol, indent=2), encoding="utf-8")
     X_sample = split.X_test.sample(600, random_state=0)
-    k = int(round(len(split.X_test) * CAPACITY))
     pair_rows, contrib_rows = [], []
     for name, n_refits in REFITS.items():
         preds, importances = [], []
         for seed in range(n_refits):
-            idx = rng.integers(0, len(split.X_train), len(split.X_train))
+            idx = samples[seed]
             X, y = split.X_train.iloc[idx].reset_index(drop=True), split.y_train.iloc[idx].reset_index(drop=True)
             start = time.perf_counter()
-            p, model = refit(name, X, y, split.X_test, seed)
+            p, model = refit(name, X, y, split.X_test, 42)
             preds.append(p)
             if model is not None:
                 importances.append(shap_importance(model, X_sample, name))
@@ -77,6 +85,7 @@ def main() -> None:
             top_j = set(np.flatnonzero(capacity_selection(preds[j], CAPACITY)))
             pair_rows.append({
                 "model": name,
+                "refit_i": i, "refit_j": j,
                 "mean_abs_prob_diff": float(np.mean(np.abs(preds[i] - preds[j]))),
                 "p95_abs_prob_diff": float(np.quantile(np.abs(preds[i] - preds[j]), 0.95)),
                 "rank_correlation": float(spearmanr(preds[i], preds[j]).statistic),
@@ -97,7 +106,7 @@ def main() -> None:
     contrib = pd.DataFrame(contrib_rows)
     pairs.to_csv(ARTIFACT_DIR / "stability_pairs.csv", index=False)
     contrib.to_csv(ARTIFACT_DIR / "stability_contributions.csv", index=False)
-    summary = pairs.groupby("model").mean().round(4)
+    summary = pairs.drop(columns=["refit_i", "refit_j"]).groupby("model").mean().round(4)
     summary["refits"] = pd.Series(REFITS)
     summary.to_csv(ARTIFACT_DIR / "stability_summary.csv")
     print(summary.to_string())

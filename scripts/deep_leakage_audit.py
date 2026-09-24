@@ -27,7 +27,7 @@ def check_release_features(features, release_columns):
         raise ValueError(f"Forbidden or unavailable-at-first-release features: {sorted(bad)}")
 
 
-def audit():
+def audit(include_prediction_sensitivity=True):
     split = load_official_split()
     released = pd.read_csv(ROOT / "nij-challenge2021_test_dataset_1.csv")
     raw = pd.read_csv(DATA_PATH)
@@ -40,6 +40,12 @@ def audit():
         before = source.set_index("ID")[FEATURE_COLUMNS].sort_index()
         after = raw.set_index("ID").loc[before.index, FEATURE_COLUMNS]
         pd.testing.assert_frame_equal(before, after, check_dtype=False)
+    outcome_columns = [TARGET, *[f"Recidivism_Arrest_Year{i}" for i in (1, 2, 3)]]
+    original_outcomes = original_train.set_index("ID")[outcome_columns].sort_index()
+    pd.testing.assert_frame_equal(
+        original_outcomes, raw.set_index("ID").loc[original_outcomes.index, outcome_columns],
+        check_dtype=False,
+    )
     filled_train, filled_test = tabicl_frames(split.X_train, split.X_test)
     cat = split.X_train.select_dtypes(exclude="number").columns
     assert not filled_train[cat].isna().any().any()
@@ -64,14 +70,19 @@ def audit():
         return pd.util.hash_pandas_object(frame.astype("string").fillna("__MISSING__"), index=False)
     a, b = hashes(split.X_train), hashes(split.X_test)
     shared = set(a) & set(b)
-    pred = pd.read_csv(ROOT / "artifacts/test_predictions.csv")
-    np.testing.assert_array_equal(pred.ID, split.audit_test.ID)
-    keep = ~b.isin(shared)
-    duplicate_sensitivity = {name: float(roc_auc_score(pred.actual[keep], pred[f"p_{name}"][keep]))
-                             for name in ["logistic", "xgboost", "tabicl"]}
+    duplicate_sensitivity = None
+    prediction_path = ROOT / "artifacts/test_predictions.csv"
+    if include_prediction_sensitivity and prediction_path.exists():
+        pred = pd.read_csv(prediction_path)
+        np.testing.assert_array_equal(pred.ID, split.audit_test.ID)
+        np.testing.assert_array_equal(pred.actual, split.y_test)
+        keep = ~b.isin(shared)
+        duplicate_sensitivity = {name: float(roc_auc_score(pred.actual[keep], pred[f"p_{name}"][keep]))
+                                 for name in ["logistic", "xgboost", "tabicl"]}
     return {
         "checks_passed": ["official split IDs", "independent first-release feature schema",
-            "baseline values unchanged since official releases", "training-only categorical modes",
+            "baseline values unchanged since official releases", "training outcomes match original release",
+            "training-only categorical modes",
             "no explicit protected/ID/split/target feature", "no categorical NaN into TabICL"],
         "train_rows": len(split.X_train), "evaluation_rows": len(split.X_test),
         "cross_split_identical_feature_patterns": len(shared),

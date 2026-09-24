@@ -8,8 +8,8 @@
 | Local explanation | coefficients | SHAP + surrogate | none native |
 | Global surrogate fidelity | exact (linear) | tree R²=0.61 | PDP/ICE only |
 | **STABILITY** | | | |
-| Score drift across refits | 0.032 | 0.035 | 0.036 |
-| Top-20% overlap | 77% | 75% | 77% |
+| Score drift across refits | 0.032 | 0.035 | 0.035 |
+| Top-20% overlap | 77% | 75% | 78% |
 | **FAIRNESS (top-20%)** | | | |
 | Race FNR gap (B − W) | -0.005 | -0.017 | -0.023 |
 | Gender FNR gap (M − F) | -0.096 | -0.112 | -0.124 |

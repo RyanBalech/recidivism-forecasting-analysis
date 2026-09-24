@@ -1,0 +1,55 @@
+model,attribute,protected_group,test,p_raw,p_holm,reject_holm_005
+logistic,Race,WHITE,statistical_parity,0.1156822258191817,1.0,False
+logistic,Gender,F,statistical_parity,8.276590450374886e-12,2.89680665763121e-10,True
+logistic,Age,33 or older,statistical_parity,5.785265735181938e-123,3.1240434969982466e-121,True
+xgboost,Race,WHITE,statistical_parity,0.0127488594714538,0.233815054065147,False
+xgboost,Gender,F,statistical_parity,1.93793553563466e-13,7.170361481848242e-12,True
+xgboost,Age,33 or older,statistical_parity,3.608630264147736e-112,1.8764877373568226e-110,True
+tabicl,Race,WHITE,statistical_parity,0.0031830501884791,0.0668440539580611,False
+tabicl,Gender,F,statistical_parity,6.928057978006213e-15,2.701942611422423e-13,True
+tabicl,Age,33 or older,statistical_parity,4.3519711121849926e-116,2.3065446894580463e-114,True
+logistic,Race,WHITE,conditional_statistical_parity,0.5904892678465216,1.0,False
+logistic,Gender,F,conditional_statistical_parity,1.4085387828430844e-11,4.789031861666487e-10,True
+logistic,Age,33 or older,conditional_statistical_parity,4.829769467197968e-52,2.1733962602390856e-50,True
+xgboost,Race,WHITE,conditional_statistical_parity,0.1342265484182364,1.0,False
+xgboost,Gender,F,conditional_statistical_parity,3.252920147579785e-13,1.1710512531287226e-11,True
+xgboost,Age,33 or older,conditional_statistical_parity,7.264804716503665e-46,3.123866028096576e-44,True
+tabicl,Race,WHITE,conditional_statistical_parity,0.0451224522099327,0.6768367831489904,False
+tabicl,Gender,F,conditional_statistical_parity,1.2301638149919956e-14,4.674622496969584e-13,True
+tabicl,Age,33 or older,conditional_statistical_parity,9.49261202112208e-52,4.1767492892937154e-50,True
+logistic,Race,WHITE,equal_opportunity,0.73041003522416,1.0,False
+logistic,Gender,F,equal_opportunity,2.5962615392662582e-05,0.0006490653848165646,True
+logistic,Age,33 or older,equal_opportunity,5.245821494268207e-73,2.5179943172487395e-71,True
+xgboost,Race,WHITE,equal_opportunity,0.2263831465394215,1.0,False
+xgboost,Gender,F,equal_opportunity,1.0489956086578524e-06,3.146986825973557e-05,True
+xgboost,Age,33 or older,equal_opportunity,2.188270045256514e-63,1.0066042208179964e-61,True
+tabicl,Race,WHITE,equal_opportunity,0.093701963098868,1.0,False
+tabicl,Gender,F,equal_opportunity,6.91515799398759e-08,2.143698978136153e-06,True
+tabicl,Age,33 or older,equal_opportunity,2.634516055136306e-68,1.2382225459140638e-66,True
+logistic,Race,WHITE,predictive_equality,0.0492056605548072,0.6888792477673008,False
+logistic,Gender,F,predictive_equality,0.0017281569515375,0.0397476098853625,True
+logistic,Age,33 or older,predictive_equality,2.599587904852187e-30,1.0918269200379185e-28,True
+xgboost,Race,WHITE,predictive_equality,0.0174923300291406,0.2973696104953902,False
+xgboost,Gender,F,predictive_equality,0.0023414839963286,0.0515126479192292,False
+xgboost,Age,33 or older,predictive_equality,5.324366034060509e-30,2.182990073964809e-28,True
+tabicl,Race,WHITE,predictive_equality,0.012306055477113,0.233815054065147,False
+tabicl,Gender,F,predictive_equality,0.001610801285058,0.038659230841392,True
+tabicl,Age,33 or older,predictive_equality,2.896354759587235e-28,1.158541903834894e-26,True
+logistic,Race,WHITE,equalized_odds,0.1362138372614238,1.0,False
+logistic,Gender,F,equalized_odds,1.0620469194333048e-06,3.146986825973557e-05,True
+logistic,Age,33 or older,equalized_odds,4.476188051274256e-100,2.2828559061498706e-98,True
+xgboost,Race,WHITE,equalized_odds,0.0285851775467658,0.4573628407482528,False
+xgboost,Gender,F,equalized_odds,6.503920362360336e-08,2.0812545159553076e-06,True
+xgboost,Age,33 or older,equalized_odds,3.5390183132708793e-90,1.734118973502731e-88,True
+tabicl,Race,WHITE,equalized_odds,0.0106956927652651,0.213913855305302,False
+tabicl,Gender,F,equalized_odds,3.338128706220736e-09,1.1015824730528429e-07,True
+tabicl,Age,33 or older,equalized_odds,2.3342078535677363e-93,1.1671039267838682e-91,True
+logistic,Race,WHITE,sufficiency,0.9836364435569502,1.0,False
+logistic,Gender,F,sufficiency,5.444699892277967e-06,0.00014156219719922713,True
+logistic,Age,33 or older,sufficiency,0.6526285841359433,1.0,False
+xgboost,Race,WHITE,sufficiency,0.8588692542953271,1.0,False
+xgboost,Gender,F,sufficiency,4.260100520845424e-06,0.00011502271406282644,True
+xgboost,Age,33 or older,sufficiency,0.3091006442832915,1.0,False
+tabicl,Race,WHITE,sufficiency,0.7433170574894005,1.0,False
+tabicl,Gender,F,sufficiency,3.774786958712974e-06,0.00010569403484396328,True
+tabicl,Age,33 or older,sufficiency,0.6897777632478231,1.0,False

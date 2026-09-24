@@ -32,6 +32,7 @@ The [fresh accuracy review](reports/deep_review.md) found no material improvemen
 
 ## Results and deliverables
 
+- [End-to-end review](reports/end_to_end_review.md): fresh three-model reproduction, actual GPU checks, CPU/CUDA comparison, paired stability refits, leakage gates and artifact integrity. Run `python scripts/end_to_end_audit.py` to check published results.
 - [Fresh leakage and accuracy review](reports/deep_review.md): independent release checks, 144 inner-fold XGBoost fits, calibration, native categorical trees, and a fixed ensemble challenger. Reproduce with the commands in that report.
 - [Exact performance](artifacts/model_metrics.csv), [probability baselines and Brier skill](artifacts/validation_baselines.csv)
 - [Paired model differences with bootstrap intervals](artifacts/paired_comparisons.csv), [fixed-configuration training CV](artifacts/validation_cv.csv)

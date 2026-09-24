@@ -48,7 +48,7 @@ display(split.X_train.isna().mean().sort_values(ascending=False).head(10))
     code("diagnostics = ROOT / 'artifacts/xper_diagnostics.csv'\nif diagnostics.exists(): display(pd.read_csv(diagnostics))"),
     md("Logistic odds ratios below are per transformed unit (numeric inputs are standardized), not causal effects. Local sensitivity changes one field of the same explained person for all three models; it is not an additive attribution."),
     code("display(A('logistic_coefficients.csv')); display(A('local_sensitivity.csv'))"),
-    md("## Stability\n\nJaccard is intersection/union, not the fraction of people retaining status. At equal selected-set size, replaced fraction is (1-J)/(1+J). Refits do not measure temporal stability; pairwise comparisons share refits."),
+    md("## Stability\n\nAll models use the same eight bootstrap samples and fixed algorithm seeds to isolate training-data sensitivity. Sample hashes are in artifacts/stability_protocol.json. Jaccard is intersection/union, not the fraction of people retaining status. At equal selected-set size, replaced fraction is (1-J)/(1+J). Refits do not measure temporal stability; pairwise comparisons share refits."),
     code("stability = A('stability_summary.csv'); stability['selected_set_replacement'] = (1-stability.top20_jaccard)/(1+stability.top20_jaccard); display(stability)"),
     md("## Fairness\n\nThresholds change decisions, not calibration of unchanged probabilities. Equal FPR alone is not equalized odds. The group-threshold frontier optimizes using evaluation labels: an optimistic in-sample illustration, not validated mitigation. Removing race does not remove proxies or prove counterfactual fairness."),
     code("display(A('fairness_inference.csv')); display(A('intersectional_audit.csv')); display(A('race_ab_test.csv'))"),
@@ -78,6 +78,8 @@ for name in ["performance_calibration", "incumbent_benchmark", "learning_curve",
 nb.cells.extend([
     md("## Recommendation\n\nPilot XGBoost prospectively with logistic as a transparent challenger. Weigh errors, explanation cost, refit stability and runtime together. Small-sample results do not establish suitability for smaller agencies elsewhere. Require independent validation, benefit evidence, corrections/appeals and monitoring before real allocation. No adverse use."),
     code("display(json.loads((ROOT/'artifacts/validation_manifest.json').read_text()))"),
+    md("## End-to-end audit\n\nA fresh three-model run exactly reproduced the published probabilities. See reports/end_to_end_review.md for the data boundaries, actual GPU checks and CPU/CUDA experiment. Holm correction of 54 course difference tests reduces rejections from 41 to 32; no race test survives, while gender and age equal-opportunity differences remain. This does not adjust TOST or mitigation selection."),
+    code("adjusted = ROOT / 'artifacts/end_to_end/fairness_tests_holm.csv'\nif adjusted.exists(): display(pd.read_csv(adjusted))"),
     md("References and requirement coverage: reports/research_review.md. Detailed methodological limits: reports/technical_report.md."),
 ])
 OUT.parent.mkdir(exist_ok=True)

@@ -41,6 +41,7 @@ LOGIT_PARAMS = dict(C=0.2154, penalty="l1")  # CV AUC 0.7324; C in [0.05, 1] is 
 # scripts/estimator_sweep.py. Keep this in one place so the app, main fit and
 # all secondary audits use the same foundation-model ensemble.
 TABICL_ESTIMATORS = 16
+TABICL_CHECKPOINT = "tabicl-classifier-v2-20260212.ckpt"
 
 
 def ordinal_encode(frame: pd.DataFrame) -> pd.DataFrame:
@@ -150,4 +151,5 @@ def tabicl_model(random_state=42):
     """One shared inference configuration for training, app and secondary audits."""
     from tabicl import TabICLClassifier
     return TabICLClassifier(n_estimators=TABICL_ESTIMATORS, batch_size=1, kv_cache="repr",
+                            checkpoint_version=TABICL_CHECKPOINT,
                             random_state=random_state, n_jobs=-1)

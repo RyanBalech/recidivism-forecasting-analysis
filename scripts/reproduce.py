@@ -19,7 +19,7 @@ STEPS = ["leakage_audit", "estimator_sweep", "train_evaluate", "incumbent_benchm
          "fairness_interpretability", "validate_project", "learning_curve", "interpretability",
          "stability_structural", "race_ab_test", "xper_attribution",
          "tradeoff_matrix", "improvement_journey", "refresh_readme", "build_notebook",
-         "build_slides", "build_prevalidation_pdf"]
+         "build_slides", "build_prevalidation_pdf", "end_to_end_audit"]
 
 
 def check_environment():
@@ -48,6 +48,11 @@ def main():
     check_environment()
     env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
     for step in steps:
+        if step == "build_notebook":
+            # Refresh the adjusted fairness table before the notebook consumes it.
+            # The final audit runs again to hash and check rebuilt deliverables.
+            subprocess.run([sys.executable, str(ROOT / "scripts/end_to_end_audit.py")],
+                           cwd=ROOT, env=env, check=True)
         print(f"Running {step}", flush=True)
         start = time.perf_counter()
         result = subprocess.run([sys.executable, str(ROOT / "scripts" / f"{step}.py")], cwd=ROOT, env=env)

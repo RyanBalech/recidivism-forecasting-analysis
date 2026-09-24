@@ -174,8 +174,8 @@ textbox(s, "TabICLv2 has no native explanation path — a real deployment cost, 
 # 10 — Stability
 s = make_slide(prs); title(s, "Structural stability across refits on resampled data", "09 · Stability")
 picture(s, FIG / "structural_stability.png", .5, 1.75, 8.3)
-card(s, "SCORE DRIFT · TABICL", f"{stability.loc['tabicl','mean_abs_prob_diff']:.3f}", 9.35, 1.9, RED)
-card(s, "TABICL JACCARD", f"{stability.loc['tabicl','top20_jaccard']:.1%}", 9.35, 3.5, ORANGE)
+card(s, "SCORE DRIFT · TABICL", f"{stability.loc['tabicl','mean_abs_prob_diff']:.3f}", 9.35, 1.9, PURPLE)
+card(s, "TABICL JACCARD", f"{stability.loc['tabicl','top20_jaccard']:.1%}", 9.35, 3.5, TEAL)
 textbox(s, "Jaccard is intersection / union, not the share of people switching. Refit sensitivity is not temporal validation.", 1.0, 6.75, 11, .4, 11, GREY, True, PP_ALIGN.CENTER); footer(s, 10)
 
 # 11 — Fairness at the deployed point

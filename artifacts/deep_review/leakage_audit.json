@@ -3,6 +3,7 @@
     "official split IDs",
     "independent first-release feature schema",
     "baseline values unchanged since official releases",
+    "training outcomes match original release",
     "training-only categorical modes",
     "no explicit protected/ID/split/target feature",
     "no categorical NaN into TabICL"

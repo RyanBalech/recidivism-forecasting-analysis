@@ -74,7 +74,7 @@ def main() -> None:
         sys.exit(1)
     sys.path.insert(0, str(ROOT / "scripts"))
     from deep_leakage_audit import audit
-    independent = audit()
+    independent = audit(include_prediction_sensitivity=False)
     print("Independent original-release checks:", independent["checks_passed"])
     print("CHECKS PASSED within scope. Proxy information, measurement timing and evaluation reuse remain limitations.")
 

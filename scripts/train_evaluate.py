@@ -10,6 +10,7 @@ them only after prediction to compare performance, fairness, and stability.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import platform
@@ -62,6 +63,8 @@ def save_json(value, path: Path) -> None:
 
 def fit_models(include_tabicl: bool = True) -> tuple[dict, dict[str, np.ndarray], dict]:
     """Fit the models and return held-out probabilities, never hard labels."""
+    from deep_leakage_audit import audit as release_audit
+    release_audit(include_prediction_sensitivity=False)
     split = load_official_split()
     models, predictions, timings = {}, {}, {}
 
@@ -71,6 +74,7 @@ def fit_models(include_tabicl: bool = True) -> tuple[dict, dict[str, np.ndarray]
         ("logistic", logistic_model(split.X_train)),
         ("xgboost", xgboost_model(split.X_train)),
     ]:
+        print(f"Fitting {name} on training rows", flush=True)
         start = time.perf_counter()
         model.fit(split.X_train, split.y_train)
         # Column 1 is P(recidivism=1), the quantity needed for Brier score,
@@ -81,6 +85,7 @@ def fit_models(include_tabicl: bool = True) -> tuple[dict, dict[str, np.ndarray]
         joblib.dump(model, MODEL_DIR / f"{name}.joblib", compress=3)
 
     if include_tabicl:
+        print("Fitting TabICL and predicting the evaluation cohort", flush=True)
         # Imported here so a quick --skip-tabicl CPU run does not load PyTorch
         # or require the foundation-model checkpoint.
         train_num, test_num = tabicl_frames(split.X_train, split.X_test)
@@ -115,6 +120,7 @@ def audit(models: dict, predictions: dict[str, np.ndarray], context: dict) -> No
         shuffled[col] = rng.permutation(shuffled[col].to_numpy())
 
     for name, p in predictions.items():
+        print(f"Auditing {name}: metrics, uncertainty and feature sensitivity", flush=True)
         # Keep one row per held-out person so reviewers can compare all models
         # against the same observed outcome and demographic audit attributes.
         pred_frame[f"p_{name}"] = p
@@ -204,6 +210,9 @@ def audit(models: dict, predictions: dict[str, np.ndarray], context: dict) -> No
         "features": list(split.X_train.columns),
         "protected_attributes_used_for_audit_only": ["Gender", "Race"],
         "tabicl_estimators": TABICL_ESTIMATORS if "tabicl" in predictions else 0,
+        "tabicl_checkpoint_sha256": hashlib.sha256(Path(models["tabicl"].model_path_).read_bytes()).hexdigest()
+            if "tabicl" in predictions else None,
+        "tabicl_checkpoint": models["tabicl"].checkpoint_version if "tabicl" in predictions else None,
         "tabicl_device": str(models["tabicl"].device_) if "tabicl" in predictions and hasattr(models["tabicl"], "device_") else "auto/not recorded",
     }, ARTIFACT_DIR / "run_manifest.json")
     make_figures(split.y_test, predictions, metrics, fairness, importance)

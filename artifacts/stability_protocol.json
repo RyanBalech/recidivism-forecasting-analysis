@@ -1,0 +1,16 @@
+{
+  "bootstrap_seed": 7,
+  "model_seed": 42,
+  "paired_across_models": true,
+  "scope": "Training-data sensitivity with fixed algorithm seeds; pairwise summaries are dependent",
+  "sample_sha256": [
+    "bf21da22f9b14d4289571b6f42bcb8070c85eeaff7d0682bd154f00c1e136844",
+    "8499984d397d45760d0eae4c3e44ada552f62ad4ff6a10f90406fa6e75d0f719",
+    "c71c615d59e3202e447cbb2b78b9a9d53cbb74d89170528f85a98402095607fb",
+    "fc19e9d58a71f57a8faa36ad1f0ed3aa48aec094da355d77c0411551d2259cd8",
+    "b50c25aa951cf0161c328106e5e9917d3099e60f718649cec387e4580841ef16",
+    "81591ee6eb92bbc5019c6ad0ab79d0ecc105cdf80568ecb2dd4ace9d7ebc7fec",
+    "f1725058986dc0dab9e1a397ba4d00bf9f46bbf7aeade3883635cefc01728c04",
+    "9f9a79e73a1fa30a38c2360774f72a7771fe626d0aeedade74bd8e807b3073d4"
+  ]
+}
