@@ -329,6 +329,224 @@ textbox(s, f"{contested_share:.0%} of decisions flip between refits, and about {
         f"Abstaining on them raises precision and WIDENS the gender gap: women are concentrated at the margin.",
         .8, 6.72, 11.7, .45, 11, ORANGE, True, PP_ALIGN.CENTER)
 
+# ---------------------------------------------------------------- SPEAKER NOTES
+# Written into the notes pane so they appear in presenter view and travel with the
+# file. Timings total 13 minutes across the 13 core slides, leaving a two-minute
+# buffer in the 15-minute slot. Appendix slides carry the cue for when to jump to them.
+NOTES = {
+ 1: """[0:00 · 30s] Opening.
+
+Team 11. Our client is a software vendor selling risk-assessment tools to US
+community-supervision agencies. The question they brought us: which three-year
+re-arrest model should they ship?
+
+Say the frame once, here: we judged four dimensions — performance,
+interpretability, stability, fairness — not accuracy. The 0.60 to 0.73 on the
+right is our models against the score agencies already have on file.""",
+
+ 2: """[0:30 · 45s] The decision being sold.
+
+The score prioritises VOLUNTARY re-entry support at the start of parole:
+employment, housing, treatment. Never sanctions, never detention, never
+surveillance.
+
+Land the ethical scoping here, because everything later depends on it. Our model
+is wrong often — at the top 20%, about one in six people offered support are not
+re-arrested. For OFFERING HELP that is an acceptable cost. For punishment it
+would not be. If a juror later challenges the error rate, this is the answer.""",
+
+ 3: """[1:15 · 1m30s] Data design, and the leak.
+
+NIJ's own split — we did not make a new one. 18,028 train, 7,807 evaluation,
+29 fields available at supervision start.
+
+Two things to say plainly rather than bury:
+
+First, the evaluation set is NOT an untouched holdout. It is excluded from
+fitting, but our development decisions inspected it. Our comparisons are
+exploratory. Say it before anyone asks.
+
+Second, the leak — this is our strongest slide. Gang affiliation is missing for
+every woman and no man. The missingness pattern IS gender. TabICL encodes NaN as
+a category, so it could read the attribute we thought we had excluded. We measured
+the cost: with missingness indicators, gender is recoverable at AUC 1.00.
+Perfectly. We fixed it with mode-filling and a regression test.""",
+
+ 4: """[2:45 · 1m00s] Three model families.
+
+White-box, machine learning, foundation model — as the brief requires. Same 29
+fields, same held-out people, same metrics.
+
+Logistic is CV-tuned L1. XGBoost ordinal-encodes ordered counts, hyperparameters
+from a 5-fold CV random search that is committed as code, not asserted. TabICL is
+a 16-member GPU ensemble.
+
+Flag the one that matters for later: TabICL has NO native attribution path. That
+is a deployment cost, and it comes back on the recommendation slide.""",
+
+ 5: """[3:45 · 1m00s] The client's real question.
+
+Not "which of your three models" — that is our question. Theirs is: is any of this
+better than what we already run?
+
+This dataset contains Georgia's recorded supervision score, which we use as one
+input. On its own it reaches 0.60 AUC. Our models reach 0.73. At 20% capacity that
+roughly doubles the net value of the scenario.
+
+Give the caveat in the same breath: this is a HISTORICAL recorded score. It does
+not tell us how today's commercial products perform. And the dollars are a
+scenario — effectiveness is assumed, not measured.""",
+
+ 6: """[4:45 · 1m30s] FINDING ONE. Performance cannot pick the model.
+
+All three are within 0.003 AUC. XGBoost beats logistic by +0.0025 with a paired
+interval excluding zero — real, but tiny.
+
+Two methodological points worth making, because they show the work:
+
+We use PAIRED bootstrap differences. Comparing two separate intervals for overlap
+is weaker and commonly misread.
+
+ECE differences are not significant, and the ECE ranking is not even stable across
+binning choices. We tested calibration bin-free instead: logistic and XGBoost are
+both indistinguishable from perfect calibration. TabICL is the exception — slope
+0.913, significantly below 1. Its probabilities are too extreme.
+
+So: performance does not discriminate. Interpretability, stability and fairness do.""",
+
+ 7: """[6:15 · 2m00s] FINDING TWO. Unequal access to support.
+
+Slow down here. This is the centre of the talk.
+
+First the framing: selection means being OFFERED support. So the harm is a missed
+offer, and FNR — equal opportunity — is our primary metric, not FPR.
+
+Second, the operating point. We audit at the top-20% rule the product actually
+ships, not at threshold 0.5. At 0.5 the tool would flag 68% of people. That is not
+a threshold this product ever applies, and auditing there inflates every gap.
+
+The results:
+— Race: equivalent within ±5 points for all three models by TOST. No race test
+  survives Holm correction across our 54 tests. Small, and unconfirmed.
+— Gender: women who ARE re-arrested miss support 10 to 12 points more often.
+  Significant for every model.
+— Age: the largest disparity, 23 to 25 points. About 97% of re-arrested people
+  aged 48+ are never selected. It persists even with the age field held fixed,
+  because prior record carries age.
+
+Say the honest line: not significant does NOT mean fair. That is why we test
+equivalence, not just difference.""",
+
+ 8: """[8:15 · 1m00s] The impossibility result, both sides.
+
+Our data demonstrates both halves of the theorem within one project.
+
+Race: base rates 0.582 and 0.564 — nearly equal. The theorem does not bind, so
+those gaps are a property of our models and are fixable.
+
+Gender: 0.591 against 0.454, fourteen points apart. Calibration and equal error
+rates CANNOT both hold. We have to choose.
+
+The mechanism is visible in our numbers: every model over-predicts women — mean
+score 0.52 against an observed 0.454 — yet women are selected less at the top 20%.
+
+And for THIS use, the direction matters. In a support programme over-prediction
+works in women's favour. Recalibrating by gender would select even fewer women and
+widen the gap. The harm here is the missed offer, not the miscalibration.""",
+
+ 9: """[9:15 · 1m00s] Where the gender gap comes from.
+
+We did not stop at measuring. The course sequence is test, identify the variable,
+mitigate — and fairness partial dependence names the candidate.
+
+Gang affiliation. Cramér's V of 1.0 with gender on the raw field, because it is
+never recorded for women. It is a measurement artefact about record-keeping, not a
+behavioural signal about women.
+
+Dropping it and re-estimating shrinks the gender FNR gap from -0.10 to about zero
+for logistic — partly by raising men's FNR, so say that too — at roughly 0.014 AUC
+and 27 to 41 fewer captured re-arrests. Statistical parity is still rejected.""",
+
+10: """[10:15 · 1m00s] Did the fix generalise, or did we just fit it?
+
+This is the slide that separates us from a project that stops at the p-value.
+
+The result on the previous slide chose the variable AND measured the improvement on
+the same cohort. That is in-sample. It shows a mitigation can be FITTED, not that
+it works.
+
+So we separated them. Five outer folds, entirely inside the training partition. In
+each fold we rerun the candidate search on that fold's training part, pick from
+there alone, refit there, and measure on the held-out fold. The evaluation cohort
+is never touched.
+
+Gang affiliation is selected in all five folds, for both models. About 70% of the
+gap closes out of fold, for roughly one AUC point. The equal-opportunity p-value
+reaches 0.27, not the in-sample 0.99 — and two of five folds still reject.
+
+We report the out-of-fold numbers. The in-sample figure is an upper bound.""",
+
+11: """[11:15 · 1m00s] The four dimensions together.
+
+Read across the rows, not down the columns.
+
+Performance: separated by 0.003 AUC, and the only real calibration difference goes
+AGAINST the model with the highest AUC.
+
+Interpretability: unambiguous, and the gaps are large.
+
+Stability: logistic drifts least on all 28 resample pairs.
+
+Fairness: the differences BETWEEN models are smaller than they look. The gender and
+age gaps are shared by all three.
+
+That is the shape of the decision: accuracy does not discriminate here.""",
+
+12: """[12:15 · 1m00s] FINDING THREE. The recommendation, with its counter-case.
+
+Logistic regression for the shadow pilot. XGBoost as challenger, running in
+parallel on the same cohort.
+
+Be explicit about what we give up: XGBoost is ahead on AUC and Brier. Those are
+real, significant differences.
+
+They do not reach the decision. At the deployed rule the two models offer support
+to 85% of the SAME people — 254 of 7,807 differ — and the difference in captured
+re-arrests has an interval spanning zero.
+
+State what we do NOT claim, because a juror will test it: logistic is not fairer
+and not better calibrated. On both, the two are statistically tied. We chose it
+for refit stability and for coefficients you can read without a second tool.
+
+And what would reverse it: if the client quotes probabilities numerically to
+supervisees, calibration starts to dominate. If their capacity is large enough that
+twelve extra offers matters. That is why the challenger runs in parallel.""",
+
+13: """[13:15 · 45s] The app, and close.
+
+The application makes every trade-off testable: score one person with all three
+models, see the explanation, audit by race, gender and age at the deployed point,
+and edit the cost assumptions.
+
+One thing to demo if there is time: pick a person and show the refit vote count.
+About one decision in seven flips across refits, and a third of the people we
+prioritise sit at that margin. The app shows that rather than hiding it behind a
+point estimate.
+
+Close on the frame: we are not trading accuracy for interpretability. The accuracy
+difference does not change who gets help.
+
+[APPENDIX CUES — jump to these on the matching question]
+A1 learning curve · A2 economics and sensitivity · A3 interpretability methods
+A4 why SHAP, permutation importance and XPER disagree · A5 LIME fidelity
+A6 stability detail · A7 what we tried and rejected · A8 proxy recovery
+A9 per-person stability and the abstention finding""",
+}
+
+for index, slide in enumerate(prs.slides, start=1):
+    if index in NOTES:
+        slide.notes_slide.notes_text_frame.text = NOTES[index]
+
 REPORTS.mkdir(exist_ok=True)
 prs.save(OUT)
-print(OUT)
+print(f"{OUT}  ({len(prs.slides)} slides, speaker notes on {len(NOTES)})")
