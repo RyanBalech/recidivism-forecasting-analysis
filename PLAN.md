@@ -19,6 +19,26 @@ mitigation validation, recommendation defence, wording and deck length.
 | 6 | Wording inconsistencies | ✅ "pre-set" tolerance → stated-but-not-pre-registered, with the ordering made explicit; race "real but small" → reconciled with Holm (no race test survives correction) |
 | 7 | Deck built on three findings | ✅ 13 core slides + marked appendix (7 slides: learning curve, economics, interpretability, explanation disagreement, LIME fidelity, stability, process). Talk sequence in presentation notes rewritten with per-slide timings |
 
+**Follow-up: claims tested, not asserted (24 Sep).** Three statements supporting the model
+comparison were point estimates. `scripts/calibration_tests.py` now tests each and the
+deliverables carry the result:
+
+- *"XGBoost is best calibrated"* → **withdrawn.** The ECE ranking flips with the binning
+  (logistic wins at 5 equal-width and 20 quantile bins). Bin-free, logistic and XGBoost are
+  both indistinguishable from perfect calibration (Cox slopes 0.999 / 1.005; Spiegelhalter
+  z 0.38 / 0.30) and from each other. **New finding:** TabICLv2's slope is 0.913,
+  significantly below 1 (z = 3.76) — its probabilities are measurably too extreme.
+- *"XGBoost captures 12 more re-arrests"* → **not significant.** Paired difference ≈14
+  offers, 95% CI −29 to 0. The two models select 85% of the same people (Jaccard 0.849;
+  254 of 7,807 differ), so the ranking edge does not change the allocation.
+- *"Logistic has the smaller gender FNR gap"* → **not significant** (−0.013, CI −0.036 to
+  +0.011) and no longer used as a reason.
+
+What does separate them: logistic has lower refit drift on all 28 resample pairs
+(0.0322 vs 0.0351) and a more stable selected set (Jaccard 0.773 vs 0.747), plus direct
+interpretability. The recommendation now rests on those rather than on fairness or
+calibration, both of which are ties. Tests 38 → 41.
+
 **Environment note.** This pass ran on CPU with packages pinned to `validation_manifest.json`
 (xgboost 3.0.5, pandas 2.3.1, scikit-learn 1.7.2, shap 0.52.0, lime 0.2.0.1). Saved models
 reproduce the published predictions to 7e-08, so the new artifacts are consistent with the

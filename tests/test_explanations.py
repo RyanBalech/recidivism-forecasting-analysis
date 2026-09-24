@@ -113,3 +113,50 @@ def test_nested_mitigation_separates_selection_from_assessment():
     # Mitigation trades accuracy for a smaller gap; both directions must be recorded.
     assert (summary.auc_change < 0).all(), "dropping a feature should not raise AUC"
     assert (summary.mitigated_fnr_gap.abs() < summary.baseline_fnr_gap.abs()).all()
+
+
+@pytest.mark.skipif(not (ARTIFACT_DIR / "calibration_tests.csv").exists(),
+                    reason="run scripts/calibration_tests.py first")
+def test_calibration_claims_are_backed_by_tests():
+    """Guards the three claims the recommendation is NOT allowed to rest on."""
+    cal = pd.read_csv(ARTIFACT_DIR / "calibration_tests.csv").set_index("model")
+    paired = pd.read_csv(ARTIFACT_DIR / "calibration_paired_tests.csv")
+    pair = paired[(paired.model_a == "logistic") & (paired.model_b == "xgboost")].set_index("metric")
+
+    # 1. Calibration is a tie between the two conventional models, not a win.
+    assert not pair.loc["abs_slope_error", "significant"]
+    for model in ["logistic", "xgboost"]:
+        assert not cal.loc[model, "slope_differs_from_1"]
+        assert cal.loc[model, "calibrated_at_5pct"]
+
+    # 2. TabICL is the one model whose probabilities are measurably too extreme.
+    assert cal.loc["tabicl", "slope_differs_from_1"]
+    assert cal.loc["tabicl", "slope"] < 1
+    assert not cal.loc["tabicl", "calibrated_at_5pct"]
+
+    # 3. The ranking edge does not become a difference in who is offered support.
+    assert not pair.loc["captured_events", "significant"]
+    assert not pair.loc["abs_gender_fnr_gap", "significant"]
+
+
+@pytest.mark.skipif(not (ARTIFACT_DIR / "calibration_bin_sensitivity.csv").exists(),
+                    reason="run scripts/calibration_tests.py first")
+def test_ece_ranking_is_not_stable_across_binning():
+    """The reason ECE alone cannot support 'best calibrated'."""
+    bins = pd.read_csv(ARTIFACT_DIR / "calibration_bin_sensitivity.csv")
+    winners = {
+        scheme: {part.loc[part[scheme].idxmin(), "model"] for _, part in bins.groupby("bins")}
+        for scheme in ["ece_equal_width", "ece_equal_frequency"]
+    }
+    assert len(winners["ece_equal_width"] | winners["ece_equal_frequency"]) > 1, (
+        "if one model won every binning choice, the sensitivity caveat would be wrong"
+    )
+
+
+@pytest.mark.skipif(not (ARTIFACT_DIR / "selected_set_overlap.csv").exists(),
+                    reason="run scripts/calibration_tests.py first")
+def test_models_mostly_select_the_same_people():
+    overlap = pd.read_csv(ARTIFACT_DIR / "selected_set_overlap.csv")
+    row = overlap.query("model_a == 'logistic' and model_b == 'xgboost'").iloc[0]
+    assert row.selected_a == row.selected_b, "capacity rule must select equal-sized sets"
+    assert row.jaccard > 0.8, "the recommendation text claims ~85% overlap"

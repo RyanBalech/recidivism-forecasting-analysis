@@ -97,6 +97,18 @@ gang_cost = base_gender.loc["logistic", "auc"] - drop_gang.loc["logistic", "auc"
 by_group = pd.read_csv(ART / "fairness_by_group.csv").set_index(["model", "attribute", "group"])
 race_auc = [by_group.loc[(m, "Race", g), "roc_auc"] for m in ["logistic", "xgboost", "tabicl"] for g in ["BLACK", "WHITE"]]
 
+# Tested comparison: calibration, captured events and the selected-set overlap.
+_cal_path = ART / "calibration_paired_tests.csv"
+if _cal_path.exists():
+    _cal = pd.read_csv(_cal_path)
+    _cap = _cal[(_cal.model_a == "logistic") & (_cal.model_b == "xgboost")
+                & (_cal.metric == "captured_events")].iloc[0]
+    cap_ci = (_cap.ci_low, _cap.ci_high)
+    overlap_share = float(pd.read_csv(ART / "selected_set_overlap.csv")
+                          .query("model_a == 'logistic' and model_b == 'xgboost'").jaccard.iloc[0])
+else:
+    cap_ci, overlap_share = (float("nan"), float("nan")), float("nan")
+
 # Out-of-fold mitigation evidence: selection inside training folds, assessment on held-out folds.
 _nested_path = ART / "mitigation_nested_summary.csv"
 if _nested_path.exists():
@@ -206,15 +218,18 @@ picture(s, FIG / "tradeoff_matrix.png", 2.2, 1.62, 8.9); footer(s, 11)
 
 # 12 — Recommendation
 s = make_slide(prs); title(s, "Pilot logistic regression; run XGBoost as the challenger", "11 · Recommendation")
-panel(s, "WHY LOGISTIC", "Native, coefficient-level explanations\n\nLowest refit drift\n\n"
-      f"Smaller gender FNR gap ({fnr20.loc['logistic', 'Gender']:+.3f} vs {fnr20.loc['xgboost', 'Gender']:+.3f})\n\n"
-      "No significant race gap · fastest", .7, 1.8, 3.85, 4.65, TEAL)
-panel(s, "WHAT WE GIVE UP", f"XGBoost AUC edge +{xgb_minus_logit:.4f}\n\nBest calibration (ECE 0.011 vs 0.013)\n\n"
-      "+12 captured re-arrests per 1,561 offers\n\nDetectable, operationally small", 4.75, 1.8, 3.85, 4.65, RED)
+panel(s, "WHY LOGISTIC", "Native, coefficient-level explanations — no second tool\n\n"
+      f"Lower refit drift on all 28 pairs ({stability.loc['logistic','mean_abs_prob_diff']:.4f} vs {stability.loc['xgboost','mean_abs_prob_diff']:.4f})\n\n"
+      f"More stable selected set (J {stability.loc['logistic','top20_jaccard']:.3f} vs {stability.loc['xgboost','top20_jaccard']:.3f})\n\n"
+      "~9× faster", .7, 1.8, 3.85, 4.65, TEAL)
+panel(s, "WHAT WE GIVE UP", f"XGBoost AUC edge +{xgb_minus_logit:.4f} and Brier −0.0010\n\n"
+      "Calibration is a tie, not a loss: both indistinguishable from perfect\n\n"
+      f"Captured re-arrests: interval {int(abs(cap_ci[0]))} to {int(abs(cap_ci[1]))} includes 0\n\n"
+      "Significant, but not at the operating point", 4.75, 1.8, 3.85, 4.65, RED)
 panel(s, "WHAT REVERSES IT", "The score is quoted numerically to supervisees\n\n"
       "Capacity large enough that +12 offers matters\n\nA feature set that widens the margin\n\nThen: promote the challenger",
       8.8, 1.8, 3.85, 4.65, PURPLE)
-textbox(s, "The gap the mitigation closes (0.08) dwarfs the gap between the two models (0.016): disparity is a feature-set property, not an estimator choice.",
+textbox(s, f"Both models select {overlap_share:.0%} of the same people at the top-20% rule. Fairness and calibration differences between them are not significant.",
         .8, 6.75, 11.7, .4, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 12)
 
 # 13 — App

@@ -383,6 +383,36 @@ for name in ["performance_calibration", "incumbent_benchmark", "learning_curve",
              "tradeoff_matrix"]:
     nb.cells.append(code(f"display(Image(filename=str(ROOT / 'artifacts/figures/{name}.png'), width=1000))"))
 nb.cells.extend([
+    md("""### Testing the comparison instead of asserting it
+
+Three claims about the model comparison are easy to carry as point estimates and hard to
+defend when challenged: that XGBoost is better calibrated, that it captures more
+re-arrests, and that logistic has the smaller gender gap. Each is checked below with a
+paired bootstrap — every resample scores all three models on the same rows, so this is a
+test of the difference, not two intervals eyeballed for overlap.
+
+ECE is reported first at several binning choices, because it is a binned estimator and the
+ranking it produces is not stable across them."""),
+    code("""bins = A('calibration_bin_sensitivity.csv')
+display(bins.pivot(index='bins', columns='model', values='ece_equal_width').round(4))
+winners = bins.loc[bins.groupby(['bins'])['ece_equal_width'].idxmin(), ['bins','model']]
+print('Lowest equal-width ECE by binning choice:')
+print(winners.to_string(index=False))
+"""),
+    md("Bin-free instead: the Cox calibration regression (outcome on logit; perfect is intercept 0 and slope 1) and the Spiegelhalter z-test."),
+    code("""cal = A('calibration_tests.csv')
+display(cal[['model','intercept','slope','slope_differs_from_1','spiegelhalter_z','calibrated_at_5pct']].round(4))
+"""),
+    md("Then the paired differences, and how much the two selected sets actually differ at the deployed rule."),
+    code("""display(A('calibration_paired_tests.csv').round(5))
+display(A('selected_set_overlap.csv').round(4))
+"""),
+    md("""Logistic and XGBoost are both statistically indistinguishable from perfect calibration and
+from each other; TabICLv2's slope of 0.913 is significantly below 1, so its probabilities are
+too extreme. The captured-events difference has an interval including zero, and the two models
+offer support to 85% of the same people. None of the three claims survives as an established
+difference — which is why the recommendation below rests on refit stability and direct
+interpretability rather than on any of them."""),
     md("""## Recommendation
 
 **Pilot L1 logistic regression prospectively, with XGBoost as the challenger running in
@@ -392,17 +422,33 @@ This is a decision across four dimensions, not an accuracy ranking, so it is sta
 the counter-case attached.
 
 **What the challenger buys.** XGBoost's AUC edge is +0.0025 with a paired 95% interval of
-0.0006 to 0.0044 — detectable, not noise. It is the best calibrated of the three
-(ECE 0.011 against 0.013 and 0.020) and captures 1,297 re-arrested people at 20% capacity
-against logistic's 1,285: twelve more out of 1,561 offers.
+0.0006 to 0.0044, and its Brier score is lower by 0.0010 [0.0003, 0.0015]. Both are
+detectable rather than noise — and they are the only two dimensions on which it is
+significantly ahead.
 
-**Why logistic is still the recommendation.** Everything else points the other way.
-Coefficient-level explanations with no second tool and no surrogate fidelity loss — the
-depth-3 surrogate of XGBoost reaches only R² = 0.61. The smallest refit drift
-(mean |Δp| 0.032 against 0.035) at comparable top-20% overlap. The smallest gender FNR gap
-(−0.096 against −0.112). No race test significant even before Holm correction, where
-XGBoost has two. And roughly a ninth of the runtime. For a product whose value proposition
-is auditability, trading all of that for 0.0025 AUC and twelve offers is the wrong trade.
+**Calibration is a tie, not a win.** XGBoost has the lower ECE at 10 equal-width bins
+(0.011 vs 0.013), but that ranking is an artefact of the binning: at 5 equal-width bins,
+or 20 quantile bins, logistic wins instead. Bin-free, both are indistinguishable from
+perfect calibration (Cox slopes 0.999 and 1.005, neither differing from 1; Spiegelhalter
+z = 0.38 and 0.30) and from each other. TabICLv2 is the exception worth stating: slope
+0.913, significantly below 1, z = 3.76 — its probabilities are measurably too extreme.
+
+**The accuracy edge does not reach the decision.** At the deployed top-20% rule the two
+models offer support to 85% of the same people (Jaccard 0.849); only 254 of 7,807 are
+chosen by one and not the other. The difference in captured re-arrests is about 14 offers
+with a 95% interval of −29 to 0 — it includes zero. Significant ranking metrics, no
+detectable difference in who receives support.
+
+**Why logistic is the recommendation.** Its refit stability is better on every one of the
+28 resample pairs (mean |Δp| 0.0322 vs 0.0351; top-20% Jaccard 0.7725 vs 0.7468). Its
+coefficients are read directly, with no second tool and no surrogate fidelity loss — the
+depth-3 surrogate of XGBoost reaches only R² = 0.61. It runs about nine times faster. The
+argument is not that logistic is fairer or better calibrated; on those it is tied. It is
+that XGBoost's wins are confined to ranking metrics that do not change the allocation.
+
+**A point estimate we do not claim as a difference.** Logistic's gender FNR gap is smaller
+(−0.096 vs −0.112), but the paired difference in absolute gaps is −0.013 with a 95%
+interval of −0.036 to +0.011. Not significant, so not offered as a reason.
 
 **Why the accuracy gap is not the decisive number.** The disparity the FPDP mitigation
 closes is far larger than the disparity separating the two models: dropping
