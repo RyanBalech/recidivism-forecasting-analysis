@@ -105,7 +105,7 @@ docs/                                 plan, development log, assignment brief
 ```
 
 **Submission notebook.** The executable cells in the root `.ipynb` import only public Python packages and read the
-three NIJ CSVs embedded inside the notebook (with SHA-256 integrity checks). It starts with training-only EDA, then defines feature engineering,
+three NIJ CSVs embedded in the notebook's hidden metadata (with SHA-256 integrity checks). A short loading cell replaces the large encoded-data block. It starts with training-only EDA, then defines feature engineering,
 preprocessing, all three models, evaluation, economic
 scenario, interpretability, stability, fairness and the training-only mitigation check
 in its own cells. The appendix embeds every earlier deep-dive narrative, table and figure

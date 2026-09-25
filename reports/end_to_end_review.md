@@ -64,3 +64,5 @@ The most useful next accuracy evidence would be a genuinely new cohort with veri
 **25 September one-file submission update:** the root notebook now embeds the entire earlier review as an appendix: all narrative, 47 collapsed historical code listings, 50 HTML tables and 17 figure attachments. These historical outputs are snapshots and do not rerun as part of the self-contained core. The core modeling and course analysis cells remain executable from CSVs without project imports. The extended notebook is retained as the appendix source snapshot.
 
 **25 September data packaging update:** the root notebook embeds the full NIJ CSV and the original first-release training/test CSVs as compressed, SHA-256-checked data. The `.ipynb` is therefore the only repository file needed to read and rerun the course workflow. Installed Python packages and TabICL's checkpoint remain external runtime dependencies.
+
+**25 September readability update:** the compressed CSV payload moved from a visible code string into notebook metadata. The loader cell is short and readable; the audit decodes the metadata and compares it byte-for-byte with the NIJ CSVs.

@@ -5,6 +5,7 @@ No model is promoted by this audit. --refit-dir checks an isolated all-model run
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import inspect
 import json
@@ -12,6 +13,7 @@ import platform
 import random
 import sys
 import time
+import zlib
 from pathlib import Path
 
 import joblib
@@ -198,9 +200,14 @@ def main():
         raise ValueError("Submission notebook still depends on project data paths or modules")
     embedded_data_files = ["nij-challenge2021_full_dataset.csv", "nij-challenge2021_training_dataset.csv",
                            "nij-challenge2021_test_dataset_1.csv"]
+    embedded = submission.get("metadata", {}).get("recidivism_embedded_csvs", {})
+    if embedded.get("format") != "zlib+base64" or set(embedded.get("files", {})) != set(embedded_data_files):
+        raise ValueError("Submission notebook lacks the three embedded NIJ source files")
     for filename in embedded_data_files:
-        source_hash = hashlib.sha256((ROOT / "data" / filename).read_bytes()).hexdigest()
-        if filename not in core_source or source_hash not in core_source:
+        original = (ROOT / "data" / filename).read_bytes()
+        record = embedded["files"][filename]
+        decoded = zlib.decompress(base64.b64decode(record["zlib_base64"]))
+        if decoded != original or record["sha256"] != hashlib.sha256(original).hexdigest():
             raise ValueError(f"Submission notebook lacks current embedded source data: {filename}")
     markdown_cells = [c for c in submission["cells"] if c["cell_type"] == "markdown"]
     appendix_present = any("# Appendix — complete earlier project review" in "".join(c["source"])

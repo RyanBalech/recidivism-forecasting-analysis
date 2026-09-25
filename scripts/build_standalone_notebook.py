@@ -7,6 +7,8 @@ from pathlib import Path
 import base64
 import hashlib
 import html
+import os
+import tempfile
 import zlib
 
 import nbformat as nbf
@@ -26,30 +28,51 @@ EMBEDDED_CSVS = (
 )
 
 
-def embedded_data_cell() -> nbf.NotebookNode:
-    """Package the three original NIJ inputs in a verifiable notebook code cell."""
-    lines = ["import base64, hashlib, io, zlib", "EMBEDDED_CSVS = {"]
-    checksums = {}
+def embedded_data_metadata() -> dict:
+    """Keep compressed NIJ inputs inside the notebook, away from visible code."""
+    files = {}
     for name in EMBEDDED_CSVS:
         data = (ROOT / "data" / name).read_bytes()
-        checksums[name] = hashlib.sha256(data).hexdigest()
-        encoded = base64.b64encode(zlib.compress(data, level=9)).decode("ascii")
-        lines.append(f"    {name!r}: (")
-        lines.extend(f"        {encoded[i:i + 120]!r}" for i in range(0, len(encoded), 120))
-        lines.append("    ),")
-    lines.extend([
-        "}",
-        f"EMBEDDED_SHA256 = {checksums!r}",
-        "def load_nij_csv(name):",
-        "    data = zlib.decompress(base64.b64decode(EMBEDDED_CSVS[name]))",
-        "    actual = hashlib.sha256(data).hexdigest()",
-        "    assert actual == EMBEDDED_SHA256[name], f'Dataset checksum mismatch: {name}'",
-        "    return pd.read_csv(io.BytesIO(data))",
-        "print('Three original NIJ CSVs available inside this notebook; SHA-256 checked on load.')",
-    ])
-    result = code("\n".join(lines))
-    result.metadata["jupyter"] = {"source_hidden": True}
-    return result
+        files[name] = {
+            "sha256": hashlib.sha256(data).hexdigest(),
+            "zlib_base64": base64.b64encode(zlib.compress(data, level=9)).decode("ascii"),
+        }
+    return {"format": "zlib+base64", "files": files}
+
+
+def embedded_data_cell() -> nbf.NotebookNode:
+    """Load embedded data with a short, readable cell."""
+    return code("""import base64, hashlib, io, json, os, zlib
+
+def find_embedded_data():
+    # The build uses a temporary notebook; ordinary Run All finds this saved file.
+    candidates = []
+    build_source = os.environ.get('RECIDIVISM_NOTEBOOK_BUILD_SOURCE')
+    if build_source:
+        candidates.append(Path(build_source))
+    candidates.extend([Path.cwd() / 'Recidivism_Project_Submission.ipynb',
+                       *Path.cwd().glob('*.ipynb')])
+    for path in dict.fromkeys(candidates):
+        if not path.is_file():
+            continue
+        try:
+            metadata = json.loads(path.read_text(encoding='utf-8')).get('metadata', {})
+        except (OSError, ValueError):
+            continue
+        payload = metadata.get('recidivism_embedded_csvs')
+        if payload and payload.get('format') == 'zlib+base64':
+            return payload['files']
+    raise FileNotFoundError('Save this notebook locally, then run it from its folder.')
+
+EMBEDDED_CSVS = find_embedded_data()
+
+def load_nij_csv(name):
+    record = EMBEDDED_CSVS[name]
+    data = zlib.decompress(base64.b64decode(record['zlib_base64']))
+    assert hashlib.sha256(data).hexdigest() == record['sha256'], f'Dataset checksum mismatch: {name}'
+    return pd.read_csv(io.BytesIO(data))
+
+print('Three embedded NIJ CSVs found; each is SHA-256 checked when loaded.')""")
 
 
 def append_extended_evidence(notebook: nbf.NotebookNode) -> None:
@@ -104,9 +127,9 @@ def main() -> None:
     nb.cells = [
         md("""# Trustworthy recidivism forecasting — self-contained submission
 
-This notebook follows the familiar machine-learning workflow: **load data → explore the training data → choose and engineer eligible features → check leakage → train → evaluate → explain → test stability and fairness → recommend**. The three NIJ source CSVs are compressed and embedded in a collapsed cell, with SHA-256 checks on load. This `.ipynb` can stand alone as the analysis file; the course presentation and app are separate deliverables. It does not import code from `src/` or `scripts/`, run shell commands, or read saved models and result tables. It still requires installed third-party Python packages and TabICL's checkpoint, which TabICL can obtain through its normal package mechanism.
+This notebook follows the familiar machine-learning workflow: **load data → explore the training data → choose and engineer eligible features → check leakage → train → evaluate → explain → test stability and fairness → recommend**. The three NIJ source CSVs are compressed in the notebook's metadata and loaded by a short cell, with SHA-256 checks. This `.ipynb` can stand alone as the analysis file; the course presentation and app are separate deliverables. It does not import code from `src/` or `scripts/`, run shell commands, or read saved models and result tables. It still requires installed third-party Python packages and TabICL's checkpoint, which TabICL can obtain through its normal package mechanism.
 
-To rerun in a fresh Python environment, install `numpy`, `pandas`, `scikit-learn==1.7.2`, `xgboost`, `tabicl==2.2.0`, `torch`, `shap`, `lime`, `statsmodels`, `matplotlib` and `ipykernel`, then use **Run All**. A first TabICL checkpoint download may require internet access; CUDA speeds up its repeated fits.
+To rerun in a fresh Python environment, save the notebook locally and open it from its folder. Install `numpy`, `pandas`, `scikit-learn==1.7.2`, `xgboost`, `tabicl==2.2.0`, `torch`, `shap`, `lime`, `statsmodels`, `matplotlib` and `ipykernel`, then use **Run All**. A first TabICL checkpoint download may require internet access; CUDA speeds up its repeated fits.
 
 **Client and decision.** A community-supervision software vendor is considering a voluntary re-entry support offer to the highest-risk 20% of people at supervision start. This is a retrospective course analysis, not an operationally validated tool. Our target is cumulative new arrest within three years. NIJ's challenge used conditional annual forecasts, so these results are not leaderboard-comparable.
 
@@ -701,9 +724,23 @@ The fairness gaps are material, particularly for women who are later re-arrested
 
 **What follows?** The appendix in this same notebook preserves the previous deep-dive tables and figures: estimator sweep, learning curve, incumbent benchmark, XPER, explanation agreement, FPDP/fairness frontier, proxy recovery, individual stability/abstention and detailed calibration tests. Those historical outputs are embedded snapshots with their earlier code visible as collapsed reference text. The main course analysis above is fully executable from raw CSVs without project functions."""),
     ]
+    nb.metadata["recidivism_embedded_csvs"] = embedded_data_metadata()
     nb.cells.insert(3, embedded_data_cell())
-    NotebookClient(nb, timeout=1800, kernel_name="python3",
-                   resources={"metadata": {"path": str(ROOT)}}).execute()
+    with tempfile.NamedTemporaryFile(prefix="_submission_build_", suffix=".ipynb",
+                                     dir=ROOT, delete=False) as temporary:
+        temporary_path = Path(temporary.name)
+    previous_source = os.environ.get("RECIDIVISM_NOTEBOOK_BUILD_SOURCE")
+    try:
+        nbf.write(nb, temporary_path)
+        os.environ["RECIDIVISM_NOTEBOOK_BUILD_SOURCE"] = str(temporary_path)
+        NotebookClient(nb, timeout=1800, kernel_name="python3",
+                       resources={"metadata": {"path": str(ROOT)}}).execute()
+    finally:
+        if previous_source is None:
+            os.environ.pop("RECIDIVISM_NOTEBOOK_BUILD_SOURCE", None)
+        else:
+            os.environ["RECIDIVISM_NOTEBOOK_BUILD_SOURCE"] = previous_source
+        temporary_path.unlink(missing_ok=True)
     append_extended_evidence(nb)
     nbf.write(nb, OUT)
     print(OUT)
