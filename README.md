@@ -16,7 +16,7 @@ or surveillance. This is a retrospective course project, not a validated operati
 
 | If you want to… | Open |
 |---|---|
-| **Read the whole analysis** | [`Recidivism_Project_Submission.ipynb`](Recidivism_Project_Submission.ipynb) — fully executed, data prep → recommendation |
+| **Read and rerun the whole analysis** | [`Recidivism_Project_Submission.ipynb`](Recidivism_Project_Submission.ipynb) — fully executed and self-contained, data prep → recommendation |
 | **Read the written report** | [`reports/technical_report.md`](reports/technical_report.md) |
 | **See the deck** | [`reports/ISAF_Recidivism_Presentation.pptx`](reports/ISAF_Recidivism_Presentation.pptx) |
 | **Run the client app** | `streamlit run app.py` |
@@ -25,8 +25,9 @@ or surveillance. This is a retrospective course project, not a validated operati
 ```bash
 python -m pip install -r requirements.txt
 streamlit run app.py                 # the client-facing lab
-python -m pytest -q                  # 45 tests
+python -m pytest -q                  # automated tests
 python scripts/reproduce.py          # full rebuild (GPU recommended)
+python scripts/build_standalone_notebook.py  # rebuild only the submission notebook
 ```
 
 ---
@@ -91,16 +92,23 @@ persisting even with the age field fixed.
 ## Repository map
 
 ```
-Recidivism_Project_Submission.ipynb   executed notebook — the readable entry point
+Recidivism_Project_Submission.ipynb   executed notebook — complete course analysis in its own cells
 app.py                                Streamlit client lab (6 tabs)
 src/recidivism/                       data loading, modelling, metrics
 scripts/                              analysis pipeline, one concern per file
-tests/                                45 tests, incl. leakage and regression guards
+tests/                                leakage and regression guards
 data/                                 NIJ 2021 challenge datasets
 artifacts/                            every generated table, figure and model
 reports/                              deck, technical report, Q&A notes, reviews
 docs/                                 plan, development log, assignment brief
 ```
+
+**Submission notebook.** The root `.ipynb` imports only public Python packages and reads the
+NIJ CSVs in `data/`. It defines preprocessing, all three models, evaluation, economic
+scenario, interpretability, stability, fairness and the training-only mitigation check
+in its own cells. It does not import `src/` or `scripts/`, call shell commands, or depend
+on saved results. Running every cell is compute intensive, especially TabICL refits;
+CUDA is used when available. The larger exploratory audit remains in the repository.
 
 **Pipeline.** [`scripts/reproduce.py`](scripts/reproduce.py) runs every step in dependency order
 and stops at the first failure (`--from-step` to resume, `--only` for a subset). It verifies that
@@ -114,7 +122,7 @@ scikit-learn matches the pinned version, since saved `.joblib` models load only 
 | Fairness | `fairness_audit`, `fairness_interpretability`, `mitigation_nested`, `proxy_inference_audit`, `race_ab_test` |
 | Stability | `stability_structural`, `individual_stability` |
 | Validation | `calibration_tests`, `validate_project`, `end_to_end_audit`, `accuracy_review` |
-| Deliverables | `build_notebook`, `build_slides`, `tradeoff_matrix`, `refresh_readme` |
+| Deliverables | `build_standalone_notebook`, `build_notebook` (extended artifact review), `build_slides`, `tradeoff_matrix`, `refresh_readme` |
 
 ---
 

@@ -4,7 +4,7 @@ The published models remain reproducible. A fresh, isolated fit of logistic regr
 
 ## Brief, data and target
 
-The supplied `Project ISAF 2026_2027.pdf` requires three model families, statistical/economic performance, interpretability, stability, fairness, a client recommendation, slides, code/notebook and an interactive app. These are present. The root-level `Recidivism_Project_Submission.ipynb` is the executed professor-facing entry point and contains 31 successfully executed code cells. The course permits a binary target, so cumulative three-year arrest is within the brief. It differs from the [NIJ challenge's annual conditional forecasts](https://nij.ojp.gov/funding/recidivism-forecasting-challenge), and leaderboard comparison would be invalid.
+The supplied `Project ISAF 2026_2027.pdf` requires three model families, statistical/economic performance, interpretability, stability, fairness, a client recommendation, slides, code/notebook and an interactive app. These are present. The root-level `Recidivism_Project_Submission.ipynb` is the executed professor-facing entry point; its current code-cell count is recorded in the [machine-readable audit](../artifacts/end_to_end/audit.json). The course permits a binary target, so cumulative three-year arrest is within the brief. It differs from the [NIJ challenge's annual conditional forecasts](https://nij.ojp.gov/funding/recidivism-forecasting-challenge), and leaderboard comparison would be invalid.
 
 The audit checks all 18,028 training and 7,807 evaluation IDs against the original releases, verifies all 29 baseline feature values, and now also compares cumulative and annual **training outcomes** with the original training release. Annual outcomes in the full dataset are mutually exclusive and reconstruct the cumulative outcome. There is no ID overlap. Identical coarsened feature patterns span 20 evaluation rows; excluding them does not materially change model ranking.
 
@@ -48,7 +48,7 @@ python scripts/train_evaluate.py --output-dir artifacts/smoke/end_to_end
 python scripts/validate_project.py
 python scripts/stability_structural.py
 python scripts/tradeoff_matrix.py
-python scripts/build_notebook.py
+python scripts/build_standalone_notebook.py
 python scripts/build_slides.py
 python scripts/end_to_end_audit.py --gpu-check --refit-dir artifacts/smoke/end_to_end
 ```
@@ -56,3 +56,5 @@ python scripts/end_to_end_audit.py --gpu-check --refit-dir artifacts/smoke/end_t
 `scripts/reproduce.py` runs the audit before notebook generation to refresh the adjusted fairness table, then again after rebuilding deliverables to record their final hashes. Optional hardware/refit checks are requested with the flags above. This review reran core training, validation and revised stability; it did not rerun the historical hyperparameter searches, learning curves or expensive XPER coalitions whose inputs were unchanged. The app passed both default and live TabICL inference checks; 33 regression tests passed.
 
 The most useful next accuracy evidence would be a genuinely new cohort with verified measurement times. For this submission, the stronger result is a reproducible comparison with clearly measured trade-offs, rather than another tiny gain on the reused evaluation set.
+
+**25 September submission update:** the root notebook now defines and runs the course analysis in its own cells from the original CSVs. The older artifact-backed notebook can be regenerated separately with `scripts/build_notebook.py`; it is no longer the submission entry point. Its broader exploratory tables remain available in `artifacts/` and `reports/`.

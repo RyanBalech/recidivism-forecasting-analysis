@@ -1,16 +1,15 @@
-"""Build and execute the professor-facing submission notebook.
+"""Build the older, artifact-backed extended review notebook.
 
-The notebook is the readable entry point for the complete project. Heavy fitting
-remains in versioned modules/scripts so the notebook and application use exactly
-the same implementation; a visible switch in the notebook runs the whole pipeline.
+The self-contained professor submission is built by build_standalone_notebook.py.
+This file is retained so the earlier exploratory review can still be regenerated.
 """
 from pathlib import Path
 import nbformat as nbf
 from nbclient import NotebookClient
 
 ROOT = Path(__file__).resolve().parents[1]
-# One canonical notebook. A second copy only ever drifts from this one.
-OUTS = [ROOT / "Recidivism_Project_Submission.ipynb"]
+# Keep the older artifact-backed review separate from the submission notebook.
+OUTS = [ROOT / "notebooks" / "extended_artifact_review.ipynb"]
 md = nbf.v4.new_markdown_cell
 code = nbf.v4.new_code_cell
 nb = nbf.v4.new_notebook()

@@ -20,7 +20,7 @@ STEPS = ["leakage_audit", "estimator_sweep", "train_evaluate", "incumbent_benchm
          "interpretability", "lime_local_fidelity", "logistic_effects", "explanation_agreement", "calibration_tests",
          "stability_structural", "individual_stability", "proxy_inference_audit",
          "race_ab_test", "xper_attribution",
-         "tradeoff_matrix", "improvement_journey", "refresh_readme", "build_notebook",
+         "tradeoff_matrix", "improvement_journey", "refresh_readme", "build_standalone_notebook",
          "build_slides", "build_prevalidation_pdf", "end_to_end_audit"]
 
 
@@ -50,9 +50,9 @@ def main():
     check_environment()
     env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
     for step in steps:
-        if step == "build_notebook":
-            # Refresh the adjusted fairness table before the notebook consumes it.
-            # The final audit runs again to hash and check rebuilt deliverables.
+        if step == "build_standalone_notebook":
+            # Validate the published artifacts before building the independent
+            # notebook. The final audit hashes the rebuilt deliverables.
             subprocess.run([sys.executable, str(ROOT / "scripts/end_to_end_audit.py")],
                            cwd=ROOT, env=env, check=True)
         print(f"Running {step}", flush=True)
