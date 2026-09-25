@@ -193,6 +193,15 @@ def main():
             raise ValueError(f"Notebook contains unexecuted cells or execution errors: {path}")
         notebook_counts[path.name] = len(code_cells)
     submission = json.loads(submission_notebook.read_text(encoding="utf-8"))
+    core_source = "\n".join("".join(c["source"]) for c in submission["cells"] if c["cell_type"] == "code")
+    if "EMBEDDED_CSVS" not in core_source or "ROOT / 'data'" in core_source or "from recidivism" in core_source:
+        raise ValueError("Submission notebook still depends on project data paths or modules")
+    embedded_data_files = ["nij-challenge2021_full_dataset.csv", "nij-challenge2021_training_dataset.csv",
+                           "nij-challenge2021_test_dataset_1.csv"]
+    for filename in embedded_data_files:
+        source_hash = hashlib.sha256((ROOT / "data" / filename).read_bytes()).hexdigest()
+        if filename not in core_source or source_hash not in core_source:
+            raise ValueError(f"Submission notebook lacks current embedded source data: {filename}")
     markdown_cells = [c for c in submission["cells"] if c["cell_type"] == "markdown"]
     appendix_present = any("# Appendix — complete earlier project review" in "".join(c["source"])
                            for c in markdown_cells)
@@ -208,6 +217,7 @@ def main():
                               "extended_executed_code_cells": notebook_counts[extended_notebook.name],
                               "embedded_earlier_figures": embedded_figures,
                               "historical_code_listings": historical_code_listings,
+                              "embedded_source_csvs": len(embedded_data_files),
                               "slides": len(Presentation(slides_path).slides)}
     report["checks_passed"] = ["original release and preprocessing boundaries", "prediction ID/label alignment",
                                "all published performance/economic metrics", "saved conventional model predictions",

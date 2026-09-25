@@ -16,7 +16,7 @@ or surveillance. This is a retrospective course project, not a validated operati
 
 | If you want to… | Open |
 |---|---|
-| **Read the complete submission in one notebook** | [`Recidivism_Project_Submission.ipynb`](Recidivism_Project_Submission.ipynb) — runnable loading → EDA → modeling → recommendation, followed by the earlier deep-dive figures and tables in an embedded appendix |
+| **Submit the analysis notebook** | [`Recidivism_Project_Submission.ipynb`](Recidivism_Project_Submission.ipynb) — stands alone as a file, with original NIJ CSVs, runnable loading → EDA → modeling → recommendation, and earlier figures/tables embedded |
 | **Read the written report** | [`reports/technical_report.md`](reports/technical_report.md) |
 | **See the deck** | [`reports/ISAF_Recidivism_Presentation.pptx`](reports/ISAF_Recidivism_Presentation.pptx) |
 | **Run the client app** | `streamlit run app.py` |
@@ -105,13 +105,16 @@ docs/                                 plan, development log, assignment brief
 ```
 
 **Submission notebook.** The executable cells in the root `.ipynb` import only public Python packages and read the
-NIJ CSVs in `data/`. It starts with training-only EDA, then defines feature engineering,
+three NIJ CSVs embedded inside the notebook (with SHA-256 integrity checks). It starts with training-only EDA, then defines feature engineering,
 preprocessing, all three models, evaluation, economic
 scenario, interpretability, stability, fairness and the training-only mitigation check
 in its own cells. The appendix embeds every earlier deep-dive narrative, table and figure
 in the same file; its historical project-code listings are reference text and do not run.
-Running every code cell is compute intensive, especially TabICL refits;
-CUDA is used when available. The larger exploratory audit remains in the repository.
+The `.ipynb` is the only repository file needed to read or rerun the analysis;
+Python packages must be installed, and TabICL may download its checkpoint on first use.
+The course also requires the slide deck and interactive app as separate deliverables.
+Running every code cell is compute intensive, especially TabICL refits; CUDA is used
+when available. The larger exploratory audit remains in the repository.
 
 **Pipeline.** [`scripts/reproduce.py`](scripts/reproduce.py) runs every step in dependency order
 and stops at the first failure (`--from-step` to resume, `--only` for a subset). It verifies that

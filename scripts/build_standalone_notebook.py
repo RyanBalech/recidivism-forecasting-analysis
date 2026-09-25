@@ -4,7 +4,10 @@ The notebook uses the NIJ CSV files and installed third-party packages. It does 
 import project modules, call project scripts, or read precomputed project artifacts.
 """
 from pathlib import Path
+import base64
+import hashlib
 import html
+import zlib
 
 import nbformat as nbf
 from nbclient import NotebookClient
@@ -14,6 +17,39 @@ ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "Recidivism_Project_Submission.ipynb"
 md = nbf.v4.new_markdown_cell
 code = nbf.v4.new_code_cell
+
+
+EMBEDDED_CSVS = (
+    "nij-challenge2021_full_dataset.csv",
+    "nij-challenge2021_training_dataset.csv",
+    "nij-challenge2021_test_dataset_1.csv",
+)
+
+
+def embedded_data_cell() -> nbf.NotebookNode:
+    """Package the three original NIJ inputs in a verifiable notebook code cell."""
+    lines = ["import base64, hashlib, io, zlib", "EMBEDDED_CSVS = {"]
+    checksums = {}
+    for name in EMBEDDED_CSVS:
+        data = (ROOT / "data" / name).read_bytes()
+        checksums[name] = hashlib.sha256(data).hexdigest()
+        encoded = base64.b64encode(zlib.compress(data, level=9)).decode("ascii")
+        lines.append(f"    {name!r}: (")
+        lines.extend(f"        {encoded[i:i + 120]!r}" for i in range(0, len(encoded), 120))
+        lines.append("    ),")
+    lines.extend([
+        "}",
+        f"EMBEDDED_SHA256 = {checksums!r}",
+        "def load_nij_csv(name):",
+        "    data = zlib.decompress(base64.b64decode(EMBEDDED_CSVS[name]))",
+        "    actual = hashlib.sha256(data).hexdigest()",
+        "    assert actual == EMBEDDED_SHA256[name], f'Dataset checksum mismatch: {name}'",
+        "    return pd.read_csv(io.BytesIO(data))",
+        "print('Three original NIJ CSVs available inside this notebook; SHA-256 checked on load.')",
+    ])
+    result = code("\n".join(lines))
+    result.metadata["jupyter"] = {"source_hidden": True}
+    return result
 
 
 def append_extended_evidence(notebook: nbf.NotebookNode) -> None:
@@ -68,7 +104,9 @@ def main() -> None:
     nb.cells = [
         md("""# Trustworthy recidivism forecasting — self-contained submission
 
-This notebook follows the familiar machine-learning workflow: **load data → explore the training data → choose and engineer eligible features → check leakage → train → evaluate → explain → test stability and fairness → recommend**. Run it top to bottom with the CSV files in `data/` and packages in `requirements.txt`. It does not import any code from `src/` or `scripts/`, run shell commands, or use saved models and result tables. Third-party libraries such as pandas, scikit-learn, XGBoost, TabICL and SHAP are normal dependencies.
+This notebook follows the familiar machine-learning workflow: **load data → explore the training data → choose and engineer eligible features → check leakage → train → evaluate → explain → test stability and fairness → recommend**. The three NIJ source CSVs are compressed and embedded in a collapsed cell, with SHA-256 checks on load. This `.ipynb` can stand alone as the analysis file; the course presentation and app are separate deliverables. It does not import code from `src/` or `scripts/`, run shell commands, or read saved models and result tables. It still requires installed third-party Python packages and TabICL's checkpoint, which TabICL can obtain through its normal package mechanism.
+
+To rerun in a fresh Python environment, install `numpy`, `pandas`, `scikit-learn==1.7.2`, `xgboost`, `tabicl==2.2.0`, `torch`, `shap`, `lime`, `statsmodels`, `matplotlib` and `ipykernel`, then use **Run All**. A first TabICL checkpoint download may require internet access; CUDA speeds up its repeated fits.
 
 **Client and decision.** A community-supervision software vendor is considering a voluntary re-entry support offer to the highest-risk 20% of people at supervision start. This is a retrospective course analysis, not an operationally validated tool. Our target is cumulative new arrest within three years. NIJ's challenge used conditional annual forecasts, so these results are not leaderboard-comparable.
 
@@ -92,18 +130,14 @@ from xgboost import XGBClassifier
 import torch
 
 SEED = 42
-ROOT = Path.cwd()
-if not (ROOT / 'data' / 'nij-challenge2021_full_dataset.csv').exists():
-    ROOT = ROOT.parent
-assert (ROOT / 'data' / 'nij-challenge2021_full_dataset.csv').exists(), 'Run from the project root or notebooks/'
 np.random.seed(SEED)
 warnings.filterwarnings('ignore', message="'penalty' was deprecated", category=FutureWarning)
 print('Python dependencies loaded; CUDA available:', torch.cuda.is_available())"""),
         md("""## 1. Load the dataset and define the prediction problem
 
-The input is NIJ's full released CSV. The outcome is cumulative new arrest within three years. We use its `Training_Sample` flag to recreate the official training and evaluation partitions; there is no new random split. The decision occurs at supervision start, before any future arrest or supervision activity."""),
+The three original NIJ CSV inputs are embedded below as compressed data. The first is the full released dataset; the two earlier releases let us independently verify baseline fields and training outcomes. The outcome is cumulative new arrest within three years. We use the `Training_Sample` flag to recreate the official training and evaluation partitions; there is no new random split. The decision occurs at supervision start, before any future arrest or supervision activity."""),
         code("""TARGET = 'Recidivism_Within_3years'
-raw = pd.read_csv(ROOT / 'data' / 'nij-challenge2021_full_dataset.csv')
+raw = load_nij_csv('nij-challenge2021_full_dataset.csv')
 assert raw.ID.is_unique and raw.ID.notna().all()
 assert set(raw.Training_Sample.unique()) == {0, 1}
 y_all = raw[TARGET].map({'Yes': 1, 'No': 0})
@@ -177,8 +211,8 @@ print('Model matrix:',X_train.shape,'training;',X_eval.shape,'evaluation')"""),
         md("""## 4. Check leakage against the original releases
 
 The full dataset was published after outcomes were known. We independently compare its baseline fields against the original training release and the first test release. We also verify the original training outcomes and disjoint IDs. These tests catch direct post-release fields and accidental row or label changes. They cannot establish the precise measurement timestamp of every nominally baseline field. The evaluation labels were used in later project development, so this is not an untouched research holdout."""),
-        code("""first_test = pd.read_csv(ROOT / 'data' / 'nij-challenge2021_test_dataset_1.csv')
-first_train = pd.read_csv(ROOT / 'data' / 'nij-challenge2021_training_dataset.csv')
+        code("""first_test = load_nij_csv('nij-challenge2021_test_dataset_1.csv')
+first_train = load_nij_csv('nij-challenge2021_training_dataset.csv')
 assert set(FEATURES).issubset(first_test.columns)
 assert set(first_test.ID) == set(audit_eval.ID)
 assert set(first_train.ID) == set(audit_train.ID)
@@ -663,10 +697,11 @@ The primary choice is **L1 logistic regression for a prospective shadow pilot**,
 
 The fairness gaps are material, particularly for women who are later re-arrested and across age bands. In the three training folds, dropping `Gang_Affiliated` reduced the female-minus-male FNR gap by about 0.08 but also lowered AUC by about 0.01. This is a real trade-off, not a free mitigation. The 27 tests above form this notebook's own family: TabICL's race selection-rate test survives Holm here, while none of the race tests survived correction across the broader 54-test course family in the repository audit. The conclusion is sensitive to the declared family; neither result proves race fairness. No model should allocate real services until intervention benefit, external validity, appeals, subgroup monitoring and stop rules are established. These data record arrests, not who would benefit most from help.
 
-**Reproduction notes.** Notebook functions live above the cells that call them. The only inputs are the full NIJ CSV and the original first-release training and test CSVs in `data/`; the only software requirements are public packages. Numerical fit times and the final digits of XGBoost/TabICL outputs may vary by hardware and package version.
+**Reproduction notes.** Notebook functions live above the cells that call them. The three original CSVs are embedded above, so no other repository file is needed to read or rerun this notebook. Installed public Python packages and TabICL's model checkpoint are still required; a first checkpoint download may need internet access. Numerical fit times and the final digits of XGBoost/TabICL outputs may vary by hardware and package version.
 
 **What follows?** The appendix in this same notebook preserves the previous deep-dive tables and figures: estimator sweep, learning curve, incumbent benchmark, XPER, explanation agreement, FPDP/fairness frontier, proxy recovery, individual stability/abstention and detailed calibration tests. Those historical outputs are embedded snapshots with their earlier code visible as collapsed reference text. The main course analysis above is fully executable from raw CSVs without project functions."""),
     ]
+    nb.cells.insert(3, embedded_data_cell())
     NotebookClient(nb, timeout=1800, kernel_name="python3",
                    resources={"metadata": {"path": str(ROOT)}}).execute()
     append_extended_evidence(nb)
