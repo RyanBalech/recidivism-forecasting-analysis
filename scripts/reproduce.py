@@ -20,7 +20,8 @@ STEPS = ["leakage_audit", "estimator_sweep", "train_evaluate", "incumbent_benchm
          "interpretability", "lime_local_fidelity", "logistic_effects", "explanation_agreement", "calibration_tests",
          "stability_structural", "individual_stability", "proxy_inference_audit",
          "race_ab_test", "xper_attribution",
-         "tradeoff_matrix", "improvement_journey", "refresh_readme", "build_standalone_notebook",
+         "tradeoff_matrix", "improvement_journey", "refresh_readme", "build_notebook",
+         "build_standalone_notebook",
          "build_slides", "build_prevalidation_pdf", "end_to_end_audit"]
 
 

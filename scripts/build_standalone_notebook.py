@@ -4,6 +4,7 @@ The notebook uses the NIJ CSV files and installed third-party packages. It does 
 import project modules, call project scripts, or read precomputed project artifacts.
 """
 from pathlib import Path
+import html
 
 import nbformat as nbf
 from nbclient import NotebookClient
@@ -13,6 +14,52 @@ ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "Recidivism_Project_Submission.ipynb"
 md = nbf.v4.new_markdown_cell
 code = nbf.v4.new_code_cell
+
+
+def append_extended_evidence(notebook: nbf.NotebookNode) -> None:
+    """Embed the earlier notebook's narrative, source and outputs in one file.
+
+    The appendix consists only of markdown cells. Historical project-code calls are
+    visible as collapsed reference text, never executed by the submission notebook.
+    Figures are notebook attachments, so they remain visible without artifact paths.
+    """
+    if any(c.cell_type == "markdown" and c.source.startswith("# Appendix — complete earlier project review")
+           for c in notebook.cells):
+        return
+    previous_path = ROOT / "notebooks/extended_artifact_review.ipynb"
+    if not previous_path.is_file():
+        raise FileNotFoundError(f"Build the extended review first: {previous_path}")
+    previous = nbf.read(previous_path, as_version=4)
+    notebook.cells.append(md("""# Appendix — complete earlier project review
+
+The sections below preserve the **earlier 94-cell notebook** in this same file: its narrative, code listings, tables and figures. These are published exploratory results. The historical code is collapsed as reference text because it calls repository modules and saved artifacts; it is not executed when you run this notebook. The course workflow above is the independently executable analysis from raw NIJ CSVs. Embedded figures and tables remain visible even without the repository's `artifacts/` folder."""))
+    for cell_index, old in enumerate(previous.cells):
+        if cell_index == 0:
+            continue  # the old title is redundant inside this appendix
+        if old.cell_type == "markdown":
+            notebook.cells.append(md(old.source))
+            continue
+        if old.cell_type != "code":
+            continue
+        escaped = html.escape(old.source)
+        notebook.cells.append(md(
+            f"<details><summary>Earlier analysis code cell {cell_index} (reference)</summary>"
+            f"<pre><code>{escaped}</code></pre></details>"
+        ))
+        for output_index, output in enumerate(old.outputs):
+            if output.output_type == "stream":
+                notebook.cells.append(md(f"```text\n{output.text}\n```"))
+                continue
+            data = getattr(output, "data", {})
+            if "image/png" in data:
+                filename = f"earlier_figure_{cell_index}_{output_index}.png"
+                figure = md(f"![Earlier analysis figure](attachment:{filename})")
+                figure.attachments = {filename: {"image/png": data["image/png"]}}
+                notebook.cells.append(figure)
+            elif "text/html" in data:
+                notebook.cells.append(md(str(data["text/html"])))
+            elif "text/plain" in data:
+                notebook.cells.append(md(f"```text\n{data['text/plain']}\n```"))
 
 
 def main() -> None:
@@ -380,6 +427,20 @@ surrogate=DecisionTreeRegressor(max_depth=3,min_samples_leaf=200,random_state=SE
 surrogate.fit(encoded_train,models['xgboost'].predict_proba(X_train)[:,1])
 surrogate_r2=r2_score(probabilities['xgboost'],surrogate.predict(encoded_eval))
 print('Depth-three surrogate R² on evaluation probabilities:',round(surrogate_r2,3))"""),
+        code("""# Local SHAP for the predetermined median-risk person, grouped to raw features.
+local_ix=int(np.argsort(probabilities['xgboost'])[len(X_eval)//2])
+local_prepared=pipe[:-1].transform(X_eval.iloc[[local_ix]])
+local_prepared=local_prepared.toarray() if hasattr(local_prepared,'toarray') else local_prepared
+local_values=shap.TreeExplainer(pipe[-1]).shap_values(local_prepared)[0]
+local_shap=(pd.DataFrame({'feature':[original_field(n) for n in transformed_names],
+                          'contribution':local_values})
+            .groupby('feature').contribution.sum().sort_values(key=abs,ascending=False).head(10))
+display(local_shap.rename('raw-score contribution').to_frame())
+fig,ax=plt.subplots(figsize=(9,5))
+local_shap.sort_values().plot.barh(ax=ax,color=['#c1121f' if v>0 else '#2a9d8f'
+                                            for v in local_shap.sort_values()])
+ax.set(xlabel='Contribution to XGBoost raw score',
+       title='Local SHAP: median-risk person'); plt.tight_layout(); plt.show()"""),
         code("""age_order=['18-22','23-27','28-32','33-37','38-42','43-47','48 or older']
 ice_people=X_eval.iloc[np.random.default_rng(SEED).choice(len(X_eval),200,replace=False)]
 pdp=[]
@@ -444,7 +505,13 @@ for case,ix in case_indices.items():
                           'top_rules':explanation.as_list()[:3]})
 lime_results=pd.DataFrame(lime_rows)
 display(lime_results[['case','seed','local_r2','model_probability']])
-display(lime_results.loc[(lime_results.case=='median')&(lime_results.seed==0),'top_rules'])"""),
+display(lime_results.loc[(lime_results.case=='median')&(lime_results.seed==0),'top_rules'])
+median_rules=lime_results.loc[(lime_results.case=='median')&(lime_results.seed==0),'top_rules'].iloc[0]
+fig,ax=plt.subplots(figsize=(9,3))
+pd.Series(dict(median_rules)).sort_values().plot.barh(ax=ax)
+ax.set(xlabel='LIME contribution to local probability',
+       title=f'Median-risk explanation (local R²={lime_results.loc[(lime_results.case=="median") & (lime_results.seed==0),"local_r2"].iloc[0]:.2f})')
+plt.tight_layout(); plt.show()"""),
         md("""### One person's complete path
 
 The median-risk evaluation person is fixed by XGBoost's rank. We show their raw fields, trained preprocessing, three probabilities, local explanation and support decision. These are predictions, not a diagnosis or a reason to impose a sanction."""),
@@ -488,7 +555,14 @@ for draw in range(3):
                       'rank_correlation':pd.Series(q).corr(pd.Series(original),method='spearman'),
                       'top20_jaccard':(a&b).sum()/(a|b).sum()})
 stability=pd.DataFrame(stability)
-display(stability.groupby('model').agg(['mean','std']).round(4))"""),
+display(stability.groupby('model').agg(['mean','std']).round(4))
+fig,axes=plt.subplots(1,2,figsize=(11,4))
+stability.groupby('model').mean_abs_probability_change.mean().plot.bar(ax=axes[0],
+    title='Mean probability change across refits')
+stability.groupby('model').top20_jaccard.mean().plot.bar(ax=axes[1],
+    title='Top-20% selected-set overlap',ylim=(0,1))
+axes[0].set_ylabel('Mean |new p − original p|'); axes[1].set_ylabel('Jaccard similarity')
+plt.tight_layout(); plt.show()"""),
         md("""## 9. Fairness at the actual support rule
 
 At 20% capacity we compare selection rate (access), false negative rate among people later re-arrested (missed support) and false positive rate. Group gaps are descriptive and do not prove discrimination or fairness. Arrest itself is influenced by social and enforcement processes. Race and gender are audit fields only. Age is a model input, so age gaps are especially important to examine."""),
@@ -516,7 +590,18 @@ fairness=pd.DataFrame(audit_rows)
 display(fairness.round(3))
 gaps=fairness.groupby(['model','attribute'])[['selection_rate','fnr','fpr']].agg(
     lambda s:s.max()-s.min()).rename(columns=lambda c:c+'_range')
-display(gaps.round(3))"""),
+display(gaps.round(3))
+fig,axes=plt.subplots(1,2,figsize=(12,4))
+for ax,attribute in zip(axes,['Gender','Race']):
+    part=fairness[fairness.attribute==attribute]
+    part.pivot(index='model',columns='group',values='selection_rate').plot.bar(ax=ax)
+    ax.set(title=f'{attribute}: support offers at 20% capacity',ylabel='Selection rate',ylim=(0,.3))
+plt.tight_layout(); plt.show()
+fig,ax=plt.subplots(figsize=(8,4))
+fairness[fairness.attribute=='Gender'].pivot(index='model',columns='group',values='fnr').plot.bar(ax=ax)
+ax.set(title='Gender: missed support among later re-arrested people',
+       ylabel='False negative rate',ylim=(0,1))
+plt.tight_layout(); plt.show()"""),
         md("""### Test multiplicity and a training-only mitigation check
 
 We test group differences on the published decision rule and apply Holm correction across this notebook's test family. A non-rejection does not establish equivalence. The mitigation experiment drops `Gang_Affiliated`, refits within each training fold, and scores only its held-out fold. The candidate was chosen during prior research, so this is a validation of a fixed candidate, not a fresh search over all fields."""),
@@ -562,16 +647,29 @@ mitigation=pd.DataFrame(mitigation)
 display(mitigation.groupby(['model','drop_gang'])[['auc','female_minus_male_fnr']]
         .agg(['mean','std']).round(4))
 print('Only training partition labels were used in this cross-validation.')"""),
+        md("""### Four-dimensional comparison at a glance
+
+The table below collects a predictive metric, an explanation-fidelity limit, a refit-stability metric and a fairness gap. It is a decision aid; these quantities have different units and should not be averaged into a single score."""),
+        code("""tradeoff=metrics[['roc_auc','brier','captured_at_20pct']].copy()
+tradeoff['mean_refit_top20_jaccard']=stability.groupby('model').top20_jaccard.mean()
+tradeoff['gender_fnr_range']=gaps.xs('Gender',level='attribute').fnr_range
+tradeoff['local_explanation_limit']=['direct coefficients' if name=='logistic'
+    else ('LIME median R² ≈ '+str(round(lime_results.query("case == 'median'").local_r2.mean(),2))
+          if name=='xgboost' else 'no native attribution') for name in tradeoff.index]
+display(tradeoff.round(4))"""),
         md("""## 10. Recommendation and limits
 
 The primary choice is **L1 logistic regression for a prospective shadow pilot**, with XGBoost running as a challenger. XGBoost has a small but measurable ranking advantage in this retrospective evaluation and captures 12 more observed events among 1,561 offers. Logistic offers direct coefficient interpretation, simpler maintenance and greater refit stability in these resamples. TabICL has the highest point AUC but uses more compute and has no equally direct native explanation. The median-risk person's LIME surrogate reached only about R² = 0.33, so that local rule list is a limited approximation.
 
 The fairness gaps are material, particularly for women who are later re-arrested and across age bands. In the three training folds, dropping `Gang_Affiliated` reduced the female-minus-male FNR gap by about 0.08 but also lowered AUC by about 0.01. This is a real trade-off, not a free mitigation. The 27 tests above form this notebook's own family: TabICL's race selection-rate test survives Holm here, while none of the race tests survived correction across the broader 54-test course family in the repository audit. The conclusion is sensitive to the declared family; neither result proves race fairness. No model should allocate real services until intervention benefit, external validity, appeals, subgroup monitoring and stop rules are established. These data record arrests, not who would benefit most from help.
 
-**Reproduction notes.** Notebook functions live above the cells that call them. The only inputs are the full NIJ CSV and the original first-release training and test CSVs in `data/`; the only software requirements are public packages. Numerical fit times and the final digits of XGBoost/TabICL outputs may vary by hardware and package version. The repository scripts contain a larger exploratory audit, but they are not needed to execute or understand this notebook."""),
+**Reproduction notes.** Notebook functions live above the cells that call them. The only inputs are the full NIJ CSV and the original first-release training and test CSVs in `data/`; the only software requirements are public packages. Numerical fit times and the final digits of XGBoost/TabICL outputs may vary by hardware and package version.
+
+**What follows?** The appendix in this same notebook preserves the previous deep-dive tables and figures: estimator sweep, learning curve, incumbent benchmark, XPER, explanation agreement, FPDP/fairness frontier, proxy recovery, individual stability/abstention and detailed calibration tests. Those historical outputs are embedded snapshots with their earlier code visible as collapsed reference text. The main course analysis above is fully executable from raw CSVs without project functions."""),
     ]
     NotebookClient(nb, timeout=1800, kernel_name="python3",
                    resources={"metadata": {"path": str(ROOT)}}).execute()
+    append_extended_evidence(nb)
     nbf.write(nb, OUT)
     print(OUT)
 

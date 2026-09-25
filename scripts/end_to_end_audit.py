@@ -179,27 +179,42 @@ def main():
             if not np.isclose(part[metric].mean(), stability.loc[name, metric], atol=5.1e-5):
                 raise ValueError(f"Stale stability summary: {name}/{metric}")
     submission_notebook = ROOT / "Recidivism_Project_Submission.ipynb"
-    notebook_path = ROOT / "Recidivism_Project_Submission.ipynb"
+    extended_notebook = ROOT / "notebooks/extended_artifact_review.ipynb"
     slides_path = ROOT / "reports/ISAF_Recidivism_Presentation.pptx"
-    for path in [submission_notebook, notebook_path, slides_path]:
+    for path in [submission_notebook, extended_notebook, slides_path]:
         if not path.is_file() or path.stat().st_size == 0:
             raise ValueError(f"Missing deliverable: {path}")
-    if submission_notebook.read_bytes() != notebook_path.read_bytes():
-        raise ValueError("Root submission notebook and canonical notebook are out of sync")
-    notebook = json.loads(notebook_path.read_text(encoding="utf-8"))
-    code_cells = [c for c in notebook["cells"] if c["cell_type"] == "code"]
-    if any(c["execution_count"] is None or any(o["output_type"] == "error" for o in c["outputs"]) for c in code_cells):
-        raise ValueError("Notebook contains unexecuted cells or execution errors")
+    notebook_counts = {}
+    for path in [submission_notebook, extended_notebook]:
+        notebook = json.loads(path.read_text(encoding="utf-8"))
+        code_cells = [c for c in notebook["cells"] if c["cell_type"] == "code"]
+        if any(c["execution_count"] is None or any(o["output_type"] == "error" for o in c["outputs"])
+               for c in code_cells):
+            raise ValueError(f"Notebook contains unexecuted cells or execution errors: {path}")
+        notebook_counts[path.name] = len(code_cells)
+    submission = json.loads(submission_notebook.read_text(encoding="utf-8"))
+    markdown_cells = [c for c in submission["cells"] if c["cell_type"] == "markdown"]
+    appendix_present = any("# Appendix — complete earlier project review" in "".join(c["source"])
+                           for c in markdown_cells)
+    embedded_figures = sum(len(c.get("attachments", {})) for c in markdown_cells)
+    historical_code_listings = sum("Earlier analysis code cell" in "".join(c["source"])
+                                   for c in markdown_cells)
+    if not appendix_present or embedded_figures < 17 or historical_code_listings != notebook_counts[extended_notebook.name]:
+        raise ValueError("Submission notebook is missing earlier analysis content")
     from pptx import Presentation
     report["deliverables"] = {"submission_notebook": submission_notebook.name,
-                              "executed_code_cells": len(code_cells),
+                              "executed_code_cells": notebook_counts[submission_notebook.name],
+                              "extended_notebook": str(extended_notebook.relative_to(ROOT)),
+                              "extended_executed_code_cells": notebook_counts[extended_notebook.name],
+                              "embedded_earlier_figures": embedded_figures,
+                              "historical_code_listings": historical_code_listings,
                               "slides": len(Presentation(slides_path).slides)}
     report["checks_passed"] = ["original release and preprocessing boundaries", "prediction ID/label alignment",
                                "all published performance/economic metrics", "saved conventional model predictions",
                                "merged fairness point estimates", "paired stability summaries", "executed notebook and readable slide deck"]
     inputs = [ARTIFACT_DIR / name for name in ["test_predictions.csv", "model_metrics.csv", "fairness_inference.csv"]]
     inputs += list((ARTIFACT_DIR / "models").glob("*.joblib"))
-    inputs += [submission_notebook, notebook_path, slides_path,
+    inputs += [submission_notebook, extended_notebook, slides_path,
                ARTIFACT_DIR / "stability_pairs.csv", ARTIFACT_DIR / "stability_summary.csv"]
     report["input_sha256"] = {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in inputs}
     report["source_sha256"] = {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest()

@@ -58,3 +58,7 @@ python scripts/end_to_end_audit.py --gpu-check --refit-dir artifacts/smoke/end_t
 The most useful next accuracy evidence would be a genuinely new cohort with verified measurement times. For this submission, the stronger result is a reproducible comparison with clearly measured trade-offs, rather than another tiny gain on the reused evaluation set.
 
 **25 September submission update:** the root notebook now defines and runs the course analysis in its own cells from the original CSVs. The older artifact-backed notebook can be regenerated separately with `scripts/build_notebook.py`; it is no longer the submission entry point. Its broader exploratory tables remain available in `artifacts/` and `reports/`.
+
+**25 September preservation update:** the earlier 94-cell review is checked in as `notebooks/extended_artifact_review.ipynb`, with all 47 code cells executed. The root notebook retains the reproducible course workflow and adds inline plots for local SHAP, LIME, refit stability and subgroup support access. The audit verifies both notebooks and records their hashes.
+
+**25 September one-file submission update:** the root notebook now embeds the entire earlier review as an appendix: all narrative, 47 collapsed historical code listings, 50 HTML tables and 17 figure attachments. These historical outputs are snapshots and do not rerun as part of the self-contained core. The core modeling and course analysis cells remain executable from CSVs without project imports. The extended notebook is retained as the appendix source snapshot.

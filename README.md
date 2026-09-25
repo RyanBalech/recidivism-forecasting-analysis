@@ -16,7 +16,7 @@ or surveillance. This is a retrospective course project, not a validated operati
 
 | If you want to… | Open |
 |---|---|
-| **Read and rerun the whole analysis** | [`Recidivism_Project_Submission.ipynb`](Recidivism_Project_Submission.ipynb) — fully executed and self-contained, loading → EDA → feature engineering → training → evaluation → recommendation |
+| **Read the complete submission in one notebook** | [`Recidivism_Project_Submission.ipynb`](Recidivism_Project_Submission.ipynb) — runnable loading → EDA → modeling → recommendation, followed by the earlier deep-dive figures and tables in an embedded appendix |
 | **Read the written report** | [`reports/technical_report.md`](reports/technical_report.md) |
 | **See the deck** | [`reports/ISAF_Recidivism_Presentation.pptx`](reports/ISAF_Recidivism_Presentation.pptx) |
 | **Run the client app** | `streamlit run app.py` |
@@ -92,7 +92,8 @@ persisting even with the age field fixed.
 ## Repository map
 
 ```
-Recidivism_Project_Submission.ipynb   executed notebook — complete course analysis in its own cells
+Recidivism_Project_Submission.ipynb   one submission notebook: executable analysis plus embedded earlier evidence
+notebooks/extended_artifact_review.ipynb  source snapshot used to rebuild the appendix
 app.py                                Streamlit client lab (6 tabs)
 src/recidivism/                       data loading, modelling, metrics
 scripts/                              analysis pipeline, one concern per file
@@ -103,12 +104,13 @@ reports/                              deck, technical report, Q&A notes, reviews
 docs/                                 plan, development log, assignment brief
 ```
 
-**Submission notebook.** The root `.ipynb` imports only public Python packages and reads the
+**Submission notebook.** The executable cells in the root `.ipynb` import only public Python packages and read the
 NIJ CSVs in `data/`. It starts with training-only EDA, then defines feature engineering,
 preprocessing, all three models, evaluation, economic
 scenario, interpretability, stability, fairness and the training-only mitigation check
-in its own cells. It does not import `src/` or `scripts/`, call shell commands, or depend
-on saved results. Running every cell is compute intensive, especially TabICL refits;
+in its own cells. The appendix embeds every earlier deep-dive narrative, table and figure
+in the same file; its historical project-code listings are reference text and do not run.
+Running every code cell is compute intensive, especially TabICL refits;
 CUDA is used when available. The larger exploratory audit remains in the repository.
 
 **Pipeline.** [`scripts/reproduce.py`](scripts/reproduce.py) runs every step in dependency order
