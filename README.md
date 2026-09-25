@@ -16,7 +16,7 @@ or surveillance. This is a retrospective course project, not a validated operati
 
 | If you want to… | Open |
 |---|---|
-| **Read and rerun the whole analysis** | [`Recidivism_Project_Submission.ipynb`](Recidivism_Project_Submission.ipynb) — fully executed and self-contained, data prep → recommendation |
+| **Read and rerun the whole analysis** | [`Recidivism_Project_Submission.ipynb`](Recidivism_Project_Submission.ipynb) — fully executed and self-contained, loading → EDA → feature engineering → training → evaluation → recommendation |
 | **Read the written report** | [`reports/technical_report.md`](reports/technical_report.md) |
 | **See the deck** | [`reports/ISAF_Recidivism_Presentation.pptx`](reports/ISAF_Recidivism_Presentation.pptx) |
 | **Run the client app** | `streamlit run app.py` |
@@ -104,7 +104,8 @@ docs/                                 plan, development log, assignment brief
 ```
 
 **Submission notebook.** The root `.ipynb` imports only public Python packages and reads the
-NIJ CSVs in `data/`. It defines preprocessing, all three models, evaluation, economic
+NIJ CSVs in `data/`. It starts with training-only EDA, then defines feature engineering,
+preprocessing, all three models, evaluation, economic
 scenario, interpretability, stability, fairness and the training-only mitigation check
 in its own cells. It does not import `src/` or `scripts/`, call shell commands, or depend
 on saved results. Running every cell is compute intensive, especially TabICL refits;

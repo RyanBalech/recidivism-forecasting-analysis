@@ -21,7 +21,7 @@ def main() -> None:
     nb.cells = [
         md("""# Trustworthy recidivism forecasting — self-contained submission
 
-This notebook contains the **data preparation, leakage checks, model definitions, fitting, evaluation, interpretability, stability, fairness and final decision** in its own cells. Run it top to bottom with the CSV files in `data/` and packages in `requirements.txt`. It does not import any code from `src/` or `scripts/`, run shell commands, or use saved models and result tables. Third-party libraries such as pandas, scikit-learn, XGBoost, TabICL and SHAP are normal dependencies.
+This notebook follows the familiar machine-learning workflow: **load data → explore the training data → choose and engineer eligible features → check leakage → train → evaluate → explain → test stability and fairness → recommend**. Run it top to bottom with the CSV files in `data/` and packages in `requirements.txt`. It does not import any code from `src/` or `scripts/`, run shell commands, or use saved models and result tables. Third-party libraries such as pandas, scikit-learn, XGBoost, TabICL and SHAP are normal dependencies.
 
 **Client and decision.** A community-supervision software vendor is considering a voluntary re-entry support offer to the highest-risk 20% of people at supervision start. This is a retrospective course analysis, not an operationally validated tool. Our target is cumulative new arrest within three years. NIJ's challenge used conditional annual forecasts, so these results are not leaderboard-comparable.
 
@@ -52,11 +52,59 @@ assert (ROOT / 'data' / 'nij-challenge2021_full_dataset.csv').exists(), 'Run fro
 np.random.seed(SEED)
 warnings.filterwarnings('ignore', message="'penalty' was deprecated", category=FutureWarning)
 print('Python dependencies loaded; CUDA available:', torch.cuda.is_available())"""),
-        md("""## 1. Define the prediction time, target and eligible inputs
+        md("""## 1. Load the dataset and define the prediction problem
 
-The prediction occurs at supervision start. We use the 29 fields from NIJ's first test release, excluding ID, protected attributes and geography. Post-release supervision activity, drug tests, employment and all arrest outcomes are unavailable at this decision time. Gender and race remain in a separate audit table. The dataset's `Training_Sample` flag reproduces the official split; there is no random repartition."""),
+The input is NIJ's full released CSV. The outcome is cumulative new arrest within three years. We use its `Training_Sample` flag to recreate the official training and evaluation partitions; there is no new random split. The decision occurs at supervision start, before any future arrest or supervision activity."""),
         code("""TARGET = 'Recidivism_Within_3years'
-FEATURES = [
+raw = pd.read_csv(ROOT / 'data' / 'nij-challenge2021_full_dataset.csv')
+assert raw.ID.is_unique and raw.ID.notna().all()
+assert set(raw.Training_Sample.unique()) == {0, 1}
+y_all = raw[TARGET].map({'Yes': 1, 'No': 0})
+assert y_all.notna().all()
+train_mask = raw.Training_Sample.eq(1)
+train_rows = raw.loc[train_mask].reset_index(drop=True)
+eval_rows = raw.loc[~train_mask].reset_index(drop=True)
+y_train = y_all[train_mask].astype(int).reset_index(drop=True)
+y_eval = y_all[~train_mask].astype(int).reset_index(drop=True)
+audit_train = train_rows[['ID','Gender','Race']].copy()
+audit_eval = eval_rows[['ID','Gender','Race']].copy()
+display(pd.Series({'rows':len(raw),'columns':raw.shape[1],
+                   'official_training_rows':len(train_rows),
+                   'official_evaluation_rows':len(eval_rows),
+                   'training_new_arrest_rate':y_train.mean()}))
+display(train_rows[[TARGET,'Age_at_Release','Supervision_Risk_Score_First','Gang_Affiliated']].head())"""),
+        md("""## 2. Explore the training data (EDA)
+
+EDA is restricted to the training partition so choices about missingness, categories and feature transformations do not depend on evaluation outcomes. We inspect class balance, column types, missing values and category levels before modeling. Protected groups are shown here only to understand the data and later audit errors; they are excluded from scoring."""),
+        code("""eda = train_rows.drop(columns=['ID','Training_Sample'])
+display(pd.DataFrame({'outcome':["No new arrest","New arrest"],
+                      'count':y_train.value_counts().sort_index().values,
+                      'share':y_train.value_counts(normalize=True).sort_index().values}))
+display(pd.Series({'numeric_columns':int(eda.select_dtypes(include='number').shape[1]),
+                   'categorical_columns':int(eda.select_dtypes(exclude='number').shape[1]),
+                   'duplicate_training_IDs':int(train_rows.ID.duplicated().sum())}))
+missing_eda = train_rows.isna().mean().sort_values(ascending=False)
+display(missing_eda.head(15).rename('missing_share').to_frame())
+display(pd.DataFrame({'feature':['Age_at_Release','Supervision_Risk_Score_First',
+                                 'Gang_Affiliated','Prison_Offense'],
+                      'distinct_nonmissing':[train_rows[c].nunique(dropna=True) for c in
+                                             ['Age_at_Release','Supervision_Risk_Score_First',
+                                              'Gang_Affiliated','Prison_Offense']]}))"""),
+        code("""fig,axes=plt.subplots(1,3,figsize=(16,4))
+y_train.map({0:'No',1:'Yes'}).value_counts().reindex(['No','Yes']).plot.bar(ax=axes[0],title='Training outcome')
+missing_eda[missing_eda>0].head(10).sort_values().plot.barh(ax=axes[1],title='Missing values (training)')
+age_order=['18-22','23-27','28-32','33-37','38-42','43-47','48 or older']
+age_rates=train_rows.assign(outcome=y_train).groupby('Age_at_Release').outcome.agg(['mean','size']).reindex(age_order)
+age_rates['mean'].plot.bar(ax=axes[2],title='New-arrest rate by age (training)')
+axes[0].set(ylabel='People'); axes[1].set(xlabel='Share missing'); axes[2].set(ylabel='Observed rate',ylim=(0,1))
+plt.tight_layout(); plt.show()
+display(age_rates.rename(columns={'mean':'new_arrest_rate','size':'people'}).round(3))
+display(train_rows.assign(outcome=y_train).groupby(['Gender','Race']).outcome.agg(['mean','size']).round(3))"""),
+        md("""The exploratory plots show why an accuracy score alone is insufficient: the outcome is common, arrest rates vary by age, and some baseline fields have structured missingness. These are associations, not causal effects. The evaluation partition remains untouched during the choices below."""),
+        md("""## 3. Select and engineer eligible features
+
+Only fields available in NIJ's first test release can enter a model. We keep 29 baseline fields and exclude ID, target, split flag, gender, race, geography and post-release supervision, employment or drug-test fields. `Gender` and `Race` stay in the audit tables. The feature list is explicit so a reader can see exactly what enters all three models."""),
+        code("""FEATURES = [
     'Age_at_Release', 'Gang_Affiliated', 'Supervision_Risk_Score_First',
     'Supervision_Level_First', 'Education_Level', 'Dependents', 'Prison_Offense',
     'Prison_Years', 'Prior_Arrest_Episodes_Felony', 'Prior_Arrest_Episodes_Misd',
@@ -69,25 +117,17 @@ FEATURES = [
     'Prior_Revocations_Probation', 'Condition_MH_SA', 'Condition_Cog_Ed',
     'Condition_Other',
 ]
-raw = pd.read_csv(ROOT / 'data' / 'nij-challenge2021_full_dataset.csv')
-assert raw.ID.is_unique and raw.ID.notna().all()
-assert set(raw.Training_Sample.unique()) == {0, 1}
 assert len(FEATURES) == 29 and set(FEATURES).issubset(raw.columns)
 assert not set(FEATURES) & {'ID', 'Gender', 'Race', 'Residence_PUMA', TARGET, 'Training_Sample'}
 assert not any(c.startswith('Recidivism_') for c in FEATURES)
-y_all = raw[TARGET].map({'Yes': 1, 'No': 0})
-assert y_all.notna().all()
-train_mask = raw.Training_Sample.eq(1)
-X_train = raw.loc[train_mask, FEATURES].reset_index(drop=True)
-X_eval = raw.loc[~train_mask, FEATURES].reset_index(drop=True)
-y_train = y_all[train_mask].astype(int).reset_index(drop=True)
-y_eval = y_all[~train_mask].astype(int).reset_index(drop=True)
-audit_train = raw.loc[train_mask, ['ID','Gender','Race']].reset_index(drop=True)
-audit_eval = raw.loc[~train_mask, ['ID','Gender','Race']].reset_index(drop=True)
-display(pd.DataFrame({'partition':['training','evaluation'], 'rows':[len(X_train),len(X_eval)],
-                      'arrest_rate':[y_train.mean(),y_eval.mean()]}))
-display(pd.DataFrame({'feature':FEATURES, 'missing_train':X_train.isna().mean().values}))"""),
-        md("""## 2. Check leakage against the original releases
+X_train = train_rows[FEATURES].copy()
+X_eval = eval_rows[FEATURES].copy()
+display(pd.DataFrame({'feature':FEATURES,
+                      'dtype':X_train.dtypes.astype(str).values,
+                      'missing_train':X_train.isna().mean().values,
+                      'levels_train':X_train.nunique(dropna=True).values}))
+print('Model matrix:',X_train.shape,'training;',X_eval.shape,'evaluation')"""),
+        md("""## 4. Check leakage against the original releases
 
 The full dataset was published after outcomes were known. We independently compare its baseline fields against the original training release and the first test release. We also verify the original training outcomes and disjoint IDs. These tests catch direct post-release fields and accidental row or label changes. They cannot establish the precise measurement timestamp of every nominally baseline field. The evaluation labels were used in later project development, so this is not an untouched research holdout."""),
         code("""first_test = pd.read_csv(ROOT / 'data' / 'nij-challenge2021_test_dataset_1.csv')
@@ -109,7 +149,7 @@ display(pd.Series({'released_features_verified':len(FEATURES), 'disjoint_IDs':Tr
                    'training_outcomes_verified':True, 'gang_missing_rows':int(missing.sum()),
                    'women_among_gang_missing':float(audit_train.loc[missing,'Gender'].eq('F').mean())}))
 print('Limitation: first-release availability does not prove that every assessment was measured before the decision.')"""),
-        md("""### Why missingness matters
+        md("""### Missingness and protected-attribute proxies
 
 `Gang_Affiliated` is missing for every woman and no man in the training set. A missingness indicator would reveal gender exactly even though Gender is excluded from model inputs. We use the **training mode** to fill missing categories, including for TabICL. Other correlations and proxies can still carry protected information; exclusion alone does not guarantee fairness."""),
         code("""display(pd.crosstab(audit_train.Gender, X_train.Gang_Affiliated.isna(), normalize='index'))
@@ -119,9 +159,9 @@ tab_train, tab_eval = X_train.fillna(category_modes), X_eval.fillna(category_mod
 assert not tab_train[categorical].isna().any().any()
 assert not tab_eval[categorical].isna().any().any()
 print('Categorical missing values filled using training modes only.')"""),
-        md("""## 3. Build three model families from scratch
+        md("""## 5. Preprocess and train three model families
 
-All learned preprocessing is inside each conventional-model pipeline and fitted only on training rows. Logistic uses median imputation, standardization, pooled one-hot encoding and L1 regularization. XGBoost additionally converts ordered categories to ranks. The hyperparameters were selected earlier with training-only cross-validation; here their exact values are visible. TabICLv2 uses its own mixed-data encoding and the shared mode-filled table. A CUDA GPU is used automatically when available."""),
+The feature engineering is explicit below. Ordered age/prison categories and count bands receive numeric ranks for XGBoost; logistic keeps categories one-hot. Numeric median imputation, categorical mode imputation, scaling and one-hot categories are learned inside the conventional-model pipelines from training rows only. TabICLv2 uses its own mixed-data encoding and the shared training-mode-filled table. The hyperparameters were selected earlier with training-only cross-validation; their exact values are visible. A CUDA GPU is used for TabICL when available."""),
         code("""ORDERED = {
     'Prison_Years': {'Less than 1 year':0, '1-2 years':1,
                      'Greater than 2 to 3 years':2, 'More than 3 years':3},
@@ -172,7 +212,17 @@ def make_xgboost(frame):
 display(pd.DataFrame([{'model':'logistic','settings':LOGIT_PARAMS},
                       {'model':'xgboost','settings':XGB_PARAMS},
                       {'model':'tabicl','settings':{'n_estimators':16,
-                       'checkpoint':'tabicl-classifier-v2-20260212.ckpt'}}]))"""),
+                       'checkpoint':'tabicl-classifier-v2-20260212.ckpt'}}]))
+display(pd.DataFrame({'raw_age':X_train.Age_at_Release.head().values,
+                      'xgboost_age_rank':ordinal_encode(X_train[['Age_at_Release']]).iloc[:,0].head().values,
+                      'raw_prison_years':X_train.Prison_Years.head().values,
+                      'xgboost_prison_rank':ordinal_encode(X_train[['Prison_Years']]).iloc[:,0].head().values}))
+preview_transform = prepare(X_train).fit(X_train)
+print('29 raw fields become',len(preview_transform.get_feature_names_out()),
+      'prepared columns for logistic regression; fitted on training rows only.')"""),
+        md("""### Fit on training rows and predict evaluation rows
+
+The next cell trains all three models from scratch. The evaluation outcomes are not passed to `.fit()`. The training-mode category fill above is reused for TabICL evaluation rows."""),
         code("""from tabicl import TabICLClassifier
 
 models, probabilities, timing = {}, {}, {}
@@ -194,7 +244,7 @@ probabilities['tabicl'] = tabicl.predict_proba(tab_eval)[:,1]
 timing['tabicl'] = time.perf_counter()-start
 print(f'tabicl: {timing["tabicl"]:.1f} s; device: {"CUDA" if torch.cuda.is_available() else "CPU"}')
 assert all(np.isfinite(p).all() and len(p)==len(y_eval) for p in probabilities.values())"""),
-        md("""## 4. Evaluate probability quality and the support decision
+        md("""## 6. Evaluate probability quality and the support decision
 
 ROC AUC measures ranking (0.5 is chance), average precision focuses on the positive class, Brier is mean squared probability error, and ECE is a binned calibration estimate. Lower Brier/ECE is better. We also select exactly 20% by descending risk, with stable row order for ties, to reflect a fixed service capacity."""),
         code("""def select_top(scores, capacity=.20):
@@ -258,7 +308,7 @@ for name,p in probabilities.items():
                       'assumed_cost_eur':chosen.sum()*5000,
                       'assumed_net_eur':captured*50000*.20-chosen.sum()*5000})
 display(pd.DataFrame(economics).set_index('model'))"""),
-        md("""## 5. Interpret what the models use
+        md("""## 7. Interpret what the models use
 
 Logistic coefficients are effects on log-odds per transformed unit; they are not causal. Average marginal effects below instead perturb one raw field while holding all others fixed, then average the change in predicted probability. For categorical features we compare each level to its training mode. Permutation importance measures the decline in evaluation AUC when a raw field is shuffled. Correlated fields may share credit."""),
         code("""logit=models['logistic']
@@ -412,7 +462,7 @@ print(f'XGBoost rank {rank} of {len(xgb_p)}; support offer at 20% capacity:',
       bool(select_top(xgb_p)[ix]))
 print('LIME local R² for this case:',
       lime_results.loc[lime_results.case=='median','local_r2'].round(3).tolist())"""),
-        md("""## 6. Stability under training resampling
+        md("""## 8. Stability under training resampling
 
 Each model is refitted on the same bootstrap samples of the *training* partition. We compare its new evaluation scores and selected set to its original fit. This measures training-data sensitivity, not future population shift. TabICL refits are compute-heavy and therefore measured with three shared resamples here; the repository's expanded audit uses eight."""),
         code("""rng=np.random.default_rng(SEED)
@@ -439,7 +489,7 @@ for draw in range(3):
                       'top20_jaccard':(a&b).sum()/(a|b).sum()})
 stability=pd.DataFrame(stability)
 display(stability.groupby('model').agg(['mean','std']).round(4))"""),
-        md("""## 7. Fairness at the actual support rule
+        md("""## 9. Fairness at the actual support rule
 
 At 20% capacity we compare selection rate (access), false negative rate among people later re-arrested (missed support) and false positive rate. Group gaps are descriptive and do not prove discrimination or fairness. Arrest itself is influenced by social and enforcement processes. Race and gender are audit fields only. Age is a model input, so age gaps are especially important to examine."""),
         code("""def group_rates(y, selected, groups, attribute, model):
@@ -512,7 +562,7 @@ mitigation=pd.DataFrame(mitigation)
 display(mitigation.groupby(['model','drop_gang'])[['auc','female_minus_male_fnr']]
         .agg(['mean','std']).round(4))
 print('Only training partition labels were used in this cross-validation.')"""),
-        md("""## 8. Recommendation and limits
+        md("""## 10. Recommendation and limits
 
 The primary choice is **L1 logistic regression for a prospective shadow pilot**, with XGBoost running as a challenger. XGBoost has a small but measurable ranking advantage in this retrospective evaluation and captures 12 more observed events among 1,561 offers. Logistic offers direct coefficient interpretation, simpler maintenance and greater refit stability in these resamples. TabICL has the highest point AUC but uses more compute and has no equally direct native explanation. The median-risk person's LIME surrogate reached only about R² = 0.33, so that local rule list is a limited approximation.
 
