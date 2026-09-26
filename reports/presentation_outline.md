@@ -12,10 +12,13 @@ Paths below are relative to this file (`reports/`). Figures are in `artifacts/fi
 | P1 | Intro + EDA | 1.5 min | 1–3 | P4 |
 | P2 | Features + Leakage | 1.5 min | 4–5 | P5 |
 | P3 | Models + Performance | 2.5 min | 6–8 | P6 |
-| P4 | Interpretability | 2.0 min | 9–11 | P1 |
-| P5 | Fairness (race as the main line, gender as the problem we found) | 3.0 min | 12–15 | P2 |
-| P6 | Stability + Trade-offs + Recommendation | 2.5 min | 16–18 | P3 |
-| P1 | App demo | 0.5–1 min | 19 | — |
+| P4 | Interpretability | 2.7 min | 9–12 | P1 |
+| P5 | Fairness (race as the main line, gender as the problem we found) | 3.0 min | 13–16 | P2 |
+| P6 | Stability + Trade-offs + Recommendation | 2.5 min | 17–19 | P3 |
+| P1 | App demo | 0.75 min | 20 | — |
+
+Interpretability was extended from 3 to 4 slides (26 Sep): PDP/ICE and XPER moved from the appendix
+into the core so every course interpretability method has an evidence slide. Total ≈ 14:25.
 
 P2 and P5 back each other up because both deal with proxies and leakage.
 
@@ -117,13 +120,19 @@ P2 and P5 back each other up because both deal with proxies and leakage.
   - A recorded gang affiliation raises predicted risk by about 17 points.
 - Sources: [shap_global.png](../artifacts/figures/shap_global.png), [marginal_effects.png](../artifacts/figures/marginal_effects.png), [probability_contrasts.csv](../artifacts/probability_contrasts.csv)
 
-### Slide 10 · Explaining one person, and checking the explanation is faithful
+### Slide 10 · Looking from outside: PDP/ICE for all three models
+- PDP (average effect) and ICE (one curve per person) for age, prior felony arrests and the Georgia score, for all three models. All agree risk falls with age.
+- The three explanation routes: logistic coefficients read directly; XGBoost needs SHAP, and a depth-3 surrogate reproduces only R² = 0.61; TabICL has no native attribution, so PDP/ICE is the only view.
+- Sources: [pdp_ice.png](../artifacts/figures/pdp_ice.png), [interpretability_summary.json](../artifacts/interpretability_summary.json)
+
+### Slide 11 · Explaining one person, and checking the explanation is faithful
 - A SHAP waterfall explains one person's score.
 - LIME was moved to the raw feature space. This raised its local fit (R²) from 0.25 to 0.41–0.43.
 - Three cases (highest, median and lowest risk), each run with three random seeds, give 63 feature conditions. All 63 keep the same sign across seeds.
 - Sources: [shap_individual.png](../artifacts/figures/shap_individual.png), [lime_individual.png](../artifacts/figures/lime_individual.png), [lime_fidelity.csv](../artifacts/lime_fidelity.csv)
 
-### Slide 11 · Explanation methods disagree, and that is a finding
+### Slide 12 · Explaining performance with XPER; the methods disagree on order
+- XPER (course method) splits the AUC into a benchmark (≈ 0.47) plus feature contributions; age adds ≈ 0.09. Figure: [xper.png](../artifacts/figures/xper.png)
 - Spearman rank correlation is 0.77–0.81 between SHAP and permutation importance, but only 0.53–0.60 between either of them and XPER.
 - The three methods share 8–10 of their top-10 features.
 - Takeaway: quote the *set* of main drivers, not their exact ranking.
@@ -137,7 +146,7 @@ P2 and P5 back each other up because both deal with proxies and leakage.
 
 **Primary metric: FNR, the share of people who are later re-arrested but were not selected for support.** Being selected means receiving help, so FNR measures missed support, which is the real harm in this programme. All results are at the deployed top-20% rule.
 
-### Slide 12 · Race (1): excluding race is not the same as being fair
+### Slide 13 · Race (1): excluding race is not the same as being fair
 - Opening: the COMPAS debate (ProPublica, 2016), where Black defendants were more often wrongly flagged as high risk.
 - Here, **base rates are almost equal**: 0.582 for Black and 0.564 for White people. So the data does not force a gap.
 - What exclusion guarantees: two people who differ only in race get exactly the same score, and adding race back changes AUC by at most about 0.001.
@@ -145,7 +154,7 @@ P2 and P5 back each other up because both deal with proxies and leakage.
 - Suggested script: *"Excluding race guarantees the model never uses it directly. It cannot guarantee equal outcomes, because criminal history carries part of the same information. That is why we audit outcomes, not inputs."*
 - Sources: [race_ab_test.csv](../artifacts/race_ab_test.csv), [proxy_recovery.csv](../artifacts/proxy_recovery.csv), [fairness_impossibility.csv](../artifacts/fairness_impossibility.csv)
 
-### Slide 13 · Race (2): the outcome audit, with three caveats
+### Slide 14 · Race (2): the outcome audit, with three caveats
 - FNR gap, Black minus White: −0.005 / −0.017 / −0.023 (logistic / XGBoost / TabICL).
 - Every race gap falls within ±5 percentage points by an equivalence test (TOST). After Holm multiple-testing correction, no race test remains significant.
 - Selection-rate ratio of White to Black: 0.93 / 0.89 / 0.87, all above the four-fifths rule.
@@ -156,7 +165,7 @@ P2 and P5 back each other up because both deal with proxies and leakage.
 - Sources: [race_fairness.png](../artifacts/figures/race_fairness.png), [fairness_inference.csv](../artifacts/fairness_inference.csv), [fairness_tests_holm.csv](../artifacts/end_to_end/fairness_tests_holm.csv), [fairness_by_group.csv](../artifacts/fairness_by_group.csv)
 - ⚠️ [fairness_support_access.png](../artifacts/figures/fairness_support_access.png) includes an age column. Crop or regenerate it before use.
 
-### Slide 14 · Gender (1): women are over-predicted, yet selected less
+### Slide 15 · Gender (1): women are over-predicted, yet selected less
 - FNR gap, men minus women: −0.096 / −0.112 / −0.124. All three models share it, so the gap comes from the feature set rather than from one model.
 - Women are selected at about half the rate of men (ratio 0.55 / 0.52 / 0.49).
 - Every model over-predicts women's risk: the mean score is about 0.52 against an observed rate of 0.454. This is the pattern criticised in *State v. Loomis* and in the gender-responsive assessment literature.
@@ -164,7 +173,7 @@ P2 and P5 back each other up because both deal with proxies and leakage.
 - The over-prediction actually helps women here. Recalibrating by gender would lower their scores, select fewer of them, and widen the FNR gap.
 - Sources: [fairness_impossibility.csv](../artifacts/fairness_impossibility.csv), [fairness_inference.csv](../artifacts/fairness_inference.csv)
 
-### Slide 15 · Gender (2): cause located, mitigated, validated out of sample
+### Slide 16 · Gender (2): cause located, mitigated, validated out of sample
 - FPDP points to `Gang_Affiliated`. It is never recorded for women, and the raw field has Cramér's V = 1.0 with gender. It reflects how records were kept rather than behaviour.
 - Mitigation: drop the field and refit. A 5-fold nested validation inside the training data picks the same field in every fold.
 - Out-of-fold results:
@@ -180,7 +189,7 @@ P2 and P5 back each other up because both deal with proxies and leakage.
 
 ## P6 · Stability + Trade-offs + Recommendation (2.5 min)
 
-### Slide 16 · Structural stability: 8 bootstrap refits
+### Slide 17 · Structural stability: 8 bootstrap refits
 
 | Model | Mean \|Δp\| between refits | Top-20% Jaccard |
 |---|---:|---:|
@@ -192,7 +201,7 @@ P2 and P5 back each other up because both deal with proxies and leakage.
 - Logistic is more stable than XGBoost on all 28 refit pairs.
 - Sources: [structural_stability.png](../artifacts/figures/structural_stability.png), [stability_summary.csv](../artifacts/stability_summary.csv)
 
-### Slide 17 · Stability for one person: abstaining is not fairness-neutral
+### Slide 18 · Stability for one person: abstaining is not fairness-neutral
 - About 13% of decisions flip between refits, and about a third of the people selected sit at that margin.
 - Keeping only the decisions all 8 refits agree on:
   - Precision rises from 0.822 to 0.846.
@@ -200,7 +209,7 @@ P2 and P5 back each other up because both deal with proxies and leakage.
 - Why: 47% of the selected women sit at the margin, against 30% of the selected men. Abstention therefore removes a larger share of women's places. This slide links directly back to P5.
 - Sources: [individual_stability.png](../artifacts/figures/individual_stability.png), [individual_stability_summary.csv](../artifacts/individual_stability_summary.csv)
 
-### Slide 18 · Trade-off matrix and recommendation
+### Slide 19 · Trade-off matrix and recommendation
 - Three models × four dimensions, with only the race and gender rows under fairness.
 - **Recommendation: L1 logistic regression for a prospective shadow pilot (run alongside current practice without driving decisions), with XGBoost as the challenger.**
   - The two models select 85% of the same people (Jaccard 0.849); only 254 people differ. The difference in re-arrests captured has a CI that includes zero.
@@ -212,7 +221,7 @@ P2 and P5 back each other up because both deal with proxies and leakage.
 
 ## P1 · App demo (0.5–1 min)
 
-### Slide 19 · Streamlit app
+### Slide 20 · Streamlit app
 - Walk one person through the app:
   1. Their scores from all three models.
   2. The explanation of their score.
@@ -226,8 +235,8 @@ P2 and P5 back each other up because both deal with proxies and leakage.
 
 - **A1 Learning curve:** [learning_curve.png](../artifacts/figures/learning_curve.png)
 - **A2 Economic sensitivity:** [incumbent_effectiveness_sweep.csv](../artifacts/incumbent_effectiveness_sweep.csv)
-- **A3 XPER:** [xper.png](../artifacts/figures/xper.png)
-- **A4 PDP/ICE:** [pdp_ice.png](../artifacts/figures/pdp_ice.png)
+- **A3 Explanation disagreement:** [explanation_agreement.png](../artifacts/figures/explanation_agreement.png)
+- **A4 Global surrogate:** [global_surrogate.png](../artifacts/figures/global_surrogate.png)
 - **A5 Group-threshold mitigation frontier:** [fairness_frontier.png](../artifacts/figures/fairness_frontier.png). It was optimised on the evaluation set, so it is optimistic.
 - **A6 Age.** Age is a validated and legally accepted risk factor. Its FNR gap of about 0.24 mostly follows from different base rates (0.646 for under-33s, 0.509 for 33+). Whether to rank by risk or by need is a policy choice for the client. Fixing the age field alone does not remove the gap, because it runs through criminal-history inputs that are correlated with age. Sources: [fairness_age_bands.csv](../artifacts/fairness_age_bands.csv), [fpdp_age.png](../artifacts/figures/fpdp_age.png)
 - **A7 Process log:** [improvement_journey.png](../artifacts/figures/improvement_journey.png)
@@ -238,7 +247,7 @@ P2 and P5 back each other up because both deal with proxies and leakage.
 - [x] Race-only and gender-only fairness figures for slides 13-14: `fairness_race_gaps.png`, `fairness_gender_gaps.png`.
       The original figures with the age column are kept for the notebook and the app.
 - [x] Readable FPDP for slide 15 and appendix A6: `fpdp_gender_focus.png`, `fpdp_age_focus.png` (3 panels instead of 29).
-- [x] Deck rebuilt to follow this outline: 19 core slides + 7 appendix, speaker notes with [P1]-[P6] owner and timing.
+- [x] Deck rebuilt to follow this outline: 20 core slides + 7 appendix, speaker notes with [P1]-[P6] owner and timing.
 - [x] Age decision (team, 26 Sep): one line on slide 14 plus appendix A6; the age row stays in the trade-off matrix.
 - [ ] Open the deck in PowerPoint and check every slide (it was checked with a layout preview, not rendered in PowerPoint).
 - [ ] Record a backup video of the app demo.

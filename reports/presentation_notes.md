@@ -4,18 +4,18 @@ Aim for 14 minutes plus a one-minute buffer. Every team member should rehearse e
 
 ## Talk sequence
 
-The deck follows [presentation_outline.md](presentation_outline.md): **19 core slides in six speaking
-parts plus a 7-slide appendix**, about 13:45 of talk. Each slide's speaker note starts with the part
+The deck follows [presentation_outline.md](presentation_outline.md): **20 core slides in six speaking
+parts plus a 7-slide appendix**, about 14:25 of talk. Each slide's speaker note starts with the part
 that speaks it and its timing, e.g. `[P3 · 3:00 · 50s]`.
 
 | Part | Slides | Time | Topic |
 |---|---|---|---|
-| P1 | 1-3, 19 | 1:30 + 0:45 | Client, data and EDA; app demo at the end |
+| P1 | 1-3, 20 | 1:30 + 0:45 | Client, data and EDA; app demo at the end |
 | P2 | 4-5 | 1:30 | Eligible features; the gender leak through missingness |
 | P3 | 6-8 | 2:30 | Models and tuning; performance tie; historical score |
-| P4 | 9-11 | 2:00 | Global drivers; one person and faithfulness; method disagreement |
-| P5 | 12-15 | 3:00 | Race (exclusion, outcome audit); gender (over-prediction, FPDP, mitigation); age in one line |
-| P6 | 16-18 | 2:30 | Structural and per-person stability; trade-offs and recommendation |
+| P4 | 9-12 | 2:40 | Global drivers; PDP/ICE and explanation cost; one person and faithfulness; XPER and method disagreement |
+| P5 | 13-16 | 3:00 | Race (exclusion, outcome audit); gender (over-prediction, FPDP, mitigation); age in one line |
+| P6 | 17-19 | 2:30 | Structural and per-person stability; trade-offs and recommendation |
 
 Three findings carry the talk: the models are equally accurate and differently expensive; access to
 support is unequal by gender (and age, by design), not by race within tolerance; the recommendation is
