@@ -234,9 +234,12 @@ P2 and P5 back each other up because both deal with proxies and leakage.
 
 ## Open to-dos
 
-- [ ] Export the EDA figure from notebook section 2, showing race × gender instead of age.
-- [ ] Crop or regenerate [fairness_support_access.png](../artifacts/figures/fairness_support_access.png) and [fairness_operating_point.png](../artifacts/figures/fairness_operating_point.png) without the age column.
-- [ ] Regenerate [tradeoff_matrix.png](../artifacts/figures/tradeoff_matrix.png) without the age row.
-- [ ] Rebuild the deck to follow this outline. The current [ISAF_Recidivism_Presentation.pptx](ISAF_Recidivism_Presentation.pptx) uses a different structure.
+- [x] EDA figure with race × gender instead of age: `artifacts/figures/eda_overview.png` (`scripts/deck_figures.py`).
+- [x] Race-only and gender-only fairness figures for slides 13-14: `fairness_race_gaps.png`, `fairness_gender_gaps.png`.
+      The original figures with the age column are kept for the notebook and the app.
+- [x] Readable FPDP for slide 15 and appendix A6: `fpdp_gender_focus.png`, `fpdp_age_focus.png` (3 panels instead of 29).
+- [x] Deck rebuilt to follow this outline: 19 core slides + 7 appendix, speaker notes with [P1]-[P6] owner and timing.
+- [x] Age decision (team, 26 Sep): one line on slide 14 plus appendix A6; the age row stays in the trade-off matrix.
+- [ ] Open the deck in PowerPoint and check every slide (it was checked with a layout preview, not rendered in PowerPoint).
 - [ ] Record a backup video of the app demo.
 - [ ] Everyone reads the Q&A section of [presentation_notes.md](presentation_notes.md).

@@ -4,39 +4,22 @@ Aim for 14 minutes plus a one-minute buffer. Every team member should rehearse e
 
 ## Talk sequence
 
-The deck is **15 core slides plus a marked appendix**. The core covers all four dimensions the
-brief names, in its order: performance (6), interpretability (7), stability (8), fairness (9-12),
-then the trade-off matrix and the recommendation. The appendix (learning curve, economic
-sensitivity, explanation disagreement, LIME fidelity, process log, proxy recovery, decision
-stability) exists to answer questions, not to be walked through. Budget 14 minutes plus a
-one-minute buffer.
+The deck follows [presentation_outline.md](presentation_outline.md): **19 core slides in six speaking
+parts plus a 7-slide appendix**, about 13:45 of talk. Each slide's speaker note starts with the part
+that speaks it and its timing, e.g. `[P3 · 3:00 · 50s]`.
 
-Three findings carry the talk. Say each of them out loud at least twice:
-
-1. **The three models are equally accurate and differently expensive.** Within ~0.003
-   AUC of each other, so performance cannot pick the model - explanation cost,
-   stability and fairness do.
-2. **Access to support is substantially unequal by gender and age.** Not by race:
-   race gaps are equivalent within ±5 points and none survives multiplicity control.
-   Gender and age are rejected on every criterion.
-3. **The recommendation is conditional, and we state what reverses it.**
-
-| # | Slide | Time | The point to land |
+| Part | Slides | Time | Topic |
 |---|---|---|---|
-| 1-2 | Title, engagement | 1.25 | A vendor allocating voluntary support. Recorded arrest is the outcome, not inherent offending. |
-| 3 | Data design | 1.25 | Original 18,028/7,807 split, baseline-only fields; the cumulative target differs from NIJ's annual forecasting. Say plainly that the evaluation set was repeatedly inspected during development, and that we found and removed a gender-aligned missingness leak. |
-| 4-5 | Model design, incumbent | 1.75 | Three families, same fields, 16-member TabICLv2. The incumbent historical score reaches 0.60 against our 0.73 - the client's real question, answered first. Prevalence and calibrated-incumbent baselines with Brier skill. |
-| 6 | Predictive performance | 1.25 | **Finding 1.** All within ~0.003 AUC; ECE differences not significant. Use the paired bootstrap; do not infer "no difference" from overlapping individual intervals. |
-| 7 | Interpretability | 1.0 | One person explained by logistic and XGBoost. Three routes: coefficients read directly; SHAP plus a surrogate that reproduces only R² 0.61; no native attribution for TabICLv2. The methods agree on the drivers, not on their order. |
-| 8 | Stability | 0.75 | Same eight resamples for all three models. Logistic drifts least on all 28 pairs and keeps the most stable top 20%. About one decision in seven flips between refits (A7). |
-| 9 | Subgroup audit | 1.75 | **Finding 2.** Selection means being offered support, so FNR is primary. Gender FNR gap -0.10 to -0.12, age -0.23 to -0.25, race equivalent within ±5 points. The age gap is **not** removed by fixing the age field: it runs through criminal-history inputs. |
-| 10 | Fairness, sharpened | 0.75 | Women are over-predicted yet selected less. Thresholds change decisions, not the calibration of unchanged scores. |
-| 11 | FPDP | 1.0 | Gang affiliation is never recorded for women - the gap has a named source. Dropping it shrinks the gender FNR gap from -0.10 to about 0.00 (logistic), partly by raising men's FNR, at about -0.014 AUC. |
-| 12 | Mitigation, validated | 1.0 | Candidate re-selected inside every training fold; ~70% of the gap closes out of fold for ~0.01 AUC. Selection and assessment are separated; the evaluation cohort is untouched. |
-| 13-14 | Trade-off matrix, recommendation | 1.75 | **Finding 3.** Walk the 3x4 matrix, then logistic for the shadow pilot with XGBoost as challenger - and say what would reverse it. |
-| 15 | App | 0.5 | Demo one person end to end: score, explanation, support decision, editable assumptions; missing-value preservation and optional TFM inference. |
+| P1 | 1-3, 19 | 1:30 + 0:45 | Client, data and EDA; app demo at the end |
+| P2 | 4-5 | 1:30 | Eligible features; the gender leak through missingness |
+| P3 | 6-8 | 2:30 | Models and tuning; performance tie; historical score |
+| P4 | 9-11 | 2:00 | Global drivers; one person and faithfulness; method disagreement |
+| P5 | 12-15 | 3:00 | Race (exclusion, outcome audit); gender (over-prediction, FPDP, mitigation); age in one line |
+| P6 | 16-18 | 2:30 | Structural and per-person stability; trade-offs and recommendation |
 
-If time runs short, compress slides 4-5 and 11; do not compress 9, 12 or 14.
+Three findings carry the talk: the models are equally accurate and differently expensive; access to
+support is unequal by gender (and age, by design), not by race within tolerance; the recommendation is
+conditional and we say what reverses it.
 
 ## Questions to rehearse
 
