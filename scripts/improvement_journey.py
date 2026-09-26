@@ -60,7 +60,7 @@ def main() -> None:
     axa.set_title("Historical XGBoost development (reused evaluation set)", fontweight="bold")
     tab_auc = float(pd.read_csv(ARTIFACT_DIR / "model_metrics.csv").set_index("model").loc["tabicl", "roc_auc"])
     axa.axhline(tab_auc, ls="--", color="#7B2CBF", lw=1.5)
-    axa.text(3.4, tab_auc + 0.0001, f"TabICL {tab_auc:.4f}", color="#7B2CBF", fontsize=9, ha="right")
+    axa.text(-0.4, tab_auc + 0.00012, f"TabICLv2 {tab_auc:.4f}", color="#7B2CBF", fontsize=9, ha="left")
     for bar, v in zip(bars, auc):
         axa.text(bar.get_x() + bar.get_width() / 2, v + 0.0002, f"{v:.4f}", ha="center", fontsize=10)
     axa.tick_params(axis="x", labelsize=10)

@@ -56,7 +56,7 @@ but never measured:
   118 selected women are at the margin against 30% of 1,490 men. A second trade-off of the
   impossibility family, empirically demonstrated.
 
-Both are in the notebook, the report, the Q&A notes, appendix slides A8/A9, and the app
+Both are in the notebook, the report, the Q&A notes, appendix slides A6/A7 (renumbered when interpretability and stability moved into the core deck), and the app
 (individual tab shows a per-person score range and refit vote count; stability tab has the
 abstention policy; fairness tab has proxy recovery). Tests 41 → 45.
 
@@ -69,6 +69,8 @@ recorded GPU run.
 but not re-executed, because its PDP/ICE pass fits TabICLv2. `artifacts/interpretability_summary.json`
 was synced by hand to what the changed code now writes — the next full `reproduce.py` regenerates
 it properly. Nothing else in `artifacts/` was hand-edited.
+
+**Deck (24 Sep, later):** interpretability and stability moved from the appendix into the core deck (slides 7 and 8), so all four brief dimensions have an evidence slide; 15 core slides, 14 minutes of timed notes. `artifacts/end_to_end` still records the previous deck hash until `end_to_end_audit.py` is rerun.
 
 **Still open:** visual check of the rebuilt deck; PDF export of the deck;
 Q&A rehearsal; readable labels in `surrogate_tree.txt` and raw CSVs; package versions in

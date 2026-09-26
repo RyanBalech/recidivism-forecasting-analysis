@@ -53,10 +53,10 @@ def bullets(slide, items, x=.8, y=1.8, w=11.7, h=4.8, size=21):
         p.text = "•  " + item; p.font.name = "Aptos"; p.font.size = Pt(size); p.font.color.rgb = WHITE; p.space_after = Pt(12)
 
 
-def card(slide, label, value, x, y, color=ORANGE, note=""):
+def card(slide, label, value, x, y, color=ORANGE, note="", size=24):
     shape = slide.shapes.add_shape(5, Inches(x), Inches(y), Inches(2.65), Inches(1.38))
     shape.fill.solid(); shape.fill.fore_color.rgb = CARD; shape.line.color.rgb = color
-    textbox(slide, value, x+.12, y+.15, 2.4, .48, 24, color, True, PP_ALIGN.CENTER)
+    textbox(slide, value, x+.12, y+.15, 2.4, .48, size, color, True, PP_ALIGN.CENTER)
     textbox(slide, label, x+.12, y+.72, 2.4, .3, 11, WHITE, True, PP_ALIGN.CENTER)
     if note: textbox(slide, note, x+.12, y+1.06, 2.4, .18, 8, PALE, align=PP_ALIGN.CENTER)
 
@@ -143,404 +143,314 @@ def span(values):
     lo, hi = sorted(values, key=abs)[0], sorted(values, key=abs)[-1]
     return f"{lo:+.2f} to {hi:+.2f}".replace("+-", "-")
 pred = pd.read_csv(ART / "test_predictions.csv")
+interp = json.loads((ART / "interpretability_summary.json").read_text())
+surrogate_r2 = float(interp["surrogate_fidelity_r2_test"])
+_agree = pd.read_csv(ART / "explanation_agreement.csv")
+agree_lo, agree_hi = _agree.spearman_rank_correlation.min(), _agree.spearman_rank_correlation.max()
 stability = pd.read_csv(ART / "stability_summary.csv").set_index("model")
 
 prs = Presentation()
 prs.slide_width, prs.slide_height = Inches(13.333), Inches(7.5)
 
+# ---------------------------------------------------------------- EXTRA INPUTS FOR THE 19-SLIDE OUTLINE
+# Structure follows reports/presentation_outline.md: six speaking parts, 19 core slides.
+_pc = pd.read_csv(ART / "deep_review" / "INELIGIBLE_timing_positive_control.csv").set_index("condition")
+posctrl_base, posctrl_leaky = _pc.loc["eligible_baseline", "roc_auc"], _pc.loc["INELIGIBLE_post_release_control", "roc_auc"]
+_mlc = pd.read_csv(ART / "ml_model_comparison.csv")
+_others = _mlc[~_mlc.model.isin(["logistic", "xgboost"])]
+ml_lo, ml_hi, ml_n = _others.test_roc_auc.min(), _others.test_roc_auc.max(), len(_others)
+_con = pd.read_csv(ART / "probability_contrasts.csv")
+_con = _con[_con.model == "logistic"].set_index(["feature", "level"]).average_probability_contrast
+age_contrast, gang_contrast = _con[("Age_at_Release", "48 or older")], _con[("Gang_Affiliated", "Yes")]
+_lime = pd.read_csv(ART / "lime_fidelity.csv").groupby("model").local_r2.mean()
+lime_lo, lime_hi = _lime.min(), _lime.max()
+_cal = pd.read_csv(ART / "calibration_tests.csv").set_index("model")
+_sel = top20[top20.metric == "selection_rate"].set_index(["model", "attribute"])
+race_ratio = [_sel.loc[(m, "Race"), "rate_b"] / _sel.loc[(m, "Race"), "rate_a"] for m in ["logistic", "xgboost", "tabicl"]]
+gender_ratio = [_sel.loc[(m, "Gender"), "rate_b"] / _sel.loc[(m, "Gender"), "rate_a"] for m in ["logistic", "xgboost", "tabicl"]]
+_ab = pd.read_csv(ART / "race_ab_test.csv").pivot_table(index="model", columns="variant", values="roc_auc")
+race_ab_max = float((_ab["A_with_race"] - _ab["B_without_race"]).abs().max())
+_curve = pd.read_csv(ART / "abstention_curve.csv")
+_lc = _curve[_curve.model == "logistic"]
+abst_full, abst_strict = _lc.loc[_lc.coverage.idxmax()], _lc.loc[_lc.max_contested_votes.idxmin()]
+_ages = pd.read_csv(ART / "fairness_age_bands.csv")
+age_old_fnr = _ages[(_ages.model == "logistic") & (_ages.age_band == "48 or older")].fnr.iloc[0]
+age_young_fnr = _ages[(_ages.model == "logistic") & (_ages.age_band == "18-22")].fnr.iloc[0]
+m3 = ["logistic", "xgboost", "tabicl"]
+_xper = pd.read_csv(ART / "xper_values.csv")
+_bench = _xper[_xper.feature.str.startswith("benchmark")].set_index("model")
+xper_bench = _bench.xper.mean()
+xper_auc = _bench.sample_auc
+xper_age = _xper[_xper.feature == "Age_at_Release"].set_index("model").xper
+
+
+def slash(values, fmt="{:.3f}"):
+    """Three model values as 'a / b / c' in logistic, XGBoost, TabICL order."""
+    return " / ".join(fmt.format(v) for v in values)
+
+
+# ================================================================ P1 · INTRO + EDA (1.5 min)
 # 1 — Title
 s = make_slide(prs)
 textbox(s, "TRUSTWORTHY AI / RECIDIVISM", .72, .58, 8, .3, 12, ORANGE, True)
 textbox(s, "Forecasting risk,\nexamining trade-offs", .72, 1.42, 8, 1.65, 36, WHITE, True)
 textbox(s, "For a risk-assessment software vendor: which three-year re-arrest model to ship, judged on performance, interpretability, stability and fairness", .76, 3.35, 6.6, 1.4, 17, PALE)
 textbox(s, "Team 11 · HEC Paris · Fall 2026", .76, 6.62, 7, .3, 11, GREY)
-panel(s, "0.60 → 0.73", "Incumbent score vs our models (ROC AUC)\n\n3 model families\n\n1 deployment recommendation", 8.55, .9, 3.65, 5.75, PURPLE)
+panel(s, f"{inc_auc['incumbent']:.2f} → {metrics.roc_auc.max():.2f}", "Historical score vs our models (ROC AUC)\n\n3 model families\n\n1 recommendation", 8.55, .9, 3.65, 5.75, PURPLE)
 
-# 2 — Client need
-s = make_slide(prs); title(s, "Our client, and the decision they sell", "01 · Engagement")
-bullets(s, ["Client: a vendor selling risk-assessment tools to US state community-supervision agencies",
-            "Deliverable: a three-year re-arrest score to allocate limited, voluntary re-entry support",
-            "Used only to expand help — never sanctions, detention or surveillance",
-            "Judged as a trustworthy AI system, not on accuracy alone"], y=1.85, size=22); footer(s, 2)
+# 2 — Client and decision
+s = make_slide(prs); title(s, "Our client, and the decision they sell", "Intro · Client")
+bullets(s, ["Client: a vendor selling risk tools to US community-supervision agencies",
+            "Decision: rank people at supervision start; the top 20% are offered voluntary re-entry support",
+            "Scope: support allocation only — never sanctions, detention or surveillance",
+            "Target: recorded re-arrest within 3 years — a proxy for need, not for offending"], y=1.85, size=21); footer(s, 2)
 
-# 3 — Data design
-s = make_slide(prs); title(s, "Original split, with explicit validation limits", "02 · Data design")
-card(s, "TRAIN", "18,028", .8, 1.9); card(s, "EVALUATION", "7,807", 3.75, 1.9, PURPLE)
-card(s, "BASELINE FIELDS", "29", 6.7, 1.9); card(s, "TEST TARGET RATE", f"{pred.actual.mean():.1%}", 9.65, 1.9, PURPLE)
-bullets(s, ["Post-release variables excluded; race, gender and geography retained only for audit",
-            f"Found and fixed a representation leak: gang affiliation is missing for every woman and no man, so with missingness indicators gender is recoverable at AUC {leak_auc:.2f} — mode-fill plus a regression audit now blocks it",
-            "Evaluation data were repeatedly inspected during development; fresh validation is still needed"], y=3.62, h=2.65, size=18); footer(s, 3)
+# 3 — Data and EDA
+s = make_slide(prs); title(s, "Georgia parolees, official split, training-only EDA", "Intro · Data")
+picture(s, FIG / "eda_overview.png", .4, 1.7, 9.0)
+_raw = pd.read_csv(ROOT / "data" / "nij-challenge2021_full_dataset.csv", usecols=["Training_Sample", "Recidivism_Within_3years"])
+train_rate = _raw.loc[_raw.Training_Sample == 1, "Recidivism_Within_3years"].astype(str).eq("True").mean() if _raw.Recidivism_Within_3years.dtype == bool else _raw.loc[_raw.Training_Sample == 1, "Recidivism_Within_3years"].eq("Yes").mean()
+card(s, "RE-ARRESTED IN 3 YEARS", f"{train_rate:.1%}", 9.95, 1.8, ORANGE, "training data, as in the chart")
+card(s, "OFFICIAL SPLIT", "18,028 / 7,807", 9.95, 3.4, TEAL, "train / evaluation · NIJ flag", size=18)
+card(s, "GANG FIELD MISSING", "100% of women", 9.95, 5.0, RED, "and 0% of men → next part", size=20)
+textbox(s, "Cumulative 3-year target: not comparable with NIJ's annual leaderboard. The missingness is structured.",
+        1.0, 6.85, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 3)
 
-# 4 — Three models
-s = make_slide(prs); title(s, "Three model families, one comparison", "03 · Model design")
-panel(s, "LOGISTIC", "White-box anchor\n\nCV-tuned L1, C=0.2154\n\nSigned, inspectable effects", .7, 1.9, color=ORANGE)
-panel(s, "XGBOOST", "Nonlinear workhorse\n\nOrdinal counts + 5-fold CV tuning\n\nFast operational scoring", 4.8, 1.9, color=TEAL)
-panel(s, "TABICLv2", "Foundation model\n\n16-member GPU ensemble\n\nTraining-only size sweep; no native attribution implemented", 8.9, 1.9, color=PURPLE)
-textbox(s, "Same eligible fields · Same held-out people · Same metrics", 2.5, 6.22, 8.3, .4, 17, ORANGE, True, PP_ALIGN.CENTER); footer(s, 4)
+# ================================================================ P2 · FEATURES + LEAKAGE (1.5 min)
+# 4 — Only information known when supervision starts
+s = make_slide(prs); title(s, "Only information known when supervision starts", "Features · Eligibility")
+panel(s, "IN THE MODEL", "29 baseline fields\n\nAge, prior arrests and convictions, offence, prison years, supervision level, Georgia's risk score",
+      .7, 1.8, 3.85, 4.7, TEAL)
+panel(s, "AUDIT ONLY", "Race, gender, residence (PUMA)\n\nNever model inputs — kept to measure who gets support",
+      4.75, 1.8, 3.85, 4.7, PURPLE)
+panel(s, "EXCLUDED", f"Everything after release: employment, drug tests, violations\n\nPositive control: adding them lifts AUC {posctrl_base:.3f} → {posctrl_leaky:.3f} — they leak the outcome",
+      8.8, 1.8, 3.85, 4.7, RED)
+footer(s, 4)
 
-# 5 — Incumbent benchmark (the hook)
-s = make_slide(prs); title(s, "Comparison with the historical recorded score", "04 · The client's real question")
-picture(s, FIG / "incumbent_benchmark.png", .35, 1.7, 9.1)
-card(s, "INCUMBENT AUC", f"{inc_auc['incumbent']:.2f}", 9.75, 1.9, RED)
-card(s, "OUR MODELS AUC", "0.73", 9.75, 3.5, TEAL)
-card(s, "NET VALUE GAIN", f"+${(inc_econ['logistic']-inc_econ['incumbent'])/1e6:.1f}M", 9.75, 5.1, ORANGE, "recommended logistic model")
-textbox(s, "This historical comparison does not establish superiority to current agency products. Dollar gains are scenarios.", 1.0, 6.85, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 5)
+# 5 — The leak
+s = make_slide(prs); title(s, "The leak we found: gender was encoded in missingness", "Features · Leakage")
+picture(s, FIG / "proxy_recovery.png", .4, 1.7, 8.4)
+panel(s, "WHAT HAPPENED", "Gang affiliation: missing for every woman, no man\n\n"
+      f"Keep missingness → gender recovered at AUC {leak_auc:.3f}\n\n"
+      "TabICL treated NaN as a category: it saw gender\n\n"
+      f"Fix: mode-fill + regression test. After: AUC {gender_proxy_auc:.2f}", 9.1, 1.7, 3.8, 4.9, RED)
+textbox(s, "Excluding an attribute is not removing it: part of it survives in legitimate features. Fairness picks this up.",
+        1.0, 6.82, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 5)
 
-# 6 — Predictive performance
-s = make_slide(prs); title(s, "Compare ranking, probability loss and calibration", "05 · Predictive performance")
+# ================================================================ P3 · MODELS + PERFORMANCE (2.5 min)
+# 6 — Three models and tuning
+s = make_slide(prs); title(s, "Three model families, each tuned by cross-validation", "Models · Design")
+panel(s, "LOGISTIC (L1)", "White box\n\nOne-hot encoding\n\n5-fold grid search\nC = 0.2154\n\nCurve flat for C in [0.05, 1]", .7, 1.8, 3.85, 4.5, TEAL)
+panel(s, "XGBOOST", "Machine learning\n\nOrdinal counts\n\n5-fold random search, 60 draws\n\nDeeper trees overfit: rejected", 4.75, 1.8, 3.85, 4.5, ORANGE)
+panel(s, "TABICLv2", "Foundation model\n\nMixed types, mode-filled\n\n16-member ensemble\n\nGains level off near 8", 8.8, 1.8, 3.85, 4.5, PURPLE)
+textbox(s, f"{ml_n} other ML candidates (CatBoost, LightGBM, EBM, …) all land at test AUC {ml_lo:.3f}–{ml_hi:.3f}.",
+        1.0, 6.62, 11, .3, 13, ORANGE, True, PP_ALIGN.CENTER); footer(s, 6)
+
+# 7 — Performance
+s = make_slide(prs); title(s, "Statistical performance: effectively a tie", "Models · Performance")
 picture(s, FIG / "performance_calibration.png", .45, 1.72, 8.05)
-card(s, "AUC · TABICL", f"{metrics.loc['tabicl','roc_auc']:.4f}", 9.25, 1.9, PURPLE)
-card(s, "BRIER · TABICL", f"{metrics.loc['tabicl','brier']:.4f}", 9.25, 3.5, PURPLE)
-card(s, "AUC GAP · XGB − LOGIT", f"+{xgb_minus_logit:.4f}", 9.25, 5.1, ORANGE, "paired bootstrap: significant, small")
-textbox(s, "All three models are within ~0.003 AUC; ECE differences are not significant. Performance alone cannot pick the model.", 1.0, 6.85, 11, .3, 11, GREY, True, PP_ALIGN.CENTER); footer(s, 6)
+card(s, "AUC", slash([metrics.loc[m, "roc_auc"] for m in m3], "{:.3f}"), 9.25, 1.9, ORANGE, "logistic / XGBoost / TabICL", size=15)
+card(s, "AUC GAP · XGB − LOGIT", f"+{xgb_minus_logit:.4f}", 9.25, 3.5, TEAL, "paired bootstrap: real, but small")
+card(s, "CALIBRATION SLOPE", slash([_cal.loc[m, "slope"] for m in m3], "{:.2f}"), 9.25, 5.1, PURPLE, "TabICL too extreme (significant)", size=16)
+textbox(s, "All three within ~0.003 AUC. Performance alone cannot pick the model.", 1.0, 6.85, 11, .3, 11, GREY, True, PP_ALIGN.CENTER); footer(s, 7)
 
-# 7 — Fairness at the deployed point
-s = make_slide(prs); title(s, "Fairness at the proposed allocation rule", "06 · Subgroup audit")
-picture(s, FIG / "fairness_support_access.png", .4, 1.7, 8.5)
-card(s, "GENDER FNR GAP (M − F)", span(fnr20["Gender"]), 9.35, 1.9, RED, "women miss support more · all significant")
-card(s, "RACE: EQUIVALENT ±5 PTS", f"{int(race_equiv.sum())} / {len(race_equiv)} models", 9.35, 3.5, TEAL,
-     f"TOST on errors · AUC Black {min(race_auc[0::2]):.2f} vs White {min(race_auc[1::2]):.2f}")
-card(s, "AGE FNR GAP (<33 − 33+)", span(fnr20["Age"]), 9.35, 5.1, ORANGE, "persists with age fixed: carried by prior record")
-textbox(s, "Selection = support offered, so the harm is a missed offer: FNR is primary. Not significant ≠ fair; we test equivalence.", 1.0, 6.8, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 7)
+# 8 — Incumbent
+s = make_slide(prs); title(s, "The client's real question: better than today's score?", "Models · Incumbent")
+picture(s, FIG / "incumbent_benchmark.png", .45, 1.75, 8.3)
+card(s, "HISTORICAL SCORE AUC", f"{inc_auc['incumbent']:.2f}", 9.25, 1.9, RED, "Georgia supervision score in the data")
+card(s, "OUR MODELS AUC", f"≈ {metrics.roc_auc.mean():.2f}", 9.25, 3.5, TEAL, "all three models")
+card(s, "NET VALUE @20%", f"${inc_econ['incumbent']/1e6:.2f}M → ${inc_econ['logistic']/1e6:.2f}M", 9.25, 5.1, ORANGE, "scenario: $5k cost, $50k event, 20% effect", size=18)
+textbox(s, "Models beat the historical score at every capacity. Dollars are a scenario, not a causal estimate.",
+        1.0, 6.85, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 8)
 
-# 8 — Impossibility result
-s = make_slide(prs); title(s, "Fairness: probability scores and allocation rules", "07 · Fairness, sharpened")
-panel(s, "SCORE CALIBRATION", f"Women are over-predicted by every model: mean score {calib.loc[('Gender', 'F'), 'mean_score_xgboost']:.2f} vs observed {calib.loc[('Gender', 'F'), 'base_rate']:.2f}\n\nYet they are selected less at the top 20%\n\nFor support, over-prediction helps women: recalibrating would widen the FNR gap", .7, 1.85, 5.75, 4.7, TEAL)
-panel(s, "ALLOCATION ERRORS", "FPR, TPR and selection rates depend on policy\n\nChanging thresholds leaves probabilities unchanged\n\nOur threshold frontier uses evaluation labels: illustrative, not validated", 6.85, 1.85, 5.75, 4.7, RED)
-footer(s, 8)
+# ================================================================ P4 · INTERPRETABILITY (2 min)
+# 9 — Global drivers
+s = make_slide(prs); title(s, "What drives the score", "Interpretability · Global")
+picture(s, FIG / "shap_global.png", .4, 1.7, 8.6)
+card(s, "AGE 23–27 → 48+", f"{age_contrast*100:+.0f} pts", 9.35, 1.9, TEAL, "logistic, average probability change")
+card(s, "GANG AFFILIATION", f"{gang_contrast*100:+.0f} pts", 9.35, 3.5, RED, "recorded 'Yes' vs 'No'")
+card(s, "TOP DRIVERS", "Age · gang · priors", 9.35, 5.1, ORANGE, "same in logistic and XGBoost", size=17)
+textbox(s, "Marginal effects in probability points, not log-odds: the unit a caseworker understands.",
+        1.0, 6.85, 11, .3, 11, GREY, True, PP_ALIGN.CENTER); footer(s, 9)
 
-# 9 — Fairness interpretability: where the gender gap comes from
-s = make_slide(prs); title(s, "Where does the gender gap come from?", "08 · Fairness interpretability (FPDP)")
-picture(s, FIG / "fpdp_gender.png", .35, 1.65, 8.4)
-panel(s, "CANDIDATE: GANG", "Never recorded for women; imputed as \"No\"\n\n"
-      f"Drop + re-estimate (logistic): FNR gap {base_gender.loc['logistic', 'fnr_gap']:+.3f} → {drop_gang.loc['logistic', 'fnr_gap']:+.3f}\n\n"
-      f"Women FNR {base_gender.loc['logistic', 'fnr_b']:.2f} → {drop_gang.loc['logistic', 'fnr_b']:.2f}; men {base_gender.loc['logistic', 'fnr_a']:.2f} → {drop_gang.loc['logistic', 'fnr_a']:.2f}\n\n"
-      f"AUC −{gang_cost:.3f}; {base_gender.loc['logistic', 'captured_events'] - drop_gang.loc['logistic', 'captured_events']:.0f} fewer re-arrests captured", 9.0, 1.65, 3.95, 5.0, RED)
-textbox(s, "Logistic FPDP is flat under a top-20% rule (a constant shifts every score equally), so it measures removing the feature, not a value.", 1.0, 6.82, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 9)
+# 10 — Model-agnostic view: PDP/ICE for all three models, and what each model costs to explain
+s = make_slide(prs); title(s, "Looking from outside: PDP/ICE for all three models", "Interpretability · Model-agnostic")
+picture(s, FIG / "pdp_ice.png", .4, 1.7, 8.3)
+panel(s, "THREE ROUTES", "LOGISTIC\nCoefficients: read directly\n\n"
+      f"XGBOOST\nNeeds SHAP; a depth-3 surrogate tree reproduces only R² = {surrogate_r2:.2f}\n\n"
+      "TABICLv2\nNo native attribution: PDP/ICE is the only view", 9.0, 1.7, 3.9, 4.9, ORANGE)
+textbox(s, "Black line = average effect (PDP); faint lines = individual people (ICE). All three models agree: risk falls with age.",
+        .8, 6.85, 11.7, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 10)
 
-# 10 — Does the mitigation survive out-of-sample?
-s = make_slide(prs); title(s, "Selecting and testing the fix on different data", "09 · Mitigation, validated")
-panel(s, "IN-SAMPLE", "Candidate chosen AND scored on the same cohort\n\n"
-      f"Equal-opportunity p 0.000 → {drop_gang.loc['logistic', 'p_equal_opportunity']:.2f}\n\n"
-      "An upper bound, not evidence of generalisation", .7, 1.85, 5.75, 4.7, GREY)
-panel(s, "OUT-OF-FOLD", "Candidate re-selected inside each training fold, scored on held-out folds\n\n"
-      f"Same variable selected in {int(nested_sel * 100)}% of folds\n\n"
-      f"Gender FNR gap {nested_base:+.3f} → {nested_mit:+.3f}  ·  AUC {nested_auc:+.3f}", 6.85, 1.85, 5.75, 4.7, TEAL)
-textbox(s, "The evaluation cohort is never touched. About 70% of the gap closes out of fold, for roughly one AUC point.",
-        1.0, 6.82, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 10)
+# 11 — One person, and a faithfulness check
+s = make_slide(prs); title(s, "Explaining one person, and checking the explanation", "Interpretability · Local")
+picture(s, FIG / "shap_individual.png", .4, 1.7, 8.3)
+panel(s, "IS IT FAITHFUL?", "SHAP: exact for these two models\n\n"
+      f"LIME on raw features: local R² 0.25 → {lime_lo:.2f}–{lime_hi:.2f}\n\n"
+      "3 cases × 3 seeds: all 63 conditions keep their sign\n\n"
+      "Quote LIME for direction, SHAP for size", 9.0, 1.7, 3.9, 4.9, PURPLE)
+textbox(s, "Red raises risk, green lowers it. The explanation is what an appeal would contest.",
+        1.0, 6.85, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 11)
 
-# 11 — Trade-off matrix (required)
-s = make_slide(prs); title(s, "Which model should the client deploy?", "10 · Trade-offs across four dimensions")
-picture(s, FIG / "tradeoff_matrix.png", 2.2, 1.62, 8.9); footer(s, 11)
+# 12 — Explaining performance: XPER (course method) and agreement with SHAP / permutation importance
+s = make_slide(prs); title(s, "Explaining performance: where does the AUC come from?", "Interpretability · XPER")
+picture(s, FIG / "xper.png", .4, 1.7, 8.4)
+panel(s, "XPER", f"Splits the AUC itself into feature contributions (Shapley values)\n\n"
+      f"Benchmark ≈ {xper_bench:.2f} (no information) + features = AUC\n\n"
+      f"Age alone adds ≈ {xper_age.mean():.2f} AUC\n\n"
+      f"Agrees with SHAP / permutation importance on the set (Spearman {agree_lo:.2f}–{agree_hi:.2f}), not the order", 9.1, 1.7, 3.8, 4.95, PURPLE)
+textbox(s, "SHAP explains a prediction; permutation importance explains loss; XPER explains performance. Quote the set of drivers, not the rank.",
+        .8, 6.85, 11.7, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 12)
 
-# 12 — Recommendation
-s = make_slide(prs); title(s, "Pilot logistic regression; run XGBoost as the challenger", "11 · Recommendation")
-panel(s, "WHY LOGISTIC", "Native, coefficient-level explanations — no second tool\n\n"
-      f"Lower refit drift on all 28 pairs ({stability.loc['logistic','mean_abs_prob_diff']:.4f} vs {stability.loc['xgboost','mean_abs_prob_diff']:.4f})\n\n"
-      f"More stable selected set (J {stability.loc['logistic','top20_jaccard']:.3f} vs {stability.loc['xgboost','top20_jaccard']:.3f})\n\n"
-      "~9× faster", .7, 1.8, 3.85, 4.65, TEAL)
-panel(s, "WHAT WE GIVE UP", f"XGBoost AUC edge +{xgb_minus_logit:.4f} and Brier −0.0010\n\n"
-      "Calibration is a tie, not a loss: both indistinguishable from perfect\n\n"
-      f"Captured re-arrests: interval {int(abs(cap_ci[0]))} to {int(abs(cap_ci[1]))} includes 0\n\n"
-      "Significant, but not at the operating point", 4.75, 1.8, 3.85, 4.65, RED)
-panel(s, "WHAT REVERSES IT", "The score is quoted numerically to supervisees\n\n"
-      "Capacity large enough that +12 offers matters\n\nA feature set that widens the margin\n\nThen: promote the challenger",
-      8.8, 1.8, 3.85, 4.65, PURPLE)
-textbox(s, f"Both models select {overlap_share:.0%} of the same people at the top-20% rule. Fairness and calibration differences between them are not significant.",
-        .8, 6.75, 11.7, .4, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 12)
+# ================================================================ P5 · FAIRNESS (3 min)
+# 12 — Race (1)
+s = make_slide(prs); title(s, "Race (1): excluding race is not the same as being fair", "Fairness · Race")
+panel(s, "BASE RATES", f"Black {calib.loc[('Race', 'BLACK'), 'base_rate']:.3f}\nWhite {calib.loc[('Race', 'WHITE'), 'base_rate']:.3f}\n\nNearly equal: the data does not force a gap",
+      .7, 1.8, 3.85, 4.5, TEAL)
+panel(s, "WHAT EXCLUSION GUARANTEES", f"Twins differing only in race get the same score\n\nAdding race back changes AUC by ≤ {race_ab_max:.3f}",
+      4.75, 1.8, 3.85, 4.5, PURPLE)
+panel(s, "WHAT IT DOES NOT", f"Race is recoverable from our features at AUC {race_proxy_auc:.2f}\n\nCriminal history carries part of it — and cannot be dropped",
+      8.8, 1.8, 3.85, 4.5, RED)
+textbox(s, "Selection = support offered, so the harm is missed support: FNR is our primary metric. We audit outcomes, not inputs.",
+        .8, 6.62, 11.7, .3, 13, ORANGE, True, PP_ALIGN.CENTER); footer(s, 13)
 
-# 13 — App
-s = make_slide(prs); title(s, "The application makes every trade-off testable", "12 · Client experience")
-panel(s, "ASSESS", "Score one person, all 3 models + SHAP", .75, 1.75, 5.7, 1.72, ORANGE)
-panel(s, "AUDIT", "Race, gender, age at the deployed point + FPDP", 6.85, 1.75, 5.7, 1.72, PURPLE)
-panel(s, "COMPARE", "Incumbent, learning curve, matrix", .75, 3.8, 5.7, 1.72, ORANGE)
-panel(s, "SIMULATE", "Costs, capacity, sensitivity", 6.85, 3.8, 5.7, 1.72, PURPLE)
-textbox(s, "streamlit run app.py", 4.4, 6.25, 4.5, .4, 17, PALE, True, PP_ALIGN.CENTER, "Consolas"); footer(s, 13)
+# 13 — Race (2)
+s = make_slide(prs); title(s, "Race (2): the outcome audit, with three caveats", "Fairness · Race")
+picture(s, FIG / "fairness_race_gaps.png", .4, 1.7, 8.3)
+panel(s, "RESULT + CAVEATS", f"All race gaps within ±5 pts (TOST); none survives Holm\n\nSelection ratio W/B {slash(race_ratio, '{:.2f}')} (> 4/5)\n\n"
+      "1. Direction: slightly MORE Black people offered support\n2. Label: recorded arrest may carry policing bias\n"
+      f"3. AUC Black {min(race_auc[0::2]):.2f} vs White {min(race_auc[1::2]):.2f}", 9.0, 1.7, 3.95, 4.95, TEAL)
+footer(s, 14)
 
-# ---------------------------------------------------------------- APPENDIX
-# Everything below is reference material for Q&A, not part of the 15-minute talk.
+# 14 — Gender (1)
+s = make_slide(prs); title(s, "Gender (1): women are over-predicted, yet selected less", "Fairness · Gender")
+picture(s, FIG / "fairness_gender_gaps.png", .4, 1.7, 8.3)
+panel(s, "WHY", f"FNR gap M − F {span(fnr20['Gender'])}, all models: the feature set, not one model\n\n"
+      f"Women's mean score {calib.loc[('Gender', 'F'), 'mean_score_logistic']:.2f} vs observed {calib.loc[('Gender', 'F'), 'base_rate']:.3f}\n\n"
+      f"Base rates {calib.loc[('Gender', 'M'), 'base_rate']:.2f} vs {calib.loc[('Gender', 'F'), 'base_rate']:.2f}: calibration and equal FNR cannot both hold",
+      9.0, 1.7, 3.95, 4.95, RED)
+textbox(s, f"Age: the largest gap ({span(fnr20['Age'])}), but by design: a validated risk factor. Risk vs need is the client's choice (A6).",
+        .6, 6.82, 12.1, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 15)
+
+# 15 — Gender (2)
+s = make_slide(prs); title(s, "Gender (2): cause located, mitigated, validated out of sample", "Fairness · Gender")
+picture(s, FIG / "fpdp_gender_focus.png", .35, 1.9, 8.4)
+panel(s, "FPDP → GANG", "Never recorded for women: record-keeping, not behaviour\n\n"
+      f"Drop it, refit inside {int(nested_sel * 100)}% of 5 training folds\n\n"
+      f"Out of fold: FNR gap {nested_base:+.3f} → {nested_mit:+.3f} (~70% closed), AUC {nested_auc:+.3f}\n\n"
+      "Cost: men's FNR +2 pts; selection rates still differ", 9.0, 1.65, 3.95, 5.0, TEAL)
+textbox(s, "Evaluation cohort untouched. A mitigation option for the client, not applied to the recommended model.",
+        1.0, 6.82, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 16)
+
+# ================================================================ P6 · STABILITY + TRADE-OFFS + RECOMMENDATION (2.5 min)
+# 16 — Structural stability
+s = make_slide(prs); title(s, "Would a different sample give the same model?", "Stability · Structural")
+picture(s, FIG / "structural_stability.png", .5, 1.75, 8.3)
+card(s, "SCORE DRIFT (mean |Δp|)", slash([stability.loc[m, "mean_abs_prob_diff"] for m in m3]), 9.35, 1.9, ORANGE,
+     "logistic below XGBoost on all 28 pairs", size=15)
+card(s, "TOP-20% JACCARD", slash([stability.loc[m, "top20_jaccard"] for m in m3], "{:.2f}"), 9.35, 3.5, TEAL,
+     "≈ 13% of the selected change per refit", size=16)
+card(s, "PROTOCOL", "8 refits", 9.35, 5.1, PURPLE, "same bootstrap resamples for all 3")
+textbox(s, "Course definition: two samples from the same population should give approximately the same model.",
+        1.0, 6.82, 11, .3, 11, GREY, True, PP_ALIGN.CENTER); footer(s, 17)
+
+# 17 — Per-person stability and abstention
+s = make_slide(prs); title(s, "Stability for one person: abstaining is not fairness-neutral", "Stability · Individual")
+picture(s, FIG / "individual_stability.png", .35, 1.7, 12.6)
+textbox(s, f"{contested_share:.0%} of decisions flip. Unanimous only: precision {abst_full.precision_at_capacity:.3f} → {abst_strict.precision_at_capacity:.3f}, "
+        f"gender FNR gap {abst_full.fnr_gap_gender:+.3f} → {abst_strict.fnr_gap_gender:+.3f}.",
+        .8, 6.72, 11.7, .45, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 18)
+
+# 18 — Trade-off matrix and recommendation
+s = make_slide(prs); title(s, "Pilot logistic regression; run XGBoost as the challenger", "Conclusion · Trade-offs")
+picture(s, FIG / "tradeoff_matrix.png", .35, 1.6, 7.7)
+panel(s, "WHY LOGISTIC", f"Same people: {overlap_share:.0%} overlap with XGBoost; captured re-arrests CI includes 0\n\n"
+      "More stable than XGBoost on all 28 refit pairs\n\nCoefficients read directly · ~9× faster\n\n"
+      "Fairness and calibration: tied — not reasons\n\nReverses if: scores are quoted numerically, or scale makes +12 offers matter",
+      8.4, 1.6, 4.5, 5.1, TEAL)
+textbox(s, "Shadow pilot first: no temporal/external validation yet, and no evidence the support programme works.",
+        .8, 6.85, 11.7, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 19)
+
+# 19 — App
+s = make_slide(prs); title(s, "The application makes every trade-off testable", "Demo · App")
+panel(s, "1 · SCORE", "One person, all 3 models", .75, 1.75, 5.7, 1.72, ORANGE)
+panel(s, "2 · EXPLAIN", "Why this score (SHAP)", 6.85, 1.75, 5.7, 1.72, PURPLE)
+panel(s, "3 · STABILITY", "How many of 8 refits select them", .75, 3.8, 5.7, 1.72, ORANGE)
+panel(s, "4 · WHAT IF", "Edit an input, watch the score move", 6.85, 3.8, 5.7, 1.72, PURPLE)
+textbox(s, "streamlit run app.py   ·   backup: screenshots / recording", 3.2, 6.25, 7, .4, 15, PALE, True, PP_ALIGN.CENTER, "Consolas"); footer(s, 20)
+
+# ---------------------------------------------------------------- APPENDIX (Q&A only)
 s = make_slide(prs)
 textbox(s, "APPENDIX", .72, 2.6, 8, .5, 14, ORANGE, True)
 textbox(s, "Supporting evidence\nfor questions", .72, 3.15, 9, 1.5, 34, WHITE, True)
-textbox(s, "Learning curve · economic sensitivity · interpretability methods · explanation disagreement · LIME fidelity · stability · process log",
-        .76, 4.95, 9.5, .9, 15, PALE)
+textbox(s, "Learning curve · economic sensitivity · explanation disagreement · global surrogate · threshold frontier · age · process log", .76, 4.95, 9.5, .9, 15, PALE)
 
-# A1 — Learning curve
 s = make_slide(prs); title(s, "Which model for which agency size?", "A1 · Learning curve")
 picture(s, FIG / "learning_curve.png", .8, 1.8, 11.7)
 textbox(s, "Subsamples of one Georgia cohort test sample-size sensitivity; they do not validate transfer to other agencies.", 1.0, 6.7, 11, .5, 13, ORANGE, True, PP_ALIGN.CENTER)
 
-# A2 — Economic performance
-s = make_slide(prs); title(s, "Model value is a scenario, stress-tested", "A2 · Economic performance")
+s = make_slide(prs); title(s, "Model value is a scenario, stress-tested", "A2 · Economic sensitivity")
 card(s, "SERVICE CAPACITY", "20%", .8, 1.9)
 card(s, "LOGISTIC NET", f"${inc_econ['logistic']/1e6:.2f}M", 3.75, 1.9, TEAL, f"XGBoost ${inc_econ['xgboost']/1e6:.2f}M")
-card(s, "INCUMBENT NET", f"${inc_econ['incumbent']/1e6:.2f}M", 6.7, 1.9, RED); card(s, "RANDOM NET", f"${inc_econ.get('random', 1.46e6)/1e6:.2f}M", 9.65, 1.9, GREY)
+card(s, "HISTORICAL SCORE NET", f"${inc_econ['incumbent']/1e6:.2f}M", 6.7, 1.9, RED); card(s, "RANDOM NET", f"${inc_econ.get('random', 1.46e6)/1e6:.2f}M", 9.65, 1.9, GREY)
 bullets(s, ["$5,000 support cost · $50,000 event cost · 20% assumed effectiveness — all editable in the app",
-            "Models beat the incumbent at every capacity from 5% to 50% (sensitivity sweep)",
+            "Models beat the historical score at every capacity from 5% to 50%",
             "A randomized or quasi-experimental pilot must estimate real intervention impact"], y=3.72, size=20)
 
-# A3 — Interpretability
-s = make_slide(prs); title(s, "Prediction explanations and their limits", "A3 · Interpretability")
-picture(s, FIG / "shap_individual.png", .4, 1.7, 8.3)
-panel(s, "METHODS", "SHAP + LIME (local)\n\nXPER on AUC (Pérignon)\n\nGlobal surrogate: imperfect fidelity\n\nPDP/ICE for all three", 9.0, 1.7, 3.9, 4.9, PURPLE)
-textbox(s, "TabICLv2 has no native explanation path — a real deployment cost, covered only by model-agnostic PDP/ICE.", 1.0, 6.75, 11, .3, 11, RED, True, PP_ALIGN.CENTER)
+s = make_slide(prs); title(s, "SHAP, permutation importance and XPER rank differently", "A3 · Explanation disagreement")
+picture(s, FIG / "explanation_agreement.png", .6, 1.75, 12.0)
+textbox(s, f"Spearman {agree_lo:.2f}–{agree_hi:.2f}; 8–10 of the top ten features shared. The set of drivers is robust, the order is method-dependent.",
+        1.0, 6.82, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER)
 
-# A4 — Explanations disagree
-s = make_slide(prs); title(s, "SHAP, permutation importance and XPER rank differently", "A4 · Explanation disagreement")
-picture(s, FIG / "explanation_agreement.png", .5, 1.7, 8.4)
-panel(s, "WHY", "SHAP explains the prediction\n\nPermutation importance explains loss\n\nXPER decomposes AUC\n\n"
-      "Different questions, so different rankings", 9.1, 1.7, 3.8, 4.9, PURPLE)
-textbox(s, "Top-10 sets largely coincide; ordering is method-dependent. Quote the set, not the rank.", 1.0, 6.75, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER)
+s = make_slide(prs); title(s, "A depth-3 tree that mimics XGBoost", "A4 · Global surrogate")
+picture(s, FIG / "global_surrogate.png", .5, 1.75, 12.3)
+textbox(s, f"Test fidelity R² = {surrogate_r2:.2f}: readable, but it misses much of what XGBoost does. A surrogate can give an illusion of interpretability.",
+        1.0, 6.82, 11, .3, 11, RED, True, PP_ALIGN.CENTER)
 
-# A5 — LIME fidelity
-s = make_slide(prs); title(s, "Is the local explanation faithful?", "A5 · LIME fidelity")
-picture(s, FIG / "lime_individual.png", .4, 1.75, 12.5)
-textbox(s, "Category-aware perturbation raised local fidelity from R² 0.25 to ≈0.41. Three fixed cases × three seeds; every condition keeps its sign.",
-        1.0, 6.75, 11, .4, 12, ORANGE, True, PP_ALIGN.CENTER)
+s = make_slide(prs); title(s, "Group thresholds: the fairness/utility frontier", "A5 · Threshold frontier")
+picture(s, FIG / "fairness_frontier.png", .5, 1.75, 12.3)
+textbox(s, "Optimised on the evaluation set, so optimistic. Group-specific thresholds by race or gender are disparate treatment.",
+        1.0, 6.82, 11, .3, 11, RED, True, PP_ALIGN.CENTER)
 
-# A6 — Stability
-s = make_slide(prs); title(s, "Structural stability across refits on resampled data", "A6 · Stability")
-picture(s, FIG / "structural_stability.png", .5, 1.75, 8.3)
-card(s, "SCORE DRIFT · LOGISTIC", f"{stability.loc['logistic','mean_abs_prob_diff']:.3f}", 9.35, 1.9, ORANGE,
-     f"lowest · XGB {stability.loc['xgboost','mean_abs_prob_diff']:.3f} · TabICL {stability.loc['tabicl','mean_abs_prob_diff']:.3f}")
-card(s, "TOP-20% JACCARD", f"{stability.top20_jaccard.min():.0%}–{stability.top20_jaccard.max():.0%}", 9.35, 3.5, TEAL,
-     f"logit {stability.loc['logistic','top20_jaccard']:.3f} · XGB {stability.loc['xgboost','top20_jaccard']:.3f} · TabICL {stability.loc['tabicl','top20_jaccard']:.3f}")
-textbox(s, "Jaccard is intersection / union, not the share of people switching. Refit sensitivity is not temporal validation.", 1.0, 6.75, 11, .4, 11, GREY, True, PP_ALIGN.CENTER)
+s = make_slide(prs); title(s, "Age: the largest gap, and a policy choice", "A6 · Age")
+picture(s, FIG / "fpdp_age_focus.png", .35, 1.9, 8.4)
+panel(s, "WHY IT IS DIFFERENT", f"FNR gap <33 − 33+: {span(fnr20['Age'])}\n\n"
+      f"Re-arrested 48+: {age_old_fnr:.0%} not selected, vs {age_young_fnr:.0%} at 18–22\n\n"
+      "Age is a direct, validated risk factor: the gap is by design\n\n"
+      "FPDP finds no candidate: age runs through criminal history", 9.0, 1.65, 3.95, 5.0, ORANGE)
+textbox(s, "Ranking by risk or reserving places by age is the client's decision; the course's mitigation has nothing to act on.",
+        .8, 6.82, 11.7, .3, 11, ORANGE, True, PP_ALIGN.CENTER)
 
-# A7 — Improvement journey
 s = make_slide(prs); title(s, "How we got here: what we tried, where we landed", "A7 · Process")
 picture(s, FIG / "improvement_journey.png", .55, 1.75, 12.2)
 textbox(s, "Full log in docs/JOURNEY.md — every step measured, including the attempts we rejected.", 1.0, 6.82, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER)
 
-# A8 — proxy recovery
-s = make_slide(prs); title(s, "Does excluding an attribute remove it?", "A8 · Proxy recovery")
-picture(s, FIG / "proxy_recovery.png", .4, 1.7, 8.4)
-panel(s, "MEASURED", f"Predict the attribute from our own features\n\n"
-      f"With missingness: gender AUC {leak_auc:.2f} — the leak, quantified\n\n"
-      f"Shipped set: gender {gender_proxy_auc:.2f}, race {race_proxy_auc:.2f}\n\n"
-      "Exclusion is not removal", 9.1, 1.7, 3.8, 4.9, RED)
-textbox(s, "Proxies are gun charges, mental-health/substance conditions, violent arrests, age — the substance of the assessment, not incidental fields.",
-        .8, 6.78, 11.7, .4, 11, ORANGE, True, PP_ALIGN.CENTER)
-
-# A9 — per-person stability and abstention
-s = make_slide(prs); title(s, "Would this person's offer survive a different sample?", "A9 · Decision stability")
-picture(s, FIG / "individual_stability.png", .35, 1.7, 12.6)
-textbox(s, f"{contested_share:.0%} of decisions flip between refits, and about {contested_of_selected:.0%} of those actually prioritised sit at that margin. "
-        f"Abstaining on them raises precision and WIDENS the gender gap: women are concentrated at the margin.",
-        .8, 6.72, 11.7, .45, 11, ORANGE, True, PP_ALIGN.CENTER)
-
 # ---------------------------------------------------------------- SPEAKER NOTES
-# Written into the notes pane so they appear in presenter view and travel with the
-# file. Timings total 13 minutes across the 13 core slides, leaving a two-minute
-# buffer in the 15-minute slot. Appendix slides carry the cue for when to jump to them.
+# Timings follow reports/presentation_outline.md: 14:25 of talk across 20 core slides,
+# leaving a buffer in the 15-minute slot. [P1]…[P6] marks who speaks.
 NOTES = {
- 1: """[0:00 · 30s] Opening.
-
-Team 11. Our client is a software vendor selling risk-assessment tools to US
-community-supervision agencies. The question they brought us: which three-year
-re-arrest model should they ship?
-
-Say the frame once, here: we judged four dimensions — performance,
-interpretability, stability, fairness — not accuracy. The 0.60 to 0.73 on the
-right is our models against the score agencies already have on file.""",
-
- 2: """[0:30 · 45s] The decision being sold.
-
-The score prioritises VOLUNTARY re-entry support at the start of parole:
-employment, housing, treatment. Never sanctions, never detention, never
-surveillance.
-
-Land the ethical scoping here, because everything later depends on it. Our model
-is wrong often — at the top 20%, about one in six people offered support are not
-re-arrested. For OFFERING HELP that is an acceptable cost. For punishment it
-would not be. If a juror later challenges the error rate, this is the answer.""",
-
- 3: """[1:15 · 1m30s] Data design, and the leak.
-
-NIJ's own split — we did not make a new one. 18,028 train, 7,807 evaluation,
-29 fields available at supervision start.
-
-Two things to say plainly rather than bury:
-
-First, the evaluation set is NOT an untouched holdout. It is excluded from
-fitting, but our development decisions inspected it. Our comparisons are
-exploratory. Say it before anyone asks.
-
-Second, the leak — this is our strongest slide. Gang affiliation is missing for
-every woman and no man. The missingness pattern IS gender. TabICL encodes NaN as
-a category, so it could read the attribute we thought we had excluded. We measured
-the cost: with missingness indicators, gender is recoverable at AUC 1.00.
-Perfectly. We fixed it with mode-filling and a regression test.""",
-
- 4: """[2:45 · 1m00s] Three model families.
-
-White-box, machine learning, foundation model — as the brief requires. Same 29
-fields, same held-out people, same metrics.
-
-Logistic is CV-tuned L1. XGBoost ordinal-encodes ordered counts, hyperparameters
-from a 5-fold CV random search that is committed as code, not asserted. TabICL is
-a 16-member GPU ensemble.
-
-Flag the one that matters for later: TabICL has NO native attribution path. That
-is a deployment cost, and it comes back on the recommendation slide.""",
-
- 5: """[3:45 · 1m00s] The client's real question.
-
-Not "which of your three models" — that is our question. Theirs is: is any of this
-better than what we already run?
-
-This dataset contains Georgia's recorded supervision score, which we use as one
-input. On its own it reaches 0.60 AUC. Our models reach 0.73. At 20% capacity that
-roughly doubles the net value of the scenario.
-
-Give the caveat in the same breath: this is a HISTORICAL recorded score. It does
-not tell us how today's commercial products perform. And the dollars are a
-scenario — effectiveness is assumed, not measured.""",
-
- 6: """[4:45 · 1m30s] FINDING ONE. Performance cannot pick the model.
-
-All three are within 0.003 AUC. XGBoost beats logistic by +0.0025 with a paired
-interval excluding zero — real, but tiny.
-
-Two methodological points worth making, because they show the work:
-
-We use PAIRED bootstrap differences. Comparing two separate intervals for overlap
-is weaker and commonly misread.
-
-ECE differences are not significant, and the ECE ranking is not even stable across
-binning choices. We tested calibration bin-free instead: logistic and XGBoost are
-both indistinguishable from perfect calibration. TabICL is the exception — slope
-0.913, significantly below 1. Its probabilities are too extreme.
-
-So: performance does not discriminate. Interpretability, stability and fairness do.""",
-
- 7: """[6:15 · 2m00s] FINDING TWO. Unequal access to support.
-
-Slow down here. This is the centre of the talk.
-
-First the framing: selection means being OFFERED support. So the harm is a missed
-offer, and FNR — equal opportunity — is our primary metric, not FPR.
-
-Second, the operating point. We audit at the top-20% rule the product actually
-ships, not at threshold 0.5. At 0.5 the tool would flag 68% of people. That is not
-a threshold this product ever applies, and auditing there inflates every gap.
-
-The results:
-— Race: equivalent within ±5 points for all three models by TOST. No race test
-  survives Holm correction across our 54 tests. Small, and unconfirmed.
-— Gender: women who ARE re-arrested miss support 10 to 12 points more often.
-  Significant for every model.
-— Age: the largest disparity, 23 to 25 points. About 97% of re-arrested people
-  aged 48+ are never selected. It persists even with the age field held fixed,
-  because prior record carries age.
-
-Say the honest line: not significant does NOT mean fair. That is why we test
-equivalence, not just difference.""",
-
- 8: """[8:15 · 1m00s] The impossibility result, both sides.
-
-Our data demonstrates both halves of the theorem within one project.
-
-Race: base rates 0.582 and 0.564 — nearly equal. The theorem does not bind, so
-those gaps are a property of our models and are fixable.
-
-Gender: 0.591 against 0.454, fourteen points apart. Calibration and equal error
-rates CANNOT both hold. We have to choose.
-
-The mechanism is visible in our numbers: every model over-predicts women — mean
-score 0.52 against an observed 0.454 — yet women are selected less at the top 20%.
-
-And for THIS use, the direction matters. In a support programme over-prediction
-works in women's favour. Recalibrating by gender would select even fewer women and
-widen the gap. The harm here is the missed offer, not the miscalibration.""",
-
- 9: """[9:15 · 1m00s] Where the gender gap comes from.
-
-We did not stop at measuring. The course sequence is test, identify the variable,
-mitigate — and fairness partial dependence names the candidate.
-
-Gang affiliation. Cramér's V of 1.0 with gender on the raw field, because it is
-never recorded for women. It is a measurement artefact about record-keeping, not a
-behavioural signal about women.
-
-Dropping it and re-estimating shrinks the gender FNR gap from -0.10 to about zero
-for logistic — partly by raising men's FNR, so say that too — at roughly 0.014 AUC
-and 27 to 41 fewer captured re-arrests. Statistical parity is still rejected.""",
-
-10: """[10:15 · 1m00s] Did the fix generalise, or did we just fit it?
-
-This is the slide that separates us from a project that stops at the p-value.
-
-The result on the previous slide chose the variable AND measured the improvement on
-the same cohort. That is in-sample. It shows a mitigation can be FITTED, not that
-it works.
-
-So we separated them. Five outer folds, entirely inside the training partition. In
-each fold we rerun the candidate search on that fold's training part, pick from
-there alone, refit there, and measure on the held-out fold. The evaluation cohort
-is never touched.
-
-Gang affiliation is selected in all five folds, for both models. About 70% of the
-gap closes out of fold, for roughly one AUC point. The equal-opportunity p-value
-reaches 0.27, not the in-sample 0.99 — and two of five folds still reject.
-
-We report the out-of-fold numbers. The in-sample figure is an upper bound.""",
-
-11: """[11:15 · 1m00s] The four dimensions together.
-
-Read across the rows, not down the columns.
-
-Performance: separated by 0.003 AUC, and the only real calibration difference goes
-AGAINST the model with the highest AUC.
-
-Interpretability: unambiguous, and the gaps are large.
-
-Stability: logistic drifts least on all 28 resample pairs.
-
-Fairness: the differences BETWEEN models are smaller than they look. The gender and
-age gaps are shared by all three.
-
-That is the shape of the decision: accuracy does not discriminate here.""",
-
-12: """[12:15 · 1m00s] FINDING THREE. The recommendation, with its counter-case.
-
-Logistic regression for the shadow pilot. XGBoost as challenger, running in
-parallel on the same cohort.
-
-Be explicit about what we give up: XGBoost is ahead on AUC and Brier. Those are
-real, significant differences.
-
-They do not reach the decision. At the deployed rule the two models offer support
-to 85% of the SAME people — 254 of 7,807 differ — and the difference in captured
-re-arrests has an interval spanning zero.
-
-State what we do NOT claim, because a juror will test it: logistic is not fairer
-and not better calibrated. On both, the two are statistically tied. We chose it
-for refit stability and for coefficients you can read without a second tool.
-
-And what would reverse it: if the client quotes probabilities numerically to
-supervisees, calibration starts to dominate. If their capacity is large enough that
-twelve extra offers matters. That is why the challenger runs in parallel.""",
-
-13: """[13:15 · 45s] The app, and close.
-
-The application makes every trade-off testable: score one person with all three
-models, see the explanation, audit by race, gender and age at the deployed point,
-and edit the cost assumptions.
-
-One thing to demo if there is time: pick a person and show the refit vote count.
-About one decision in seven flips across refits, and a third of the people we
-prioritise sit at that margin. The app shows that rather than hiding it behind a
-point estimate.
-
-Close on the frame: we are not trading accuracy for interpretability. The accuracy
-difference does not change who gets help.
-
-[APPENDIX CUES — jump to these on the matching question]
-A1 learning curve · A2 economics and sensitivity · A3 interpretability methods
-A4 why SHAP, permutation importance and XPER disagree · A5 LIME fidelity
-A6 stability detail · A7 what we tried and rejected · A8 proxy recovery
-A9 per-person stability and the abstention finding""",
+ 1: """[P1 · 0:00 · 20s] Team 11. Our client sells risk-assessment tools to US community-supervision agencies. Their question: which three-year re-arrest model should they ship? We judged four dimensions — performance, interpretability, stability, fairness — not accuracy alone.""",
+ 2: """[P1 · 0:20 · 30s] The score prioritises VOLUNTARY re-entry support: employment, housing, treatment. Never sanctions or detention. Everything later depends on this: being selected means being offered help. Our target is recorded re-arrest, which is only a proxy for need.""",
+ 3: """[P1 · 0:50 · 40s] NIJ's own split: 18,028 training, 7,807 evaluation, Georgia 2013-2015. About 58% are re-arrested. Black and White men have almost the same rate; women are lower. On the right, missing values: the gang field is missing for EVERY woman and no man. The missingness is structured — over to [P2].""",
+ 4: """[P2 · 1:30 · 40s] We only use what is known when supervision starts: 29 fields. Race, gender and residence are never inputs; we keep them to audit who gets support. Everything recorded after release is excluded — and we proved why: adding those fields lifts AUC from 0.73 to 0.81, because they leak the outcome.""",
+ 5: """[P2 · 2:10 · 50s] The leak we found. Gang affiliation is missing for every woman. If missingness is kept, gender is recovered from our own inputs at AUC 1.00 — perfectly. TabICL treats a missing value as its own category, so it effectively saw gender. We fixed it with mode-filling and a regression test. But even after the fix, gender is still recoverable at 0.78: excluding an attribute is not removing it. [P5] picks this up.""",
+ 6: """[P3 · 3:00 · 50s] Three families, as the brief requires, each tuned by cross-validation on training data only. Logistic with L1, C chosen by grid search. XGBoost with a 60-draw random search; deeper trees overfit and were rejected. TabICL with 16 ensemble members; gains level off near 8. Six other ML models all land in the same narrow AUC band.""",
+ 7: """[P3 · 3:50 · 50s] Finding one: performance cannot pick the model. All three within 0.003 AUC. XGBoost beats logistic by 0.0025 on a PAIRED bootstrap — real, but small. Calibration: logistic and XGBoost are indistinguishable from perfect; TabICL's slope is 0.91, significantly below 1 — its probabilities are too extreme.""",
+ 8: """[P3 · 4:40 · 50s] The client's real question: is this better than the score agencies already have? The historical Georgia score in the data reaches 0.60 AUC; our models reach 0.73, and roughly double the scenario net value at 20% capacity. Caveats in the same breath: it is a historical score, and the dollars are a scenario. Over to [P4].""",
+ 9: """[P4 · 5:30 · 40s] What drives the score. Age at release, gang affiliation and prior record, in both models. In probability points: moving from age 23-27 to 48+ lowers predicted risk by about 27 points; a recorded gang affiliation raises it by about 17.""",
+ 10: """[P4 · 6:10 · 40s] Now from the outside, without opening the model. Partial dependence shows the average effect of one feature; the faint individual curves show each person. All three models agree that risk falls with age. This is the only way we can look inside TabICL at all: it has no native attribution. XGBoost can be summarised by a small surrogate tree, but that tree reproduces only 61% of it. Logistic needs none of this: its coefficients are the explanation.""",
+ 11: """[P4 · 6:50 · 40s] One person, explained by both models. Red raises risk, green lowers it — this is what an appeal would contest. We checked faithfulness: LIME on raw features fits locally about twice as well as before, and all 63 conditions keep their sign across seeds. We quote LIME for direction and SHAP for size.""",
+ 12: """[P4 · 7:30 · 40s] Last, explaining PERFORMANCE rather than predictions — XPER, from this course. It splits the AUC itself into contributions: an uninformative model gets about 0.47, and each feature adds its share; age alone adds about 0.09. Compared with SHAP and permutation importance, the three methods agree on WHICH features matter but not on their order, because they answer different questions: prediction, loss, performance. So we quote the set, not the rank. Over to [P5].""",
+ 13: """[P5 · 8:10 · 45s] Fairness. Our primary metric is FNR: people later re-arrested but not offered support — the real harm here. Race first, the question everyone expects after COMPAS. Base rates are almost equal, so the data does not force a gap. Excluding race guarantees twins get the same score, but race is still recoverable at 0.71 through criminal history. So we audit outcomes, not inputs.""",
+ 14: """[P5 · 8:55 · 45s] The outcome audit: every race gap is within five points by an equivalence test, and none survives Holm correction. Three caveats: the small gap runs toward MORE support for Black people; the label is recorded arrest, which may carry policing bias; and prediction quality is lower for Black people, AUC 0.72 vs 0.75.""",
+ 15: """[P5 · 9:40 · 45s] Gender is where we found a problem. Re-arrested women miss support 10 to 12 points more often, in all three models — so it comes from the features. Every model over-predicts women, yet selects them less: with different base rates, calibration and equal FNR cannot both hold. Age shows an even larger gap, but by design — age is a validated risk factor — so it is the client's policy choice; details in the appendix.""",
+ 16: """[P5 · 10:25 · 45s] We located the cause with the course's FPDP: gang affiliation, never recorded for women. Dropping it, selected in every one of five training folds, closes about 70% of the gap out of sample for about one AUC point — at the cost of men's FNR rising two points. It is an option for the client, not applied to our recommended model. Over to [P6].""",
+ 17: """[P6 · 11:10 · 40s] Stability, in the course's sense: two samples from the same population should give the same model. Eight bootstrap refits, same resamples for all three models. Logistic drifts less than XGBoost on all 28 pairs. Jaccard around 0.77 means about 13% of the selected people change per refit.""",
+ 18: """[P6 · 11:50 · 50s] At the level of one person, about one decision in seven flips across refits. Referring contested cases to a human raises precision — but WIDENS the gender gap, because women sit at the margin more often. Abstention is not fairness-neutral.""",
+ 19: """[P6 · 12:40 · 60s] Reading across the four dimensions: performance is a tie; interpretability and stability favour logistic; fairness gaps are shared by all three. So: logistic for a shadow pilot, XGBoost as challenger. The two select 85% of the same people and the difference in captured re-arrests includes zero. We do NOT claim logistic is fairer or better calibrated. It reverses if the client quotes scores numerically, or operates at a scale where a dozen extra offers matter.""",
+ 20: """[P1 · 13:40 · 45s] Demo one person: scores from all three models, the explanation, how many of eight refits select them, then edit an input and watch the score move. If the app fails, switch to the screenshots.
+
+[APPENDIX CUES] A1 learning curve · A2 economics · A3 explanation disagreement · A4 global surrogate · A5 threshold frontier · A6 age · A7 process""",
 }
 
 for index, slide in enumerate(prs.slides, start=1):
