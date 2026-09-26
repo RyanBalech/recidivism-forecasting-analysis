@@ -5,6 +5,7 @@ No model is promoted by this audit. --refit-dir checks an isolated all-model run
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import inspect
 import json
@@ -12,6 +13,7 @@ import platform
 import random
 import sys
 import time
+import zlib
 from pathlib import Path
 
 import joblib
@@ -179,27 +181,57 @@ def main():
             if not np.isclose(part[metric].mean(), stability.loc[name, metric], atol=5.1e-5):
                 raise ValueError(f"Stale stability summary: {name}/{metric}")
     submission_notebook = ROOT / "Recidivism_Project_Submission.ipynb"
-    notebook_path = ROOT / "Recidivism_Project_Submission.ipynb"
+    extended_notebook = ROOT / "notebooks/extended_artifact_review.ipynb"
     slides_path = ROOT / "reports/ISAF_Recidivism_Presentation.pptx"
-    for path in [submission_notebook, notebook_path, slides_path]:
+    for path in [submission_notebook, extended_notebook, slides_path]:
         if not path.is_file() or path.stat().st_size == 0:
             raise ValueError(f"Missing deliverable: {path}")
-    if submission_notebook.read_bytes() != notebook_path.read_bytes():
-        raise ValueError("Root submission notebook and canonical notebook are out of sync")
-    notebook = json.loads(notebook_path.read_text(encoding="utf-8"))
-    code_cells = [c for c in notebook["cells"] if c["cell_type"] == "code"]
-    if any(c["execution_count"] is None or any(o["output_type"] == "error" for o in c["outputs"]) for c in code_cells):
-        raise ValueError("Notebook contains unexecuted cells or execution errors")
+    notebook_counts = {}
+    for path in [submission_notebook, extended_notebook]:
+        notebook = json.loads(path.read_text(encoding="utf-8"))
+        code_cells = [c for c in notebook["cells"] if c["cell_type"] == "code"]
+        if any(c["execution_count"] is None or any(o["output_type"] == "error" for o in c["outputs"])
+               for c in code_cells):
+            raise ValueError(f"Notebook contains unexecuted cells or execution errors: {path}")
+        notebook_counts[path.name] = len(code_cells)
+    submission = json.loads(submission_notebook.read_text(encoding="utf-8"))
+    core_source = "\n".join("".join(c["source"]) for c in submission["cells"] if c["cell_type"] == "code")
+    if "EMBEDDED_CSVS" not in core_source or "ROOT / 'data'" in core_source or "from recidivism" in core_source:
+        raise ValueError("Submission notebook still depends on project data paths or modules")
+    embedded_data_files = ["nij-challenge2021_full_dataset.csv", "nij-challenge2021_training_dataset.csv",
+                           "nij-challenge2021_test_dataset_1.csv"]
+    embedded = submission.get("metadata", {}).get("recidivism_embedded_csvs", {})
+    if embedded.get("format") != "zlib+base64" or set(embedded.get("files", {})) != set(embedded_data_files):
+        raise ValueError("Submission notebook lacks the three embedded NIJ source files")
+    for filename in embedded_data_files:
+        original = (ROOT / "data" / filename).read_bytes()
+        record = embedded["files"][filename]
+        decoded = zlib.decompress(base64.b64decode(record["zlib_base64"]))
+        if decoded != original or record["sha256"] != hashlib.sha256(original).hexdigest():
+            raise ValueError(f"Submission notebook lacks current embedded source data: {filename}")
+    markdown_cells = [c for c in submission["cells"] if c["cell_type"] == "markdown"]
+    appendix_present = any("# Appendix — complete earlier project review" in "".join(c["source"])
+                           for c in markdown_cells)
+    embedded_figures = sum(len(c.get("attachments", {})) for c in markdown_cells)
+    historical_code_listings = sum("Earlier analysis code cell" in "".join(c["source"])
+                                   for c in markdown_cells)
+    if not appendix_present or embedded_figures < 17 or historical_code_listings != notebook_counts[extended_notebook.name]:
+        raise ValueError("Submission notebook is missing earlier analysis content")
     from pptx import Presentation
     report["deliverables"] = {"submission_notebook": submission_notebook.name,
-                              "executed_code_cells": len(code_cells),
+                              "executed_code_cells": notebook_counts[submission_notebook.name],
+                              "extended_notebook": str(extended_notebook.relative_to(ROOT)),
+                              "extended_executed_code_cells": notebook_counts[extended_notebook.name],
+                              "embedded_earlier_figures": embedded_figures,
+                              "historical_code_listings": historical_code_listings,
+                              "embedded_source_csvs": len(embedded_data_files),
                               "slides": len(Presentation(slides_path).slides)}
     report["checks_passed"] = ["original release and preprocessing boundaries", "prediction ID/label alignment",
                                "all published performance/economic metrics", "saved conventional model predictions",
                                "merged fairness point estimates", "paired stability summaries", "executed notebook and readable slide deck"]
     inputs = [ARTIFACT_DIR / name for name in ["test_predictions.csv", "model_metrics.csv", "fairness_inference.csv"]]
     inputs += list((ARTIFACT_DIR / "models").glob("*.joblib"))
-    inputs += [submission_notebook, notebook_path, slides_path,
+    inputs += [submission_notebook, extended_notebook, slides_path,
                ARTIFACT_DIR / "stability_pairs.csv", ARTIFACT_DIR / "stability_summary.csv"]
     report["input_sha256"] = {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in inputs}
     report["source_sha256"] = {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest()

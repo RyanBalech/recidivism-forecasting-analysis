@@ -16,7 +16,7 @@ or surveillance. This is a retrospective course project, not a validated operati
 
 | If you want to… | Open |
 |---|---|
-| **Read the whole analysis** | [`Recidivism_Project_Submission.ipynb`](Recidivism_Project_Submission.ipynb) — fully executed, data prep → recommendation |
+| **Submit the analysis notebook** | [`Recidivism_Project_Submission.ipynb`](Recidivism_Project_Submission.ipynb) — stands alone as a file, with original NIJ CSVs, runnable loading → EDA → modeling → recommendation, and earlier figures/tables embedded |
 | **Read the written report** | [`reports/technical_report.md`](reports/technical_report.md) |
 | **See the deck** | [`reports/ISAF_Recidivism_Presentation.pptx`](reports/ISAF_Recidivism_Presentation.pptx) |
 | **Run the client app** | `streamlit run app.py` |
@@ -25,8 +25,9 @@ or surveillance. This is a retrospective course project, not a validated operati
 ```bash
 python -m pip install -r requirements.txt
 streamlit run app.py                 # the client-facing lab
-python -m pytest -q                  # 45 tests
+python -m pytest -q                  # automated tests
 python scripts/reproduce.py          # full rebuild (GPU recommended)
+python scripts/build_standalone_notebook.py  # rebuild only the submission notebook
 ```
 
 ---
@@ -91,16 +92,33 @@ persisting even with the age field fixed.
 ## Repository map
 
 ```
-Recidivism_Project_Submission.ipynb   executed notebook — the readable entry point
+Recidivism_Project_Submission.ipynb   one submission notebook: executable analysis plus embedded earlier evidence
+notebooks/extended_artifact_review.ipynb  source snapshot used to rebuild the appendix
 app.py                                Streamlit client lab (6 tabs)
 src/recidivism/                       data loading, modelling, metrics
 scripts/                              analysis pipeline, one concern per file
-tests/                                45 tests, incl. leakage and regression guards
+tests/                                leakage and regression guards
 data/                                 NIJ 2021 challenge datasets
 artifacts/                            every generated table, figure and model
 reports/                              deck, technical report, Q&A notes, reviews
 docs/                                 plan, development log, assignment brief
 ```
+
+**Submission notebook.** The executable cells in the root `.ipynb` import only public Python packages and read the
+three NIJ CSVs embedded in the notebook's hidden metadata (with SHA-256 integrity checks). A short loading cell replaces the large encoded-data block. It starts with training-only EDA, then defines feature engineering,
+preprocessing, all three models, evaluation, economic
+scenario, interpretability, stability, fairness and the training-only mitigation check
+in its own cells. Before training, a short decision section compares encoding,
+Logistic Regression grid search, XGBoost randomized search and rejected complexity
+experiments, and TabICL ensemble sizes using embedded historical tuning tables.
+It explicitly identifies the missing original XGBoost trial log and validation limits.
+The appendix embeds every earlier deep-dive narrative, table and figure
+in the same file; its historical project-code listings are reference text and do not run.
+The `.ipynb` is the only repository file needed to read or rerun the analysis;
+Python packages must be installed, and TabICL may download its checkpoint on first use.
+The course also requires the slide deck and interactive app as separate deliverables.
+Running every code cell is compute intensive, especially TabICL refits; CUDA is used
+when available. The larger exploratory audit remains in the repository.
 
 **Pipeline.** [`scripts/reproduce.py`](scripts/reproduce.py) runs every step in dependency order
 and stops at the first failure (`--from-step` to resume, `--only` for a subset). It verifies that
@@ -114,7 +132,7 @@ scikit-learn matches the pinned version, since saved `.joblib` models load only 
 | Fairness | `fairness_audit`, `fairness_interpretability`, `mitigation_nested`, `proxy_inference_audit`, `race_ab_test` |
 | Stability | `stability_structural`, `individual_stability` |
 | Validation | `calibration_tests`, `validate_project`, `end_to_end_audit`, `accuracy_review` |
-| Deliverables | `build_notebook`, `build_slides`, `tradeoff_matrix`, `refresh_readme` |
+| Deliverables | `build_standalone_notebook`, `build_notebook` (extended artifact review), `build_slides`, `tradeoff_matrix`, `refresh_readme` |
 
 ---
 
