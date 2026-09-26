@@ -108,7 +108,11 @@ docs/                                 plan, development log, assignment brief
 three NIJ CSVs embedded in the notebook's hidden metadata (with SHA-256 integrity checks). A short loading cell replaces the large encoded-data block. It starts with training-only EDA, then defines feature engineering,
 preprocessing, all three models, evaluation, economic
 scenario, interpretability, stability, fairness and the training-only mitigation check
-in its own cells. The appendix embeds every earlier deep-dive narrative, table and figure
+in its own cells. Before training, a short decision section compares encoding,
+Logistic Regression grid search, XGBoost randomized search and rejected complexity
+experiments, and TabICL ensemble sizes using embedded historical tuning tables.
+It explicitly identifies the missing original XGBoost trial log and validation limits.
+The appendix embeds every earlier deep-dive narrative, table and figure
 in the same file; its historical project-code listings are reference text and do not run.
 The `.ipynb` is the only repository file needed to read or rerun the analysis;
 Python packages must be installed, and TabICL may download its checkpoint on first use.

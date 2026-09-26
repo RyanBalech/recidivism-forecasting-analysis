@@ -4,9 +4,12 @@ The notebook uses the NIJ CSV files and installed third-party packages. It does 
 import project modules, call project scripts, or read precomputed project artifacts.
 """
 from pathlib import Path
+import argparse
 import base64
+import csv
 import hashlib
 import html
+import json
 import os
 import tempfile
 import zlib
@@ -26,6 +29,98 @@ EMBEDDED_CSVS = (
     "nij-challenge2021_training_dataset.csv",
     "nij-challenge2021_test_dataset_1.csv",
 )
+
+
+DECISIONS_HEADING = "### How the modeling decisions were chosen"
+
+
+def modeling_decisions_cell() -> nbf.NotebookNode:
+    """Publish compact, artifact-backed tuning evidence as standalone narrative."""
+    def records(relative):
+        with (ROOT / relative).open(encoding="utf-8", newline="") as handle:
+            return list(csv.DictReader(handle))
+
+    logistic = records("artifacts/logistic_tuning_grid.csv")
+    encoding_rows = []
+    for encoding in ("onehot", "ordinal"):
+        best = max((r for r in logistic if r["encoding"] == encoding),
+                   key=lambda r: float(r["cv_roc_auc"]))
+        encoding_rows.append(
+            f"| {'One-hot' if encoding == 'onehot' else 'Ordinal'} | "
+            f"{float(best['C']):.5f}, {best['penalty'].upper()} | "
+            f"{float(best['cv_roc_auc']):.4f} | {float(best['cv_brier']):.4f} | "
+            f"{'Kept' if encoding == 'onehot' else 'Rejected'} |")
+
+    protocol = json.loads((ROOT / "artifacts/deep_review/accuracy_protocol.json").read_text(encoding="utf-8"))
+    inner = records("artifacts/deep_review/accuracy_inner_search.csv")
+    outer = records("artifacts/deep_review/accuracy_outer_folds.csv")
+    selected = [r for r in outer if r["model"] == "xgboost_selected"]
+    if len(selected) != 3 or any(int(r["selected_candidate"]) != 0 for r in selected):
+        raise ValueError("Update the narrative: XGBoost no longer selects candidate 0 in all folds")
+    xgb_rows = []
+    for candidate in (0, 2, 8, 3, 4):
+        spec = protocol["candidates"][candidate]
+        rows = [r for r in inner if int(r["candidate"]) == candidate]
+        if len(rows) != 3:
+            raise ValueError(f"Expected three inner-CV summaries for candidate {candidate}")
+        auc = sum(float(r["inner_auc"]) for r in rows) / len(rows)
+        brier = sum(float(r["inner_brier"]) for r in rows) / len(rows)
+        xgb_rows.append(
+            f"| {candidate}: {spec['encoding']} | {spec['params']['max_depth']} | "
+            f"{auc:.4f} | {brier:.4f} | {'Kept' if candidate == 0 else 'Rejected'} |")
+
+    sweep = records("artifacts/estimator_sweep.csv")
+    tab_rows = []
+    for row in sweep:
+        n = int(row["n_estimators"])
+        if n not in (1, 8, 16, 32, 64):
+            continue
+        tab_rows.append(f"| {n} | {float(row['roc_auc']):.5f} | "
+                        f"{float(row['brier']):.5f} | {float(row['seconds']):.1f} | "
+                        f"{'Kept' if n == 16 else 'Not selected'} |")
+
+    cell = md(f"""{DECISIONS_HEADING}
+
+These are **recorded training-only experiments**, not searches rerun by this notebook. The tables are embedded here so no result files are needed to read the rationale. Higher AUC and lower Brier are better; scores from different validation protocols are not directly comparable.
+
+**Logistic Regression: grid search and encoding.** Five-fold stratified CV tested 13 `C` values from 0.001 to 10, L1/L2 penalties and two encodings: **52 configurations / 260 fold fits**. Preprocessing was fitted inside each fold. Each row below is the best configuration *within that encoding*, not a controlled encoding-only experiment.
+
+| Encoding | Best C, penalty | CV AUC | CV Brier | Decision |
+|---|---|---:|---:|---|
+{chr(10).join(encoding_rows)}
+
+Keep one-hot + L1 (`C=0.21544`, rounded to `0.2154` for the final fit): category-specific effects slightly outperformed a single ordinal slope. The difference is small, not proof of superiority; nearby regularization settings were also competitive.
+
+**XGBoost: randomized search, then complexity checks.** The historical search used 60 draws × five stratified folds, selecting by AUC. It explored 300–1,399 trees, depth 2–6, learning rate 0.005–0.1, child weight 1–14, row/column sampling 0.6–1, and L1/L2/gamma regularization. The recorded winner was depth 2, 1,196 trees and learning rate 0.0188 (historically reported CV AUC ≈ 0.7343); the exact kept settings appear in the next cell. **The original search-results JSON/full trial log is not retained**, so that score is historical documentation, not independently verified trial evidence.
+
+A later saved three-outer × three-inner-fold review compared 13 ordinal/one-hot configurations, depths 1–4 and shrinkage/regularization (**117 inner fits**). Selection minimized inner Brier, with AUC as tie-breaker. Selected comparisons below average the three saved inner-CV summaries:
+
+| Candidate: encoding | Depth | Inner AUC | Inner Brier | Decision |
+|---|---:|---:|---:|---|
+{chr(10).join(xgb_rows)}
+
+Keep candidate 0: it won all three outer selections. Candidates 2 and 8 have identical hyperparameters apart from encoding, and ordinal did slightly better. The shown depth-3/4 alternatives had worse Brier and AUC, so extra complexity was rejected. They also changed tree count and regularization: this rejects those **configurations**, not every possible deep-tree model. Unordered fields remain one-hot; only ordered/count fields receive ranks.
+
+**TabICL: ensemble-size sensitivity.** A fixed stratified split of the training partition used 14,422 fit rows and 3,606 development rows. Sizes 1, 2, 4, 8, 16, 32 and 64 were tested; selected rows are shown. Timings are recorded fit-plus-predict times on the sweep hardware, not a universal benchmark.
+
+| Ensemble size | Dev AUC | Dev Brier | Seconds | Decision |
+|---:|---:|---:|---:|---|
+{chr(10).join(tab_rows)}
+
+Keep 16 as a practical compute–accuracy trade-off, **not the absolute AUC winner**: 32 took about twice as long and was slightly worse; 64 took about four times as long for an AUC gain of only ≈ 0.00004. Smaller ensembles cost less but had worse point metrics. The final fit uses all 18,028 training rows.
+
+**Evidence and limits.** Sources: saved `logistic_tuning_grid.csv`, `accuracy_protocol.json`, `accuracy_inner_search.csv`, `accuracy_outer_folds.csv`, `estimator_sweep.csv`, and the historical tuning scripts. Repeated experimentation reused the training cohort; these small differences do not establish statistical significance or a global optimum. Official evaluation labels were excluded from these selection procedures, but were inspected elsewhere during project development, as disclosed above.""")
+    cell.metadata["recidivism_modeling_decisions"] = True
+    return cell
+
+
+def refresh_modeling_decisions(notebook: nbf.NotebookNode) -> None:
+    """Insert or replace only the decision narrative; retain all executed outputs."""
+    notebook.cells = [c for c in notebook.cells
+                      if not (c.cell_type == "markdown" and c.source.startswith(DECISIONS_HEADING))]
+    training = next(i for i, c in enumerate(notebook.cells)
+                    if c.cell_type == "markdown" and c.source.startswith("## 5. Preprocess and train"))
+    notebook.cells.insert(training, modeling_decisions_cell())
 
 
 def embedded_data_metadata() -> dict:
@@ -726,6 +821,7 @@ The fairness gaps are material, particularly for women who are later re-arrested
     ]
     nb.metadata["recidivism_embedded_csvs"] = embedded_data_metadata()
     nb.cells.insert(3, embedded_data_cell())
+    refresh_modeling_decisions(nb)
     with tempfile.NamedTemporaryFile(prefix="_submission_build_", suffix=".ipynb",
                                      dir=ROOT, delete=False) as temporary:
         temporary_path = Path(temporary.name)
@@ -747,4 +843,15 @@ The fairness gaps are material, particularly for women who are later re-arrested
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--refresh-decisions", action="store_true",
+                        help="Update only the tuning narrative, preserving existing fits and outputs")
+    args = parser.parse_args()
+    if args.refresh_decisions:
+        notebook = nbf.read(OUT, as_version=4)
+        refresh_modeling_decisions(notebook)
+        nbf.validate(notebook)
+        nbf.write(notebook, OUT)
+        print(f"Updated modeling decisions only: {OUT}")
+    else:
+        main()
