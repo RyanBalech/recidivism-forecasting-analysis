@@ -157,7 +157,6 @@ def comparison_figure(perf: pd.DataFrame, shap: pd.DataFrame) -> None:
         ("PERFORMANCE", None),
         ("ROC AUC", lambda x: f"{x.roc_auc:.3f}"),
         ("Brier ↓", lambda x: f"{x.brier:.4f}"),
-        ("Calibration slope (1 = ideal)", lambda x: f"{x.calibration_slope:.2f}"),
         ("Re-arrests captured in top 20%", lambda x: f"{int(x.captured_events):,}"),
         ("INTERPRETABILITY", None),
         ("Top-2 SHAP drivers", "top"),
@@ -165,10 +164,9 @@ def comparison_figure(perf: pd.DataFrame, shap: pd.DataFrame) -> None:
         ("Score drift, mean |Δp| ↓", lambda x: f"{x.mean_abs_prob_diff:.4f}"),
         ("Top-20% Jaccard ↑", lambda x: f"{x.top20_jaccard:.3f}"),
         ("FAIRNESS (FNR gap, top 20%)", None),
-        ("Gender (M − F)", lambda x: f"{x.gender_fnr_gap:+.3f}"),
         ("Race (B − W)", lambda x: f"{x.race_fnr_gap:+.3f}"),
+        ("Gender (M − F)", lambda x: f"{x.gender_fnr_gap:+.3f}"),
         ("Age (<33 − 33+)", lambda x: f"{x.age_fnr_gap:+.3f}"),
-        ("Women: mean score vs observed", lambda x: f"{x.women_mean_score:.2f} vs {x.women_observed_rate:.2f}"),
     ]
     fig, ax = plt.subplots(figsize=(15, 8.2))
     ax.axis("off")
