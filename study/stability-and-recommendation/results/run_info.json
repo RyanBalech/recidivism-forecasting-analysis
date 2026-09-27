@@ -1,0 +1,15 @@
+{
+  "python": "3.9.6",
+  "platform": "macOS-26.6.2-arm64-arm-64bit",
+  "logical_cpus": 10,
+  "scikit_learn": "1.6.1",
+  "xgboost": "2.1.4",
+  "logistic_eval_auc_here": 0.7298327241325903,
+  "logistic_max_abs_diff_vs_published": 3.552713678800501e-15,
+  "xgboost_eval_auc_here": 0.7323742146088459,
+  "xgboost_max_abs_diff_vs_published": 0.0361915484515381,
+  "bootstrap_samples_match_published": true,
+  "logistic_half_model_mean_eval_auc": 0.7276550764178513,
+  "xgboost_half_model_mean_eval_auc": 0.7296865525277603,
+  "runtime_seconds": 150.0
+}
