@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import inspect
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -25,6 +27,8 @@ LABELS = {"logistic": "Logistic regression", "xgboost": "XGBoost", "tabicl": "Ta
 CAPACITY = 0.20
 SCOPE = ("Decision support for allocating re-entry support services only — "
          "not for detention, sentencing, surveillance, or sanctions.")
+# Text verdicts are not increases: hide st.metric's delta arrow where this Streamlit supports it.
+NO_ARROW = {"delta_arrow": "off"} if "delta_arrow" in inspect.signature(st.metric).parameters else {}
 
 
 @st.cache_data
@@ -67,6 +71,18 @@ def predict(models, name, frame):
     return models[name].predict_proba(frame)[:, 1]
 
 
+@st.cache_data(show_spinner="TabICLv2 is scoring this edited record…", max_entries=64)
+def tabicl_live(frame: pd.DataFrame) -> float:
+    """Live TabICLv2 score, cached per edited row so unrelated reruns stay instant."""
+    return float(predict(load_models(include_tabicl=True), "tabicl", frame)[0])
+
+
+def natural_key(value):
+    """Sort '2' before '10' and '23-27' before '48 or older'."""
+    match = re.match(r"\d+(\.\d+)?", str(value))
+    return (0, float(match.group()), str(value)) if match else (1, 0.0, str(value))
+
+
 def figure(name: str, caption: str | None = None):
     path = FIGURE_DIR / name
     if path.exists():
@@ -86,7 +102,8 @@ if data["model_metrics"] is None or data["test_predictions"] is None:
 metrics, predictions = data["model_metrics"], data["test_predictions"]
 LABELS = {m: label for m, label in LABELS.items() if f"p_{m}" in predictions}
 metrics["Model"] = metrics.model.map(LABELS)
-thresholds = {m: float(np.quantile(predictions[f"p_{m}"], 1 - CAPACITY)) for m in LABELS}
+# Score of the round(n × capacity)-th person, so ">=" selects exactly the audited top 20%.
+thresholds = {m: float(np.sort(predictions[f"p_{m}"].to_numpy())[-round(len(predictions) * CAPACITY)]) for m in LABELS}
 
 tab_ind, tab_cmp, tab_fair, tab_stab, tab_econ, tab_gov = st.tabs([
     "Individual assessment", "Model comparison", "Fairness audit", "Stability", "Economics", "Governance",
@@ -95,31 +112,52 @@ tab_ind, tab_cmp, tab_fair, tab_stab, tab_econ, tab_gov = st.tabs([
 with tab_ind:
     st.subheader("Score one person with all three models")
     split = load_split()
-    include_tabicl = st.checkbox("Include TabICLv2 live inference (slower first load)", value=False,
-                                disabled="tabicl" not in LABELS)
-    with st.spinner("Loading selected models…"):
-        models = load_models(include_tabicl)
-    source_row = st.selectbox("Start from a held-out record", range(min(250, len(split.X_test))),
-                              format_func=lambda i: f"Record {int(split.audit_test.iloc[i].ID)}")
+    live_tabicl = st.checkbox("Score edited records with TabICLv2 live (about 10 s per new edit on a GPU)",
+                              value=False, disabled="tabicl" not in LABELS)
+    with st.spinner("Loading models…"):
+        models = load_models()
+    ids = split.audit_test.ID.astype(int).tolist()
+    source_row = st.selectbox("Start from a held-out record", range(len(ids)),
+                              format_func=lambda i: f"Record {ids[i]}")
+    record_id = ids[source_row]
     row = split.X_test.iloc[[source_row]].copy()
     editable = ["Age_at_Release", "Supervision_Risk_Score_First", "Gang_Affiliated", "Education_Level",
                 "Prison_Years", "Prior_Arrest_Episodes_Felony", "Prior_Revocations_Parole"]
     cols = st.columns(4)
+    edited = []
     for i, col in enumerate(editable):
-        options = [None, *sorted(split.X_train[col].dropna().unique(), key=lambda x: str(x))]
         current = row.iloc[0][col]
-        index = options.index(current) if pd.notna(current) and current in options else 0
-        value = cols[i % 4].selectbox(pretty(col), options, index=index,
+        original = None if pd.isna(current) else current
+        values = sorted(split.X_train[col].dropna().unique(), key=natural_key)
+        options = [None, *values] if original is None or split.X_train[col].isna().any() else values
+        index = options.index(original) if original in options else 0
+        # One key per record, so an edit made on one person never carries over to the next.
+        value = cols[i % 4].selectbox(pretty(col), options, index=index, key=f"edit_{col}_{record_id}",
                                      format_func=lambda v: "Missing" if v is None else str(v))
         row.loc[:, col] = np.nan if value is None else value
+        if value != original:
+            edited.append(pretty(col))
 
     scores = {m: float(predict(models, m, row[FEATURE_COLUMNS])[0]) for m in models if m in LABELS}
+    if "tabicl" in LABELS:
+        if not edited:  # published score from the evaluation run: instant and identical to the audits
+            scores["tabicl"] = float(predictions.loc[predictions.ID == record_id, "p_tabicl"].iloc[0])
+        elif live_tabicl:
+            scores["tabicl"] = tabicl_live(row[FEATURE_COLUMNS])
     cols = st.columns(3)
-    for col, (m, p) in zip(cols, scores.items()):
-        priority = p >= thresholds[m]
-        col.metric(LABELS[m], f"{p:.1%}", "Priority for support (top 20%)" if priority else "Standard support",
-                   delta_color="off")
-    st.caption("Priority is a comparison to a historical cohort cutoff. Edited records are hypothetical; this is not a live allocation guarantee. Cohort audits allocate exactly round(n × capacity), breaking ties by row order.")
+    for col, m in zip(cols, LABELS):
+        if m not in scores:
+            col.metric(LABELS[m], "—", "Tick live TabICLv2 above to score this edit", delta_color="off", **NO_ARROW)
+            continue
+        priority = scores[m] >= thresholds[m]
+        col.metric(LABELS[m], f"{scores[m]:.1%}", "Priority for support (top 20%)" if priority else "Standard support",
+                   delta_color="off", **NO_ARROW)
+    if edited:
+        st.caption(f"Hypothetical edit: {', '.join(edited)}. The stability figures below describe the original record.")
+    cutoffs = ", ".join(f"{LABELS[m]} {thresholds[m]:.3f}" for m in LABELS)
+    st.caption(f"Priority = within the top 20% of the 7,807-person 2013–2015 evaluation cohort (cutoffs: {cutoffs}). "
+               "Unedited records show TabICLv2's published score. Edited records are hypothetical; this is not a live "
+               "allocation guarantee.")
 
     st.markdown("**Why this score? Local explanation**")
     explain_model = st.radio("Explain with", ["logistic", "xgboost", "tabicl"], format_func=LABELS.get, horizontal=True)
@@ -143,7 +181,6 @@ with tab_ind:
     if stability_rows is None:
         st.caption("Run `python scripts/individual_stability.py` to add per-person decision stability.")
     else:
-        record_id = int(split.audit_test.iloc[source_row].ID)
         person_rows = stability_rows[stability_rows.ID == record_id]
         if person_rows.empty:
             st.caption("No refit record for this person.")
@@ -161,7 +198,7 @@ with tab_ind:
                            else f"Contested: prioritised in {votes} of {total}")
                 col.metric(LABELS.get(r.model, r.model),
                            f"{r.min_probability:.1%}–{r.max_probability:.1%}",
-                           verdict, delta_color="off")
+                           verdict, delta_color="off", **NO_ARROW)
             if (person_rows.times_selected.between(1, person_rows.n_refits - 1)).any():
                 st.warning(
                     "This decision flips between refits. In a deployment with a review route, this is the "
@@ -169,11 +206,11 @@ with tab_ind:
 
     summary = data["individual_stability_summary"]
     if summary is not None:
-        st.caption(
-            f"Across the cohort, {1 - float(summary.share_decision_unanimous.iloc[0]):.0%} of decisions are "
-            f"contested, and about {float(summary.contested_share_of_selected.iloc[0]):.0%} of the people "
-            "actually prioritised sit at that margin."
-        )
+        per_model = "; ".join(
+            f"{LABELS.get(r.model, r.model)} {r.share_contested:.0%} of decisions contested, "
+            f"{r.contested_share_of_selected:.0%} of the people it prioritises (in at least 4 of 8 refits) at that margin"
+            for r in summary.itertuples())
+        st.caption(f"Across the cohort: {per_model}. TabICLv2 was not refitted per person.")
 
     st.markdown("**Race twin test**")
     st.caption("Race, gender and residence geography are not model inputs, so two people identical except for race "
@@ -340,7 +377,8 @@ with tab_econ:
 with tab_gov:
     st.subheader("Recommended operating policy")
     st.markdown("""
-    - Score with the L1 logistic model and run XGBoost as a shadow challenger: XGBoost's AUC edge (+0.0025) does not outweigh logistic's native explanations, lower refit drift and smaller subgroup gaps.
+    - Score with the L1 logistic model and run XGBoost as a shadow challenger: XGBoost's AUC edge (+0.0025) does not outweigh logistic's native explanations and lower refit drift. Calibration and subgroup gaps are statistically tied, so they do not decide the choice.
+    - Run a second pilot arm without `Gang_Affiliated`, a field never recorded for women: in nested cross-validation, dropping it closes about 70% of the gender FNR gap at an AUC cost of about 0.01.
     - Use scores only to offer beneficial, capacity-limited support; never to increase surveillance, sanctions, or detention.
     - Keep race and gender out of the score and in the monitoring layer. Audit error rates and calibration by group every quarter, at the deployed operating point.
     - Require documented overrides, an appeal route, data-quality checks, and automatic suspension when drift or subgroup gaps exceed agreed limits.
