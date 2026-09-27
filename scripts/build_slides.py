@@ -71,16 +71,38 @@ def picture(slide, path, x, y, w):
     slide.shapes.add_picture(str(path), Inches(x), Inches(y), width=Inches(w))
 
 
-def panel(slide, heading, body, x, y, w=3.75, h=3.6, color=ORANGE):
+def panel(slide, heading, body, x, y, w=3.75, h=3.6, color=ORANGE, size=15):
     shape = slide.shapes.add_shape(5, Inches(x), Inches(y), Inches(w), Inches(h))
     shape.fill.solid(); shape.fill.fore_color.rgb = CARD; shape.line.color.rgb = color
     textbox(slide, heading, x+.25, y+.3, w-.5, .4, 20, color, True, PP_ALIGN.CENTER)
-    textbox(slide, body, x+.35, y+1.08, w-.7, h-1.35, 15, PALE, align=PP_ALIGN.CENTER)
+    textbox(slide, body, x+.35, y+1.08, w-.7, h-1.35, size, PALE, align=PP_ALIGN.CENTER)
+
+
+def table(slide, rows, x, y, widths, row_h=.36, size=13, highlight=()):
+    """Dark-theme table; the first row is the header, rows in `highlight` are drawn in teal."""
+    shape = slide.shapes.add_table(len(rows), len(rows[0]), Inches(x), Inches(y),
+                                   Inches(sum(widths)), Inches(row_h * len(rows)))
+    grid = shape.table
+    for j, w in enumerate(widths):
+        grid.columns[j].width = Inches(w)
+    for i, row in enumerate(rows):
+        grid.rows[i].height = Inches(row_h)
+        for j, value in enumerate(row):
+            cell = grid.cell(i, j)
+            cell.fill.solid(); cell.fill.fore_color.rgb = ORANGE if i == 0 else CARD
+            cell.vertical_anchor = MSO_ANCHOR.MIDDLE
+            p = cell.text_frame.paragraphs[0]
+            p.text = str(value); p.alignment = PP_ALIGN.LEFT if j == 0 else PP_ALIGN.RIGHT
+            p.font.name = "Aptos"; p.font.size = Pt(size); p.font.bold = i == 0 or i in highlight
+            p.font.color.rgb = NAVY if i == 0 else (TEAL if i in highlight else WHITE)
 
 
 metrics = pd.read_csv(ART / "model_metrics.csv").set_index("model")
 inc_auc = pd.read_csv(ART / "incumbent_discrimination.csv").set_index("ranker")["roc_auc"]
-inc_econ = pd.read_csv(ART / "incumbent_economics.csv").set_index("ranker")["assumed_net_value"]
+econ = pd.read_csv(ART / "incumbent_economics.csv").set_index("ranker")
+inc_econ = econ["assumed_net_value"]
+baselines = pd.read_csv(ART / "validation_baselines.csv").set_index("model")
+brier_skill, base_brier = baselines.brier_skill_vs_prevalence, baselines.loc["training_prevalence", "brier"]
 inf = pd.read_csv(ART / "fairness_inference.csv")
 top20 = inf[inf.rule == "top_20pct"]
 fnr20 = top20[top20.metric == "fnr"].pivot_table(index="model", columns="attribute", values="gap")
@@ -248,20 +270,42 @@ textbox(s, f"{ml_n} other ML candidates (CatBoost, LightGBM, EBM, …) all land 
 
 # 7 — Performance
 s = make_slide(prs); title(s, "Statistical performance: effectively a tie", "Models · Performance")
-picture(s, FIG / "performance_calibration.png", .45, 1.72, 8.05)
-card(s, "AUC", slash([metrics.loc[m, "roc_auc"] for m in m3], "{:.3f}"), 9.25, 1.9, ORANGE, "logistic / XGBoost / TabICL", size=15)
+picture(s, FIG / "performance_benchmark.png", .45, 1.72, 8.55)
+textbox(s, "Brier = mean of (predicted probability − outcome)², lower is better: it scores the probability itself, "
+        f"and it is the accuracy score NIJ used for this challenge. Predicting the {train_rate:.0%} base rate for everyone gives "
+        f"{base_brier:.3f}. Brier also rewards calibration (a predicted 70% should mean 70% re-arrested): "
+        f"logistic and XGBoost pass (Cox slope {_cal.loc['logistic', 'slope']:.2f} / {_cal.loc['xgboost', 'slope']:.2f}); "
+        f"TabICL's probabilities are slightly too extreme ({_cal.loc['tabicl', 'slope']:.2f}).", .6, 5.3, 8.3, 1.3, 13, PALE)
+card(s, "AUC", slash([metrics.loc[m, "roc_auc"] for m in m3], "{:.3f}"), 9.25, 1.9, ORANGE, "'excellent' band (≥ .71) for US tools", size=15)
 card(s, "AUC GAP · XGB − LOGIT", f"+{xgb_minus_logit:.4f}", 9.25, 3.5, TEAL, "paired bootstrap: real, but small")
-card(s, "CALIBRATION SLOPE", slash([_cal.loc[m, "slope"] for m in m3], "{:.2f}"), 9.25, 5.1, PURPLE, "TabICL too extreme (significant)", size=16)
-textbox(s, "All three within ~0.003 AUC. Performance alone cannot pick the model.", 1.0, 6.85, 11, .3, 11, GREY, True, PP_ALIGN.CENTER); footer(s, 7)
+card(s, "BRIER LOSS", slash([metrics.loc[m, "brier"] for m in m3]), 9.25, 5.1, PURPLE,
+     f"{brier_skill[m3].min():.0%} better than the base-rate forecast", size=16)
+textbox(s, "All three within ~0.003 AUC and ~0.001 Brier. Performance alone cannot pick the model.", 1.0, 6.85, 11, .3, 11, GREY, True, PP_ALIGN.CENTER); footer(s, 7)
 
-# 8 — Incumbent
-s = make_slide(prs); title(s, "The client's real question: better than today's score?", "Models · Incumbent")
-picture(s, FIG / "incumbent_benchmark.png", .45, 1.75, 8.3)
-card(s, "HISTORICAL SCORE AUC", f"{inc_auc['incumbent']:.2f}", 9.25, 1.9, RED, "Georgia supervision score in the data")
-card(s, "OUR MODELS AUC", f"≈ {metrics.roc_auc.mean():.2f}", 9.25, 3.5, TEAL, "all three models")
-card(s, "NET VALUE @20%", f"${inc_econ['incumbent']/1e6:.2f}M → ${inc_econ['logistic']/1e6:.2f}M", 9.25, 5.1, ORANGE, "scenario: $5k cost, $50k event, 20% effect", size=18)
-textbox(s, "Models beat the historical score at every capacity. Dollars are a scenario, not a causal estimate.",
-        1.0, 6.85, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 8)
+# 8 — Incumbent, in dollars: the scenario, the formula and the result
+SUPPORT_COST, EVENT_COST, EFFECT = 5_000, 50_000, 0.20
+offers = int(econ.loc["logistic", "selected"])
+break_even = lambda r: SUPPORT_COST / (econ.loc[r, "precision_at_capacity"] * EVENT_COST)
+s = make_slide(prs); title(s, "The client's real question: better than today's score, in dollars?", "Models · Economic value")
+panel(s, "SCENARIO (ASSUMED)", f"20% capacity = {offers:,} offers\nSupport costs ${SUPPORT_COST:,} per person\n"
+      f"A re-arrest costs ${EVENT_COST:,}\nSupport prevents {EFFECT:.0%} of re-arrests", .7, 1.7, 4.0, 2.55, PURPLE)
+panel(s, "NET VALUE", f"re-arrested among offers × ${EVENT_COST:,} × {EFFECT:.0%}   −   offers × ${SUPPORT_COST:,}\n\n"
+      f"Logistic:  {econ.loc['logistic', 'captured_events']:,} × ${EVENT_COST * EFFECT:,.0f}  −  {offers:,} × ${SUPPORT_COST:,}"
+      f"  =  ${inc_econ['logistic']/1e6:.3f}M\n\nSame cost for every ranking: only precision differs",
+      4.9, 1.7, 7.75, 2.55, ORANGE, size=16)
+_names = {"random": "Random", "incumbent": "Historical Georgia score", "logistic": "Logistic",
+          "xgboost": "XGBoost", "tabicl": "TabICLv2"}
+_rows = [["Ranking", "AUC", "Re-arrested / offers", "Precision", "Net value"]]
+for r in ["random", "incumbent", "logistic", "xgboost", "tabicl"]:
+    auc = inc_auc[r] if r in inc_auc else metrics.loc[r, "roc_auc"]
+    _rows.append([_names[r], f"{auc:.2f}", f"{econ.loc[r, 'captured_events']:,} / {offers:,}",
+                  f"{econ.loc[r, 'precision_at_capacity']:.2f}", f"${inc_econ[r]/1e6:.3f}M"])
+table(s, _rows, .7, 4.45, [2.85, .9, 2.1, 1.25, 1.35], highlight=(3, 4, 5))
+card(s, "BREAK-EVEN EFFECT", f"{break_even('logistic'):.0%} vs {break_even('incumbent'):.0%}", 9.95, 4.45, TEAL,
+     "logistic vs historical score", size=22)
+textbox(s, "Support must prevent at least this share of re-arrests to pay for itself.", 9.95, 5.95, 2.65, .7, 11, PALE)
+textbox(s, "Models beat the historical score at every capacity from 5% to 50% (A2). Dollars are a scenario, not a causal estimate.",
+        .8, 6.85, 11.7, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 8)
 
 # ================================================================ P4 · INTERPRETABILITY (2 min)
 # 9 — Global drivers
@@ -391,11 +435,12 @@ textbox(s, "Subsamples of one Georgia cohort test sample-size sensitivity; they 
 
 s = make_slide(prs); title(s, "Model value is a scenario, stress-tested", "A2 · Economic sensitivity")
 card(s, "SERVICE CAPACITY", "20%", .8, 1.9)
-card(s, "LOGISTIC NET", f"${inc_econ['logistic']/1e6:.2f}M", 3.75, 1.9, TEAL, f"XGBoost ${inc_econ['xgboost']/1e6:.2f}M")
-card(s, "HISTORICAL SCORE NET", f"${inc_econ['incumbent']/1e6:.2f}M", 6.7, 1.9, RED); card(s, "RANDOM NET", f"${inc_econ.get('random', 1.46e6)/1e6:.2f}M", 9.65, 1.9, GREY)
-bullets(s, ["$5,000 support cost · $50,000 event cost · 20% assumed effectiveness — all editable in the app",
-            "Models beat the historical score at every capacity from 5% to 50%",
-            "A randomized or quasi-experimental pilot must estimate real intervention impact"], y=3.72, size=20)
+card(s, "LOGISTIC NET", f"${inc_econ['logistic']/1e6:.3f}M", 3.75, 1.9, TEAL, f"XGBoost ${inc_econ['xgboost']/1e6:.3f}M")
+card(s, "HISTORICAL SCORE NET", f"${inc_econ['incumbent']/1e6:.3f}M", 6.7, 1.9, RED); card(s, "RANDOM NET", f"${inc_econ['random']/1e6:.3f}M", 9.65, 1.9, GREY)
+picture(s, FIG / "incumbent_benchmark.png", .8, 3.55, 11.7)
+textbox(s, "Right panel: models beat the historical score at every capacity from 5% to 50%. "
+        "A randomized or quasi-experimental pilot must estimate the real intervention effect.",
+        .8, 6.85, 11.7, .3, 11, ORANGE, True, PP_ALIGN.CENTER)
 
 s = make_slide(prs); title(s, "SHAP, permutation importance and XPER rank differently", "A3 · Explanation disagreement")
 picture(s, FIG / "explanation_agreement.png", .6, 1.75, 12.0)
@@ -434,9 +479,9 @@ NOTES = {
  3: """[P1 · 0:50 · 40s] NIJ's own split: 18,028 training, 7,807 evaluation, Georgia 2013-2015. About 58% are re-arrested. Black and White men have almost the same rate; women are lower. On the right, missing values: the gang field is missing for EVERY woman and no man. The missingness is structured — over to [P2].""",
  4: """[P2 · 1:30 · 40s] We only use what is known when supervision starts: 29 fields. Race, gender and residence are never inputs; we keep them to audit who gets support. Everything recorded after release is excluded — and we proved why: adding those fields lifts AUC from 0.73 to 0.81, because they leak the outcome.""",
  5: """[P2 · 2:10 · 50s] The leak we found. Gang affiliation is missing for every woman. If missingness is kept, gender is recovered from our own inputs at AUC 1.00 — perfectly. TabICL treats a missing value as its own category, so it effectively saw gender. We fixed it with mode-filling and a regression test. But even after the fix, gender is still recoverable at 0.78: excluding an attribute is not removing it. [P5] picks this up.""",
- 6: """[P3 · 3:00 · 50s] Three families, as the brief requires, each tuned by cross-validation on training data only. Logistic with L1, C chosen by grid search. XGBoost with a 60-draw random search; deeper trees overfit and were rejected. TabICL with 16 ensemble members; gains level off near 8. Six other ML models all land in the same narrow AUC band.""",
- 7: """[P3 · 3:50 · 50s] Finding one: performance cannot pick the model. All three within 0.003 AUC. XGBoost beats logistic by 0.0025 on a PAIRED bootstrap — real, but small. Calibration: logistic and XGBoost are indistinguishable from perfect; TabICL's slope is 0.91, significantly below 1 — its probabilities are too extreme.""",
- 8: """[P3 · 4:40 · 50s] The client's real question: is this better than the score agencies already have? The historical Georgia score in the data reaches 0.60 AUC; our models reach 0.73, and roughly double the scenario net value at 20% capacity. Caveats in the same breath: it is a historical score, and the dollars are a scenario. Over to [P4].""",
+ 6: """[P3 · 3:00 · 40s] Three families, as the brief requires, each tuned by cross-validation on training data only. Logistic with L1, C chosen by grid search. XGBoost with a 60-draw random search; deeper trees overfit and were rejected. TabICL with 16 ensemble members; gains level off near 8. Five other ML models all land in the same narrow AUC band.""",
+ 7: """[P3 · 3:40 · 45s] Finding one: performance cannot pick the model. The three ROC curves lie on top of each other: AUC 0.730 to 0.733. Is 0.73 good? Reviews of US recidivism tools call an AUC above 0.71 "excellent"; the historical Georgia score, at 0.60, is only "fair". XGBoost beats logistic by 0.0025 on a paired bootstrap: real, but small. Brier, the score NIJ used for this challenge, agrees: about 16% better than predicting the base rate, for all three. It also checks calibration, whether a predicted 70% means 70%: logistic and XGBoost pass; TabICL is slightly overconfident.""",
+ 8: """[P3 · 4:25 · 65s] The client's real question: is this worth paying for, compared with the score they already have? The scenario: 20% capacity, 1,561 offers. Support costs $5,000 a person, a re-arrest costs $50,000, and we ASSUME support prevents 20% of re-arrests. So net value is the number of offered people later re-arrested, times $10,000, minus $7.8M of programme cost. The cost is identical for every ranking, so only precision matters: 82% of our offers reach someone later re-arrested, against 67% for the historical score. That turns $2.7M into $5.0M. Put differently: with our ranking the programme breaks even if it prevents 12% of re-arrests; with the historical score it needs 15%. The dollars are a scenario, not a causal estimate: the data cannot tell us whether support works. Over to [P4].""",
  9: """[P4 · 5:30 · 40s] What drives the score. Age at release, gang affiliation and prior record, in both models. In probability points: moving from age 23-27 to 48+ lowers predicted risk by about 27 points; a recorded gang affiliation raises it by about 17.""",
  10: """[P4 · 6:10 · 40s] Now from the outside, without opening the model. Partial dependence shows the average effect of one feature; the faint individual curves show each person. All three models agree that risk falls with age. This is the only way we can look inside TabICL at all: it has no native attribution. XGBoost can be summarised by a small surrogate tree, but that tree reproduces only 61% of it. Logistic needs none of this: its coefficients are the explanation.""",
  11: """[P4 · 6:50 · 40s] One person, explained by both models. Red raises risk, green lowers it — this is what an appeal would contest. We checked faithfulness: LIME on raw features fits locally about twice as well as before, and all 63 conditions keep their sign across seeds. We quote LIME for direction and SHAP for size.""",

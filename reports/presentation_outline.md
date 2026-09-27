@@ -79,7 +79,7 @@ P2 and P5 back each other up because both deal with proxies and leakage.
 | XGBoost | ordinal encoding for count fields | 5-fold random search, 60 draws; deeper trees overfit and were rejected |
 | TabICLv2 | mixed types | 16 ensemble members; results level off at about 8 |
 
-- Six other ML candidates (CatBoost, LightGBM, EBM, …) all land between AUC 0.729 and 0.733.
+- Five other ML candidates (CatBoost, LightGBM, EBM, HistGB, random forest) all land between test AUC 0.729 and 0.733.
 - Sources: [ml_model_comparison.csv](../artifacts/ml_model_comparison.csv), [estimator_sweep.png](../artifacts/figures/estimator_sweep.png)
 
 ### Slide 7 · Statistical performance: effectively a tie
@@ -90,26 +90,28 @@ P2 and P5 back each other up because both deal with proxies and leakage.
 | XGBoost | 0.7324 | 0.2045 | 0.0112 | 8.7 s |
 | TabICLv2 | 0.7328 | 0.2044 | 0.0199 | 41.8 s |
 
+- **How good is 0.73?** Reviews of US recidivism tools grade AUC < .55 poor, .55–.63 fair, .64–.71 good and ≥ .71 excellent (Desmarais & Singh 2013, CSG Justice Center, Table 2; bands anchored to Cohen's d via Rice & Harris 2005). Our models sit in the "excellent" band; the historical Georgia score (0.60) is "fair".
 - XGBoost's AUC is 0.0025 higher than logistic's, with a paired 95% CI of [0.0006, 0.0044]. The difference is real but small.
-- Calibration: logistic and XGBoost are tied (Cox slopes 0.999 and 1.005). TabICL's slope is 0.913, so its probabilities are too extreme.
-- Sources: [model_comparison.png](../artifacts/figures/model_comparison.png), [performance_calibration.png](../artifacts/figures/performance_calibration.png), [paired_comparisons.csv](../artifacts/paired_comparisons.csv), [calibration_tests.csv](../artifacts/calibration_tests.csv)
+- Brier = mean of (predicted probability − outcome)², lower is better. It is the accuracy score NIJ used to rank this challenge. All three models are about 16% better than predicting the training base rate for everyone (0.245).
+- Calibration gets one sentence, as part of Brier (Brier = calibration error − resolution + uncertainty): does a predicted 70% mean 70% re-arrested? Logistic and XGBoost are statistically indistinguishable from perfect calibration (Cox slopes 0.999 and 1.005); TabICL's slope is 0.913, so its probabilities are slightly too extreme. This sets up "calibration" on slides 15 and 19; in course terms, calibration within groups is *sufficiency*. Bin-dependent ECE and the Spiegelhalter test stay for Q&A.
+- Sources: [performance_benchmark.png](../artifacts/figures/performance_benchmark.png) (from `scripts/deck_figures.py`), [paired_comparisons.csv](../artifacts/paired_comparisons.csv), [validation_baselines.csv](../artifacts/validation_baselines.csv), [calibration_tests.csv](../artifacts/calibration_tests.csv)
 
-### Slide 8 · The client's real question: are we better than the current tool?
-- The historical Georgia supervision score already in the data reaches AUC ≈ 0.60. Our models reach ≈ 0.73.
-- Precision among the selected top 20%: 0.675 for the current tool, 0.82–0.83 for our models.
-- Net value at 20% capacity:
+### Slide 8 · The client's real question: are we better than the current tool, in dollars?
+- Scenario (assumed, not estimated): 20% capacity = 1,561 offers; support costs $5,000 per person; a re-arrest costs $50,000; support prevents 20% of re-arrests.
+- Formula: net value = re-arrested among offers × $50,000 × 20% − offers × $5,000. Logistic: 1,285 × $10,000 − 1,561 × $5,000 = $5.045M.
+- Programme cost is the same for every ranking, so only precision (share of offers reaching someone later re-arrested) differs.
 
-| Ranking | Net value |
-|---|---:|
-| Random | $1.46M |
-| Current tool | $2.73M |
-| Logistic | $5.05M |
-| XGBoost | $5.17M |
-| TabICL | $5.12M |
+| Ranking | AUC | Re-arrested / offers | Precision | Net value |
+|---|---:|---:|---:|---:|
+| Random | 0.51 | 926 / 1,561 | 0.59 | $1.455M |
+| Historical Georgia score | 0.60 | 1,053 / 1,561 | 0.67 | $2.725M |
+| Logistic | 0.73 | 1,285 / 1,561 | 0.82 | $5.045M |
+| XGBoost | 0.73 | 1,297 / 1,561 | 0.83 | $5.165M |
+| TabICL | 0.73 | 1,292 / 1,561 | 0.83 | $5.115M |
 
-- The models beat the current tool at every capacity level.
-- Assumptions: $5,000 support cost per person, $50,000 cost per event, 20% intervention effectiveness. These dollar figures are scenarios, not causal estimates.
-- Sources: [incumbent_benchmark.png](../artifacts/figures/incumbent_benchmark.png), [incumbent_economics.csv](../artifacts/incumbent_economics.csv), [incumbent_capacity_sweep.csv](../artifacts/incumbent_capacity_sweep.csv)
+- Break-even: support pays for itself if precision × $50,000 × effect > $5,000, i.e. effect > 10% / precision. That is 12% with our ranking against 15% with the historical score.
+- The models beat the historical score at every capacity from 5% to 50% (appendix A2). The dollar figures are scenarios, not causal estimates.
+- Sources: [incumbent_economics.csv](../artifacts/incumbent_economics.csv), [incumbent_capacity_sweep.csv](../artifacts/incumbent_capacity_sweep.csv), [incumbent_effectiveness_sweep.csv](../artifacts/incumbent_effectiveness_sweep.csv)
 
 ## P4 · Interpretability (2 min)
 

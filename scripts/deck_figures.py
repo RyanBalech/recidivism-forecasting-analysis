@@ -5,6 +5,8 @@
 2. fairness_race_gaps.png / fairness_gender_gaps.png — one attribute each, at the deployed
    top-20% rule: selection, FNR and FPR gaps with 95% bootstrap CIs and the ±5-point TOST band.
    Reads artifacts/fairness_inference.csv, so it never disagrees with fairness_audit.py.
+3. performance_benchmark.png — ROC curves plus the AUC scale used in reviews of US recidivism
+   tools, with the random, historical-score and model AUCs placed on it.
 """
 from __future__ import annotations
 
@@ -107,13 +109,53 @@ def fpdp_focus(attribute: str, features: list[str], out: str) -> None:
     plt.close(fig)
 
 
+def performance_benchmark() -> None:
+    """Slide 7: ROC curves for the three models, and where their AUC sits on the scale that
+    US reviews of recidivism tools use (Desmarais & Singh 2013, anchored to Rice & Harris 2005)."""
+    from sklearn.metrics import roc_auc_score, roc_curve
+
+    preds = pd.read_csv(ARTIFACT_DIR / "test_predictions.csv")
+    incumbent = pd.read_csv(ARTIFACT_DIR / "incumbent_discrimination.csv").set_index("ranker").roc_auc
+    sns.set_theme(style="whitegrid", context="talk")
+    fig, (ax_roc, ax_scale) = plt.subplots(1, 2, figsize=(16, 6.5), gridspec_kw={"width_ratios": [1.15, 1]})
+
+    aucs = {}
+    for m in MODELS:
+        aucs[m] = roc_auc_score(preds.actual, preds[f"p_{m}"])
+        fpr, tpr, _ = roc_curve(preds.actual, preds[f"p_{m}"])
+        ax_roc.plot(fpr, tpr, color=PALETTE[m], lw=2.5, label=f"{DISPLAY[m]} ({aucs[m]:.3f})")
+    ax_roc.plot([0, 1], [0, 1], color="grey", ls="--", lw=1)
+    ax_roc.set(xlabel="False-positive rate", ylabel="True-positive rate", title="ROC: the three curves overlap")
+    ax_roc.legend(fontsize=12, loc="lower right")
+
+    bands = [(0.45, 0.55, "Poor", "#E5E7EB"), (0.55, 0.64, "Fair", "#FDE68A"),
+             (0.64, 0.71, "Good", "#BBF7D0"), (0.71, 0.80, "Excellent", "#4ADE80")]
+    for lo, hi, name, colour in bands:
+        ax_scale.axhspan(lo, hi, color=colour, alpha=0.8, lw=0)
+        ax_scale.text(0.04, (lo + hi) / 2, name, va="center", fontsize=14, fontweight="bold", color="#374151")
+    markers = [(incumbent["random"], f"Random allocation  {incumbent['random']:.2f}", "#4B5563"),
+               (incumbent["incumbent"], f"Historical Georgia score  {incumbent['incumbent']:.2f}", "#C1121F"),
+               (np.mean(list(aucs.values())), f"Our 3 models  {min(aucs.values()):.3f}–{max(aucs.values()):.3f}", "#0A1F44")]
+    for auc, name, colour in markers:
+        ax_scale.plot(0.5, auc, "o", ms=14, color=colour)
+        ax_scale.text(0.56, auc, name, va="center", fontsize=13, color=colour, fontweight="bold")
+    ax_scale.set(xlim=(0, 1.35), ylim=(0.45, 0.80), xticks=[], ylabel="ROC AUC",
+                 title="How good is 0.73? US recidivism-tool scale")
+    ax_scale.set_xlabel("Bands: Desmarais & Singh (2013), after Rice & Harris (2005)", fontsize=11, color="#4B5563")
+    ax_scale.grid(False)
+    fig.tight_layout()
+    fig.savefig(FIGURE_DIR / "performance_benchmark.png", dpi=180, bbox_inches="tight")
+    plt.close(fig)
+
+
 def main() -> None:
     eda_overview()
+    performance_benchmark()
     attribute_gaps("Race", "Black minus White", "fairness_race_gaps.png")
     attribute_gaps("Gender", "men minus women", "fairness_gender_gaps.png")
     fpdp_focus("Gender", ["Gang_Affiliated", "Age_at_Release", "Prior_Arrest_Episodes_Felony"], "fpdp_gender_focus.png")
     fpdp_focus("Age", ["Age_at_Release", "Supervision_Risk_Score_First", "Prior_Arrest_Episodes_Felony"], "fpdp_age_focus.png")
-    print("Saved eda_overview, fairness_race_gaps, fairness_gender_gaps, fpdp_gender_focus, fpdp_age_focus")
+    print("Saved eda_overview, performance_benchmark, fairness_race_gaps, fairness_gender_gaps, fpdp_gender_focus, fpdp_age_focus")
 
 
 if __name__ == "__main__":
