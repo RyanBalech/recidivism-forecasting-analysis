@@ -1,0 +1,7 @@
+model,contrast,pdp_difference
+logistic,Age 23-27 -> 48 or older,-0.27361512899243595
+logistic,Gang No -> Yes,0.16737485531363905
+xgboost,Age 23-27 -> 48 or older,-0.26002541184425354
+xgboost,Gang No -> Yes,0.15599209070205688
+tabicl,Age 23-27 -> 48 or older,-0.29124790430068975
+tabicl,Gang No -> Yes,0.1729782223701477

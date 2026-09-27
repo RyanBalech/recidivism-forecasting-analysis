@@ -116,11 +116,11 @@ P2 and P5 back each other up because both deal with proxies and leakage.
 ## P4 · Interpretability (2 min)
 
 ### Slide 9 · Global drivers
-- SHAP global importance.
+- SHAP summary (beeswarm) for logistic and XGBoost on all 7,807 evaluation people: importance and direction in one chart (course p159-160).
 - Logistic effects in probability points:
   - Moving from age 23–27 to 48+ lowers predicted risk by about 27 points. Here age appears as a risk factor, consistent with how we treat it in fairness.
   - A recorded gang affiliation raises predicted risk by about 17 points.
-- Sources: [shap_global.png](../artifacts/figures/shap_global.png), [marginal_effects.png](../artifacts/figures/marginal_effects.png), [probability_contrasts.csv](../artifacts/probability_contrasts.csv)
+- Sources: [shap_summary.png](../artifacts/figures/shap_summary.png), [shap_importance_full.csv](../artifacts/shap_importance_full.csv), [marginal_effects.png](../artifacts/figures/marginal_effects.png), [probability_contrasts.csv](../artifacts/probability_contrasts.csv)
 
 ### Slide 10 · Looking from outside: PDP/ICE for all three models
 - PDP (average effect) and ICE (one curve per person) for age, prior felony arrests and the Georgia score, for all three models. All agree risk falls with age.
@@ -187,6 +187,7 @@ P2 and P5 back each other up because both deal with proxies and leakage.
 
 - The gap closes by about 70%.
 - Costs: men's FNR rises by about 2 points, so part of the improvement is levelling down. Selection rates still differ between men and women.
+- Re-evaluated on all four dimensions (appendix A11): gender gap closes, stability and drivers barely change, race stays within ±5 pts but flips sign, AUC −0.014. Proposed as a **second pilot arm**, not imposed on the client.
 - Sources: [fpdp_gender.png](../artifacts/figures/fpdp_gender.png), [fairness_dependence.png](../artifacts/figures/fairness_dependence.png), [mitigation_nested_summary.csv](../artifacts/mitigation_nested_summary.csv), [fairness_mitigation.csv](../artifacts/fairness_mitigation.csv)
 
 ## P6 · Stability + Trade-offs + Recommendation (2.5 min)
@@ -217,6 +218,7 @@ P2 and P5 back each other up because both deal with proxies and leakage.
   - The two models select 85% of the same people (Jaccard 0.849); only 254 people differ. The difference in re-arrests captured has a CI that includes zero.
   - Logistic is more stable, directly interpretable and about 9× faster.
   - Calibration and fairness are tied, so neither is a reason to choose.
+  - The pilot runs a **second arm without gang affiliation** (never recorded for women); evidence in A11. Team decision pending on whether to make it the primary configuration.
 - What would reverse it: the client values calibration more than direct interpretability (for example, scores quoted numerically to supervisees), or operates at a scale where a few extra captured events matter.
 - Limits, in one line: the evaluation set was inspected repeatedly during development, there is no temporal or external validation, and there is no evidence yet that the support programme helps.
 - ⚠️ [tradeoff_matrix.png](../artifacts/figures/tradeoff_matrix.png) contains an "Age FNR gap" row. Regenerate it without that row.
@@ -242,6 +244,8 @@ P2 and P5 back each other up because both deal with proxies and leakage.
 - **A5 Group-threshold mitigation frontier:** [fairness_frontier.png](../artifacts/figures/fairness_frontier.png). It was optimised on the evaluation set, so it is optimistic.
 - **A6 Age.** Age is a validated and legally accepted risk factor. Its FNR gap of about 0.24 mostly follows from different base rates (0.646 for under-33s, 0.509 for 33+). Whether to rank by risk or by need is a policy choice for the client. Fixing the age field alone does not remove the gap, because it runs through criminal-history inputs that are correlated with age. Sources: [fairness_age_bands.csv](../artifacts/fairness_age_bands.csv), [fpdp_age.png](../artifacts/figures/fpdp_age.png)
 - **A7 Process log:** [improvement_journey.png](../artifacts/figures/improvement_journey.png)
+- **A8 LIME**, **A9 Permutation importance**, **A10 Interpretability method overview**
+- **A11 No-gang pilot arm:** [gang_variant_comparison.png](../artifacts/figures/gang_variant_comparison.png), [gang_variant_eval.csv](../artifacts/gang_variant_eval.csv)
 
 ## Open to-dos
 

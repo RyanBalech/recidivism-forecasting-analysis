@@ -29,7 +29,7 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from recidivism.config import ARTIFACT_DIR, FIGURE_DIR, MODEL_DIR, RANDOM_SEED
+from recidivism.config import ARTIFACT_DIR, FIGURE_DIR, MODEL_DIR, RANDOM_SEED, pretty
 from recidivism.data import load_official_split
 
 SEEDS = [0, 1, 2]
@@ -157,7 +157,7 @@ def _figure(weights: pd.DataFrame, scores: pd.DataFrame) -> None:
         agg = (part.groupby("condition").weight.agg(["mean", "std"])
                .sort_values("mean").tail(10))
         colors = ["#C1121F" if v > 0 else "#2A9D8F" for v in agg["mean"]]
-        ax.barh(agg.index, agg["mean"], xerr=agg["std"].fillna(0), color=colors, capsize=3)
+        ax.barh([pretty(c) for c in agg.index], agg["mean"], xerr=agg["std"].fillna(0), color=colors, capsize=3)
         r2 = scores[(scores.model == "xgboost") & (scores.case == case)].local_r2
         ax.set_title(f"{case.replace('_', ' ')}\nlocal fidelity R2 = {r2.mean():.2f}", fontsize=12)
         ax.set_xlabel("LIME weight (mean +/- sd over seeds)")
@@ -169,4 +169,7 @@ def _figure(weights: pd.DataFrame, scores: pd.DataFrame) -> None:
 
 
 if __name__ == "__main__":
-    main()
+    if "--figure-only" in sys.argv:  # redraw from saved results, no LIME rerun
+        _figure(pd.read_csv(ARTIFACT_DIR / "lime_weights.csv"), pd.read_csv(ARTIFACT_DIR / "lime_fidelity.csv"))
+    else:
+        main()

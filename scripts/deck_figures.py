@@ -148,7 +148,147 @@ def performance_benchmark() -> None:
     plt.close(fig)
 
 
+def shap_summary() -> None:
+    """SHAP summary (beeswarm) for logistic and XGBoost on the full evaluation cohort (course p159-160).
+
+    Exact explainers (linear / tree), so all 7,807 people are used. One-hot levels are summed back to
+    their raw field. Colour = the raw field's value: meaningful for ordered fields (age band, counts,
+    risk score) and yes/no fields; arbitrary for unordered categories (offence type, education).
+    """
+    import joblib
+    import shap
+
+    from interpretability import shap_for
+    from recidivism.config import MODEL_DIR, pretty
+    from recidivism.modeling import ordinal_encode
+
+    split = load_official_split()
+    X = split.X_test
+    colour = ordinal_encode(X)
+    for col in colour.columns:
+        if not pd.api.types.is_numeric_dtype(colour[col]):
+            cats = sorted(colour[col].dropna().astype(str).unique())
+            colour[col] = colour[col].map({c: i for i, c in enumerate(cats)})
+        colour[col] = colour[col].astype(float).fillna(colour[col].astype(float).median())
+
+    rows = []
+    fig = plt.figure(figsize=(17, 8.6))
+    for i, model in enumerate(["logistic", "xgboost"], start=1):
+        pipe = joblib.load(MODEL_DIR / f"{model}.joblib")
+        values, _ = shap_for(pipe, split.X_train, X, model)
+        values = values[list(X.columns)]
+        for feat, v in values.abs().mean().items():
+            rows.append({"model": model, "feature": feat, "mean_abs_shap": v, "n_people": len(X)})
+        plt.subplot(1, 2, i)
+        shap.summary_plot(values.to_numpy(), colour.to_numpy(), feature_names=[pretty(c) for c in X.columns],
+                          max_display=8, show=False, plot_size=None, color_bar=(i == 2))
+        plt.title(f"{DISPLAY[model]}: SHAP summary, all {len(X):,} people", fontsize=15)
+        plt.xlabel("SHAP value (log-odds): right = raises risk", fontsize=12)
+    fig.tight_layout()
+    fig.savefig(FIGURE_DIR / "shap_summary.png", dpi=180, bbox_inches="tight")
+    plt.close(fig)
+    pd.DataFrame(rows).to_csv(ARTIFACT_DIR / "shap_importance_full.csv", index=False)
+
+
+def interpretability_matrix() -> None:
+    """Which interpretability method was applied to which model, grouped as in the course syllabus
+    (global, local, explaining performance), with where each result is shown."""
+    DONE, PART, NONE, NATIVE = "#2A9D8F", "#E9C46A", "#D9D9D9", "#1D6F63"
+    rows = [
+        ("NATIVELY INTERPRETABLE (white box)", None),
+        ("Coefficients / odds ratios", [("native", NATIVE, "notebook"), ("—", NONE, ""), ("—", NONE, "")]),
+        ("Average marginal effects", [("✓", DONE, "notebook"), ("—", NONE, ""), ("—", NONE, "")]),
+        ("AdaLogit / PLTR (white-box variants)", [("✓ tie", DONE, "AUC 0.7296 / 0.7292"), ("—", NONE, ""), ("—", NONE, "")]),
+        ("GLOBAL — what drives the model", None),
+        ("Impurity (gain) importance", [("—", NONE, "trees only"), ("✓", DONE, "artifact"), ("—", NONE, "")]),
+        ("SHAP summary", [("✓", DONE, "slide 9"), ("✓", DONE, "slide 9"), ("✗ too slow", NONE, "no exact explainer")]),
+        ("PDP (average curve)", [("✓", DONE, "slides 9-10"), ("✓", DONE, "slides 9-10"), ("✓", DONE, "slides 9-10")]),
+        ("Global surrogate tree", [("not needed", NONE, "already linear"), ("✓ R² 0.61", PART, "slide 10 · A4"), ("—", NONE, "")]),
+        ("LOCAL — one person", None),
+        ("ICE (one curve per person)", [("✓", DONE, "slide 10"), ("✓", DONE, "slide 10"), ("✓", DONE, "slide 10")]),
+        ("SHAP (one person)", [("✓", DONE, "slide 11"), ("✓", DONE, "slide 11"), ("✗ too slow", NONE, "")]),
+        ("LIME + fidelity check", [("✓", DONE, "slide 11 · A8"), ("✓", DONE, "slide 11 · A8"), ("—", NONE, "")]),
+        ("What-if: change one field", [("✓", DONE, "app"), ("✓", DONE, "app"), ("✓", DONE, "app")]),
+        ("PERFORMANCE — what drives the AUC", None),
+        ("Permutation importance", [("✓", DONE, "slide 12 · A9"), ("✓", DONE, "slide 12 · A9"), ("partial", PART, "10 of 29 fields")]),
+        ("XPER", [("✓", DONE, "slide 12"), ("✓", DONE, "slide 12"), ("✗ too slow", NONE, "")]),
+        ("Method agreement (SHAP·PI·XPER)", [("✓", DONE, "slide 12 · A3"), ("✓", DONE, "slide 12 · A3"), ("—", NONE, "")]),
+    ]
+    fig, ax = plt.subplots(figsize=(14, 10.2))
+    ax.axis("off")
+    n = len(rows)
+    ax.set_xlim(0, 4.3)
+    ax.set_ylim(-0.4, n + 0.9)
+    for j, h in enumerate(["Logistic regression", "XGBoost", "TabICLv2"]):
+        ax.text(1.75 + j * 0.9, n + 0.3, h, ha="center", va="center", fontsize=13, fontweight="bold")
+    for i, (label, cells) in enumerate(rows):
+        y = n - 0.5 - i
+        if cells is None:
+            ax.add_patch(plt.Rectangle((0, y - 0.4), 4.3, 0.8, color="#264653"))
+            ax.text(0.05, y, label, color="white", fontweight="bold", fontsize=11.5, va="center")
+            continue
+        ax.text(0.05, y, label, fontsize=11.5, va="center")
+        for j, (mark, colour, where) in enumerate(cells):
+            x = 1.33 + j * 0.9
+            ax.add_patch(plt.Rectangle((x, y - 0.38), 0.84, 0.76, color=colour, alpha=0.85))
+            ax.text(x + 0.42, y + (0.12 if where else 0), mark, ha="center", va="center", fontsize=11.5,
+                    fontweight="bold", color="white" if colour in (DONE, NATIVE) else "#333333")
+            if where:
+                ax.text(x + 0.42, y - 0.17, where, ha="center", va="center", fontsize=8.5,
+                        color="white" if colour in (DONE, NATIVE) else "#333333")
+    ax.set_title("Interpretability methods applied, by model (course grouping)",
+                 fontsize=14, fontweight="bold", pad=6)
+    fig.text(0.5, 0.01, "Logistic explains itself; XGBoost needs post-hoc tools; TabICLv2 can only be probed from outside "
+             "(PDP/ICE, what-if) — exact SHAP, LIME and XPER need too many foundation-model predictions.",
+             ha="center", fontsize=10, style="italic")
+    fig.tight_layout(rect=[0, 0.03, 1, 1])
+    fig.savefig(FIGURE_DIR / "interpretability_matrix.png", dpi=180, bbox_inches="tight")
+    plt.close(fig)
+
+
+def permutation_figure() -> None:
+    """Permutation importance for the three models (course: explaining performance), readable labels."""
+    from recidivism.config import pretty
+
+    pi = pd.read_csv(ARTIFACT_DIR / "permutation_importance.csv")
+    sns.set_theme(style="whitegrid", context="talk")
+    fig, axes = plt.subplots(1, 3, figsize=(21, 6.5))
+    for ax, model in zip(axes, MODELS):
+        part = pi[pi.model == model].sort_values("importance", ascending=False).head(8)[::-1]
+        ax.barh(part.feature.map(pretty), part.importance, color=PALETTE[model])
+        n = int((pi.model == model).sum())
+        ax.set_title(f"{DISPLAY[model]}" + ("" if n == 29 else f" ({n} of 29 fields measured)"), fontsize=15)
+        ax.set_xlabel("Increase in Brier loss when shuffled", fontsize=12)
+        ax.tick_params(axis="y", labelsize=12)
+    fig.suptitle("Permutation importance: how much worse the model gets when one field is shuffled", fontsize=15)
+    fig.tight_layout()
+    fig.savefig(FIGURE_DIR / "permutation_importance_readable.png", dpi=180, bbox_inches="tight")
+    plt.close(fig)
+
+
+def impurity_importance() -> None:
+    """XGBoost impurity (total gain) importance per raw field, normalised to sum to 1 (course p112)."""
+    import joblib
+
+    from interpretability import original_feature
+    from recidivism.config import FEATURE_COLUMNS, MODEL_DIR
+
+    pipe = joblib.load(MODEL_DIR / "xgboost.joblib")
+    names = list(pipe[-2].get_feature_names_out())
+    total = pipe[-1].get_booster().get_score(importance_type="total_gain")
+    gain = pd.Series({original_feature(names[int(k[1:])], FEATURE_COLUMNS): 0.0 for k in total})
+    for k, v in total.items():
+        gain[original_feature(names[int(k[1:])], FEATURE_COLUMNS)] += v
+    (gain / gain.sum()).sort_values(ascending=False).rename("normalized_total_gain").rename_axis("feature") \
+        .reset_index().to_csv(ARTIFACT_DIR / "xgboost_impurity_importance.csv", index=False)
+
+
 def main() -> None:
+    sys.path.insert(0, str(ROOT / "scripts"))
+    impurity_importance()
+    permutation_figure()
+    interpretability_matrix()
+    shap_summary()
     eda_overview()
     performance_benchmark()
     attribute_gaps("Race", "Black minus White", "fairness_race_gaps.png")

@@ -1,0 +1,119 @@
+rule,coefficient
+Age at release ≤ 3.5,0.21019657928039073
+Gang affiliated > 0.5 AND Prior parole revocations ≤ 0.5,0.1341666776308614
+Prison offense type ≤ 3.5 AND Prior parole revocations ≤ 0.5,-0.1201393480115954
+Condition: mental health / substance abuse ≤ 0.5 AND Prior domestic-violence convictions ≤ 0.5,-0.11450456876682658
+Age at release ≤ 3.5 AND Age at release ≤ 1.5,0.11199582131609374
+Prison offense type ≤ 3.5,0.10174782826167383
+Prior felony arrests > 3.5 AND Age at release ≤ 4.5,0.09719690488780997
+Gang affiliated ≤ 0.5,-0.0917661673023122
+Prior parole/probation-violation arrests ≤ 0.5 AND Georgia risk score (1-10) ≤ 6.5,-0.09170933163046568
+Gang affiliated ≤ 0.5 AND Years in prison ≤ 1.5,0.0831232150224992
+Gang affiliated ≤ 0.5 AND Prior felony convictions ≤ 1.5,-0.08291944990113481
+Georgia risk score (1-10) ≤ 5.5 AND Prison offense type ≤ 2.5,0.08206231317103546
+Years in prison > 2.5 AND Prior drug convictions ≤ 0.5,0.07856852112291686
+Georgia risk score (1-10) ≤ 5.5 AND Prior property arrests ≤ 2.5,-0.07796581100489877
+Initial supervision level > 1.5 AND Prior violent arrests ≤ 2.5,-0.07503477481195137
+Georgia risk score (1-10) ≤ 5.5 AND Prior misdemeanor convictions ≤ 2.5,-0.07194301104576717
+Gang affiliated ≤ 0.5 AND Prior property arrests ≤ 1.5,-0.06290084466931405
+Georgia risk score (1-10) > 5.5 AND Prior misdemeanor convictions ≤ 0.5,-0.05874980218923612
+Prior misdemeanor convictions > 0.5 AND Years in prison ≤ 2.5,0.05766574140856077
+Georgia risk score (1-10) ≤ 5.5 AND Prior felony convictions ≤ 1.5,0.05717901515736466
+Prior felony convictions > 1.5 AND Prison offense type ≤ 0.5,-0.05495675275272307
+Georgia risk score (1-10) ≤ 5.5 AND Age at release ≤ 3.5,0.053980403293472826
+Dependents > 2.5 AND Condition: other ≤ 0.5,-0.05310421275070819
+Prior gun-charge arrests ≤ 0.5 AND Dependents ≤ 2.5,-0.05208799167413163
+Prior misdemeanor arrests > 3.5 AND Age at release ≤ 4.5,0.04819457504948726
+Gang affiliated > 0.5 AND Prior domestic-violence arrests ≤ 0.5,0.047444707978187915
+Gang affiliated > 0.5 AND Prior property convictions ≤ 1.5,-0.04718408176768912
+Prior gun-charge arrests ≤ 0.5 AND Prior probation revocations ≤ 0.5,0.04645445375072934
+Age at release ≤ 3.5 AND Prior violent arrests ≤ 1.5,-0.04446974191701296
+Prior misdemeanor convictions > 0.5 AND Prior misdemeanor arrests ≤ 5.5,-0.04374137068518463
+Prior misdemeanor convictions ≤ 0.5 AND Prior misdemeanor arrests ≤ 2.5,-0.0429460637786031
+Prior drug convictions > 0.5 AND Condition: other ≤ 0.5,-0.03958602059551991
+Prior violent convictions ≤ 0.5 AND Dependents ≤ 2.5,-0.0370674920060173
+Gang affiliated > 0.5 AND Years in prison ≤ 2.5,0.0354788687671432
+Gang affiliated > 0.5 AND Age at release ≤ 0.5,0.034755010507406155
+Prior felony arrests > 3.5 AND Georgia risk score (1-10) ≤ 5.5,-0.033038638362981175
+Prior parole/probation-violation arrests ≤ 0.5 AND Gang affiliated ≤ 0.5,-0.032389068781441946
+Gang affiliated > 0.5 AND Prior felony arrests ≤ 1.5,-0.032330054548698396
+Prior property arrests ≤ 1.5 AND Prior misdemeanor arrests ≤ 1.5,-0.032273080825935975
+Prior misdemeanor arrests ≤ 3.5 AND Education level ≤ 0.5,-0.03142832940928902
+Prior parole/probation-violation arrests ≤ 0.5 AND Age at release ≤ 2.5,0.029367965908267513
+Prior felony arrests ≤ 3.5 AND Prior property arrests ≤ 0.5,-0.02917420015030291
+Prior domestic-violence arrests > 0.5 AND Prior violent arrests ≤ 0.5,0.02895643362510489
+Prior parole/probation-violation arrests ≤ 0.5 AND Prior drug arrests ≤ 1.5,-0.028627040251864636
+Condition: cognitive / education ≤ 0.5 AND Prior gun-charge convictions ≤ 0.5,0.0273269072253718
+Prior misdemeanor convictions ≤ 0.5 AND Prior property arrests ≤ 0.5,-0.026684914459192393
+Prior parole/probation-violation convictions ≤ 0.5 AND Dependents ≤ 2.5,0.026306206555085927
+Initial supervision level ≤ 1.5 AND Prior gun-charge arrests ≤ 0.5,-0.02566367454700309
+Prior misdemeanor arrests > 3.5 AND Years in prison ≤ 1.5,0.025398665955836487
+Condition: mental health / substance abuse > 0.5 AND Prior domestic-violence convictions ≤ 0.5,0.025213171899210837
+Prior probation revocations > 0.5 AND Condition: other ≤ 0.5,-0.024582893364828606
+Georgia risk score (1-10) > 5.5 AND Years in prison ≤ 2.5,0.024083662675665075
+Prior violent arrests ≤ 1.5 AND Prior violent arrests ≤ 0.5,-0.022981963074661566
+Years in prison > 2.5 AND Condition: cognitive / education ≤ 0.5,0.021605168359313875
+Age at release ≤ 3.5 AND Age at release ≤ 1.5,0.021287862544525037
+Age at release ≤ 3.5 AND Age at release ≤ 1.5,0.020942960844929463
+Initial supervision level > 1.5 AND Condition: other ≤ 0.5,-0.02011646542128982
+Prior felony arrests > 3.5 AND Initial supervision level ≤ 1.5,0.019601053728493766
+Prior felony convictions ≤ 1.5 AND Prior probation revocations ≤ 0.5,-0.019322456254632428
+Education level ≤ 0.5 AND Dependents ≤ 2.5,0.018849575061428245
+Gang affiliated > 0.5 AND Prior probation revocations ≤ 0.5,0.01875914801117317
+Gang affiliated > 0.5 AND Georgia risk score (1-10) ≤ 5.5,-0.018623307123846678
+Years in prison > 2.5 AND Initial supervision level ≤ 1.5,-0.018317457580329877
+Prior property arrests ≤ 1.5 AND Education level ≤ 0.5,-0.01770620978280961
+Prior domestic-violence convictions > 0.5 AND Condition: cognitive / education ≤ 0.5,-0.01694997638233718
+Georgia risk score (1-10) ≤ 5.5 AND Prior domestic-violence arrests ≤ 0.5,-0.016591895655417906
+Age at release ≤ 3.5 AND Prior felony convictions ≤ 1.5,0.016356257027862007
+Prior felony arrests > 3.5 AND Years in prison ≤ 2.5,0.016161661193020278
+Prior drug convictions ≤ 0.5 AND Dependents ≤ 2.5,-0.01323078521332378
+Gang affiliated ≤ 0.5 AND Initial supervision level ≤ 0.5,0.01293230697711312
+Prior drug convictions ≤ 0.5 AND Prior gun-charge arrests ≤ 0.5,-0.012850006760660797
+Prior parole/probation-violation convictions > 0.5 AND Prior violent arrests ≤ 1.5,-0.012315109421136098
+Gang affiliated ≤ 0.5 AND Prior drug convictions ≤ 0.5,-0.011519811302202532
+Prison offense type ≤ 3.5 AND Prior drug arrests ≤ 1.5,-0.010435116488193466
+Condition: mental health / substance abuse ≤ 0.5 AND Prior parole/probation-violation convictions ≤ 0.5,0.009868170002231271
+Initial supervision level ≤ 1.5 AND Prior drug arrests ≤ 0.5,-0.009172370264703487
+Age at release ≤ 3.5 AND Age at release ≤ 1.5,0.009135425373057986
+Prior property arrests > 1.5 AND Prior misdemeanor arrests ≤ 3.5,-0.008996075911355069
+Age at release ≤ 3.5 AND Age at release ≤ 1.5,0.008698399834901524
+Prison offense type > 3.5 AND Dependents ≤ 0.5,-0.008151048471348097
+Prior felony convictions ≤ 1.5 AND Condition: cognitive / education ≤ 0.5,-0.008140825073995385
+Prior parole/probation-violation convictions > 0.5 AND Prior felony convictions ≤ 2.5,-0.007449698405462561
+Years in prison ≤ 2.5 AND Prior felony convictions ≤ 1.5,-0.00743123113309544
+Prior parole/probation-violation arrests ≤ 0.5 AND Prior violent arrests ≤ 1.5,-0.007149699794219869
+Prior domestic-violence arrests ≤ 0.5 AND Dependents ≤ 2.5,-0.006196332331510283
+Prior domestic-violence arrests > 0.5 AND Prior domestic-violence convictions ≤ 0.5,0.005990357551996189
+Dependents ≤ 2.5 AND Dependents ≤ 0.5,-0.0055275157085823675
+Condition: mental health / substance abuse ≤ 0.5 AND Prior violent convictions ≤ 0.5,-0.005370529355906544
+Prior parole/probation-violation arrests ≤ 0.5 AND Education level ≤ 0.5,-0.005035179590816634
+Prior probation revocations > 0.5 AND Dependents ≤ 0.5,-0.00483130347114784
+Age at release ≤ 3.5 AND Age at release ≤ 1.5,0.003925807787205045
+Prior violent convictions > 0.5 AND Prior gun-charge arrests ≤ 0.5,-0.0037943455100164568
+Prior parole revocations > 0.5 AND Prior gun-charge arrests ≤ 0.5,0.0031024486877933807
+Gang affiliated > 0.5 AND Dependents ≤ 0.5,-0.003094213132339182
+Prior misdemeanor convictions ≤ 0.5 AND Prior drug arrests ≤ 0.5,-0.002985201606195552
+Prior property arrests > 1.5 AND Condition: mental health / substance abuse ≤ 0.5,-0.0022732788404612268
+Age at release ≤ 3.5 AND Age at release ≤ 1.5,0.0018810958755312035
+Age at release ≤ 3.5 AND Age at release ≤ 1.5,0.0012148892459760516
+Condition: mental health / substance abuse > 0.5 AND Prior felony convictions ≤ 1.5,-0.0010441658712806732
+Prior violent arrests ≤ 1.5 AND Prior violent arrests ≤ 0.5,-0.0008646103957738308
+Gang affiliated ≤ 0.5 AND Prior property convictions ≤ 0.5,0.0005281708278307126
+Prior felony arrests > 3.5 AND Prior felony arrests ≤ 7.5,-0.00036527652616555556
+Age at release ≤ 3.5 AND Age at release ≤ 1.5,0.00034137241049866907
+Age at release ≤ 3.5 AND Age at release ≤ 1.5,0.00019958065120770973
+Prior violent convictions > 0.5 AND Prior probation revocations ≤ 0.5,0.00010918653393627306
+Prior felony arrests > 3.5 AND Prior felony arrests ≤ 7.5,-4.7250594605591953e-05
+Prior felony arrests > 3.5 AND Prior felony arrests ≤ 7.5,-3.8500376474407944e-05
+Prior felony arrests > 3.5 AND Prior felony arrests ≤ 7.5,-2.3905704526266457e-05
+Age at release ≤ 3.5 AND Age at release ≤ 1.5,1.3164507389135806e-05
+Age at release ≤ 3.5 AND Age at release ≤ 1.5,1.109633944596663e-05
+Prior felony arrests > 3.5 AND Prior felony arrests ≤ 7.5,-4.825001056759972e-06
+Prior felony arrests > 3.5 AND Prior felony arrests ≤ 7.5,-2.383297713418498e-06
+Age at release ≤ 3.5 AND Age at release ≤ 1.5,2.203397987012384e-06
+Prior felony arrests > 3.5 AND Prior felony arrests ≤ 7.5,-2.108047146233375e-06
+Prior felony arrests > 3.5 AND Prior felony arrests ≤ 7.5,-7.978630829363255e-07
+Age at release ≤ 3.5 AND Age at release ≤ 1.5,7.402303076745892e-07
+Prior felony arrests > 3.5 AND Prior felony arrests ≤ 7.5,-6.288828142789723e-07
+Prior felony arrests > 3.5 AND Prior felony arrests ≤ 7.5,-1.854583322538013e-07

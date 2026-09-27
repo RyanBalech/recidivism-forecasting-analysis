@@ -184,6 +184,9 @@ ml_lo, ml_hi, ml_n = _others.test_roc_auc.min(), _others.test_roc_auc.max(), len
 _con = pd.read_csv(ART / "probability_contrasts.csv")
 _con = _con[_con.model == "logistic"].set_index(["feature", "level"]).average_probability_contrast
 age_contrast, gang_contrast = _con[("Age_at_Release", "48 or older")], _con[("Gang_Affiliated", "Yes")]
+_pdpc = pd.read_csv(ART / "pdp_contrasts.csv").set_index(["contrast", "model"]).pdp_difference
+pdp_age = [_pdpc[("Age 23-27 -> 48 or older", m)] * 100 for m in ["logistic", "xgboost", "tabicl"]]
+pdp_gang = [_pdpc[("Gang No -> Yes", m)] * 100 for m in ["logistic", "xgboost", "tabicl"]]
 _lime = pd.read_csv(ART / "lime_fidelity.csv").groupby("model").local_r2.mean()
 lime_lo, lime_hi = _lime.min(), _lime.max()
 _cal = pd.read_csv(ART / "calibration_tests.csv").set_index("model")
@@ -310,11 +313,11 @@ textbox(s, "Models beat the historical score at every capacity from 5% to 50% (A
 # ================================================================ P4 · INTERPRETABILITY (2 min)
 # 9 — Global drivers
 s = make_slide(prs); title(s, "What drives the score", "Interpretability · Global")
-picture(s, FIG / "shap_global.png", .4, 1.7, 8.6)
-card(s, "AGE 23–27 → 48+", f"{age_contrast*100:+.0f} pts", 9.35, 1.9, TEAL, "logistic, average probability change")
-card(s, "GANG AFFILIATION", f"{gang_contrast*100:+.0f} pts", 9.35, 3.5, RED, "recorded 'Yes' vs 'No'")
+picture(s, FIG / "shap_summary.png", .3, 1.75, 8.8)
+card(s, "PDP · AGE 23–27 → 48+", slash(pdp_age, "{:+.0f}"), 9.35, 1.9, TEAL, "pts · logistic / XGBoost / TabICL", size=17)
+card(s, "PDP · GANG NO → YES", slash(pdp_gang, "{:+.0f}"), 9.35, 3.5, RED, "pts · logistic / XGBoost / TabICL", size=17)
 card(s, "TOP DRIVERS", "Age · gang · priors", 9.35, 5.1, ORANGE, "same in logistic and XGBoost", size=17)
-textbox(s, "Marginal effects in probability points, not log-odds: the unit a caseworker understands.",
+textbox(s, "Each dot is one person (all 7,807); red = high value of the field. Right = raises risk. Cards: PDP differences in probability points.",
         1.0, 6.85, 11, .3, 11, GREY, True, PP_ALIGN.CENTER); footer(s, 9)
 
 # 10 — Model-agnostic view: PDP/ICE for all three models, and what each model costs to explain
@@ -383,7 +386,7 @@ panel(s, "FPDP → GANG", "Never recorded for women: record-keeping, not behavio
       f"Drop it, refit inside {int(nested_sel * 100)}% of 5 training folds\n\n"
       f"Out of fold: FNR gap {nested_base:+.3f} → {nested_mit:+.3f} (~70% closed), AUC {nested_auc:+.3f}\n\n"
       "Cost: men's FNR +2 pts; selection rates still differ", 9.0, 1.65, 3.95, 5.0, TEAL)
-textbox(s, "Evaluation cohort untouched. A mitigation option for the client, not applied to the recommended model.",
+textbox(s, "Evaluation cohort untouched. Re-evaluated on all four dimensions (A11): proposed as a second pilot arm.",
         1.0, 6.82, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 16)
 
 # ================================================================ P6 · STABILITY + TRADE-OFFS + RECOMMENDATION (2.5 min)
@@ -412,8 +415,8 @@ panel(s, "WHY LOGISTIC", f"Same people: {overlap_share:.0%} overlap with XGBoost
       "More stable than XGBoost on all 28 refit pairs\n\nCoefficients read directly · ~9× faster\n\n"
       "Fairness and calibration: tied — not reasons\n\nReverses if: scores are quoted numerically, or scale makes +12 offers matter",
       8.4, 1.6, 4.5, 5.1, TEAL)
-textbox(s, "Shadow pilot first: no temporal/external validation yet, and no evidence the support programme works.",
-        .8, 6.85, 11.7, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 19)
+textbox(s, "Shadow pilot, with a second arm that drops gang affiliation (A11). No temporal validation yet; no evidence the programme works.",
+        .8, 6.92, 11.7, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 19)
 
 # 19 — App
 s = make_slide(prs); title(s, "The application makes every trade-off testable", "Demo · App")
@@ -427,7 +430,7 @@ textbox(s, "streamlit run app.py   ·   backup: screenshots / recording", 3.2, 6
 s = make_slide(prs)
 textbox(s, "APPENDIX", .72, 2.6, 8, .5, 14, ORANGE, True)
 textbox(s, "Supporting evidence\nfor questions", .72, 3.15, 9, 1.5, 34, WHITE, True)
-textbox(s, "Learning curve · economic sensitivity · explanation disagreement · global surrogate · threshold frontier · age · process log", .76, 4.95, 9.5, .9, 15, PALE)
+textbox(s, "Learning curve · economics · explanation disagreement · surrogate · threshold frontier · age · process · LIME · permutation importance · method overview · no-gang arm", .76, 4.95, 9.5, .9, 15, PALE)
 
 s = make_slide(prs); title(s, "Which model for which agency size?", "A1 · Learning curve")
 picture(s, FIG / "learning_curve.png", .8, 1.8, 11.7)
@@ -470,6 +473,24 @@ s = make_slide(prs); title(s, "How we got here: what we tried, where we landed",
 picture(s, FIG / "improvement_journey.png", .55, 1.75, 12.2)
 textbox(s, "Full log in docs/JOURNEY.md — every step measured, including the attempts we rejected.", 1.0, 6.82, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER)
 
+s = make_slide(prs); title(s, "LIME for three people, with its fidelity", "A8 · LIME")
+picture(s, FIG / "lime_individual.png", .35, 1.75, 12.6)
+textbox(s, "Category-aware LIME on raw fields: local R² 0.33–0.49, every condition keeps its sign across three seeds. Quote it for direction, SHAP for size.",
+        .8, 6.82, 11.7, .3, 11, ORANGE, True, PP_ALIGN.CENTER)
+
+s = make_slide(prs); title(s, "Permutation importance: shuffle one field, measure the loss", "A9 · Permutation importance")
+picture(s, FIG / "permutation_importance_readable.png", .35, 1.75, 12.6)
+textbox(s, "Same drivers as SHAP and XPER. TabICLv2 was measured on 10 of 29 fields only: each shuffle needs a full foundation-model prediction pass.",
+        .8, 6.82, 11.7, .3, 11, ORANGE, True, PP_ALIGN.CENTER)
+
+s = make_slide(prs); title(s, "Which interpretability method, for which model", "A10 · Method overview")
+picture(s, FIG / "interpretability_matrix.png", 1.3, 1.6, 10.7)
+
+s = make_slide(prs); title(s, "Dropping gang affiliation, re-evaluated on all four dimensions", "A11 · Pilot arm 2")
+picture(s, FIG / "gang_variant_comparison.png", 1.0, 1.6, 11.3)
+textbox(s, "Gender gap closes; stability and drivers barely change; race stays within ±5 pts but flips sign. Cost: AUC −0.014, 27 fewer re-arrests captured.",
+        .8, 6.92, 11.7, .3, 11, ORANGE, True, PP_ALIGN.CENTER)
+
 # ---------------------------------------------------------------- SPEAKER NOTES
 # Timings follow reports/presentation_outline.md: 14:25 of talk across 20 core slides,
 # leaving a buffer in the 15-minute slot. [P1]…[P6] marks who speaks.
@@ -482,20 +503,20 @@ NOTES = {
  6: """[P3 · 3:00 · 40s] Three families, as the brief requires, each tuned by cross-validation on training data only. Logistic with L1, C chosen by grid search. XGBoost with a 60-draw random search; deeper trees overfit and were rejected. TabICL with 16 ensemble members; gains level off near 8. Five other ML models all land in the same narrow AUC band.""",
  7: """[P3 · 3:40 · 45s] Finding one: performance cannot pick the model. The three ROC curves lie on top of each other: AUC 0.730 to 0.733. Is 0.73 good? Reviews of US recidivism tools call an AUC above 0.71 "excellent"; the historical Georgia score, at 0.60, is only "fair". XGBoost beats logistic by 0.0025 on a paired bootstrap: real, but small. Brier, the score NIJ used for this challenge, agrees: about 16% better than predicting the base rate, for all three. It also checks calibration, whether a predicted 70% means 70%: logistic and XGBoost pass; TabICL is slightly overconfident.""",
  8: """[P3 · 4:25 · 65s] The client's real question: is this worth paying for, compared with the score they already have? The scenario: 20% capacity, 1,561 offers. Support costs $5,000 a person, a re-arrest costs $50,000, and we ASSUME support prevents 20% of re-arrests. So net value is the number of offered people later re-arrested, times $10,000, minus $7.8M of programme cost. The cost is identical for every ranking, so only precision matters: 82% of our offers reach someone later re-arrested, against 67% for the historical score. That turns $2.7M into $5.0M. Put differently: with our ranking the programme breaks even if it prevents 12% of re-arrests; with the historical score it needs 15%. The dollars are a scenario, not a causal estimate: the data cannot tell us whether support works. Over to [P4].""",
- 9: """[P4 · 5:30 · 40s] What drives the score. Age at release, gang affiliation and prior record, in both models. In probability points: moving from age 23-27 to 48+ lowers predicted risk by about 27 points; a recorded gang affiliation raises it by about 17.""",
+ 9: """[P4 · 5:30 · 40s] What drives the score. This is a SHAP summary for all 7,807 people: each dot is a person, red means a high value of that field, and dots to the right raise risk. Age comes first in both models - young people (blue) sit on the right - then gang affiliation and prior record. Logistic draws straight bars because it is linear; XGBoost spreads out because it picks up interactions. The cards turn this into probability points with partial dependence, for all three models: set everyone to age 23-27, then to 48+, and the average predicted risk falls by 26 to 29 points; switching gang affiliation from No to Yes raises it by 16 to 17. The three models agree - including TabICL, which SHAP cannot reach. For logistic regression this PDP difference is exactly the course's average marginal effect.""",
  10: """[P4 · 6:10 · 40s] Now from the outside, without opening the model. Partial dependence shows the average effect of one feature; the faint individual curves show each person. All three models agree that risk falls with age. This is the only way we can look inside TabICL at all: it has no native attribution. XGBoost can be summarised by a small surrogate tree, but that tree reproduces only 61% of it. Logistic needs none of this: its coefficients are the explanation.""",
  11: """[P4 · 6:50 · 40s] One person, explained by both models. Red raises risk, green lowers it — this is what an appeal would contest. We checked faithfulness: LIME on raw features fits locally about twice as well as before, and all 63 conditions keep their sign across seeds. We quote LIME for direction and SHAP for size.""",
  12: """[P4 · 7:30 · 40s] Last, explaining PERFORMANCE rather than predictions — XPER, from this course. It splits the AUC itself into contributions: an uninformative model gets about 0.47, and each feature adds its share; age alone adds about 0.09. Compared with SHAP and permutation importance, the three methods agree on WHICH features matter but not on their order, because they answer different questions: prediction, loss, performance. So we quote the set, not the rank. Over to [P5].""",
  13: """[P5 · 8:10 · 45s] Fairness. Our primary metric is FNR: people later re-arrested but not offered support — the real harm here. Race first, the question everyone expects after COMPAS. Base rates are almost equal, so the data does not force a gap. Excluding race guarantees twins get the same score, but race is still recoverable at 0.71 through criminal history. So we audit outcomes, not inputs.""",
  14: """[P5 · 8:55 · 45s] The outcome audit: every race gap is within five points by an equivalence test, and none survives Holm correction. Three caveats: the small gap runs toward MORE support for Black people; the label is recorded arrest, which may carry policing bias; and prediction quality is lower for Black people, AUC 0.72 vs 0.75.""",
  15: """[P5 · 9:40 · 45s] Gender is where we found a problem. Re-arrested women miss support 10 to 12 points more often, in all three models — so it comes from the features. Every model over-predicts women, yet selects them less: with different base rates, calibration and equal FNR cannot both hold. Age shows an even larger gap, but by design — age is a validated risk factor — so it is the client's policy choice; details in the appendix.""",
- 16: """[P5 · 10:25 · 45s] We located the cause with the course's FPDP: gang affiliation, never recorded for women. Dropping it, selected in every one of five training folds, closes about 70% of the gap out of sample for about one AUC point — at the cost of men's FNR rising two points. It is an option for the client, not applied to our recommended model. Over to [P6].""",
+ 16: """[P5 · 10:25 · 45s] We located the cause with the course's FPDP: gang affiliation, never recorded for women. Dropping it, selected in every one of five training folds, closes about 70% of the gap out of sample for about one AUC point — at the cost of men's FNR rising two points. We then re-evaluated the fix on all four dimensions (appendix A11): the gender gap closes, stability and the main drivers barely move, race stays within tolerance, and it costs about 0.014 AUC. So we propose it as a second pilot arm rather than deciding it for the client. Over to [P6].""",
  17: """[P6 · 11:10 · 40s] Stability, in the course's sense: two samples from the same population should give the same model. Eight bootstrap refits, same resamples for all three models. Logistic drifts less than XGBoost on all 28 pairs. Jaccard around 0.77 means about 13% of the selected people change per refit.""",
  18: """[P6 · 11:50 · 50s] At the level of one person, about one decision in seven flips across refits. Referring contested cases to a human raises precision — but WIDENS the gender gap, because women sit at the margin more often. Abstention is not fairness-neutral.""",
- 19: """[P6 · 12:40 · 60s] Reading across the four dimensions: performance is a tie; interpretability and stability favour logistic; fairness gaps are shared by all three. So: logistic for a shadow pilot, XGBoost as challenger. The two select 85% of the same people and the difference in captured re-arrests includes zero. We do NOT claim logistic is fairer or better calibrated. It reverses if the client quotes scores numerically, or operates at a scale where a dozen extra offers matter.""",
+ 19: """[P6 · 12:40 · 60s] Reading across the four dimensions: performance is a tie; interpretability and stability favour logistic; fairness gaps are shared by all three. So: logistic for a shadow pilot, XGBoost as challenger. The two select 85% of the same people and the difference in captured re-arrests includes zero. We do NOT claim logistic is fairer or better calibrated. It reverses if the client quotes scores numerically, or operates at a scale where a dozen extra offers matter. And the pilot runs a second arm without gang affiliation, the field never recorded for women; appendix A11 shows it on all four dimensions.""",
  20: """[P1 · 13:40 · 45s] Demo one person: scores from all three models, the explanation, how many of eight refits select them, then edit an input and watch the score move. If the app fails, switch to the screenshots.
 
-[APPENDIX CUES] A1 learning curve · A2 economics · A3 explanation disagreement · A4 global surrogate · A5 threshold frontier · A6 age · A7 process""",
+[APPENDIX CUES] A1 learning curve · A2 economics · A3 explanation disagreement · A4 global surrogate · A5 threshold frontier · A6 age · A7 process · A8 LIME · A9 permutation importance · A10 method overview · A11 no-gang pilot arm""",
 }
 
 for index, slide in enumerate(prs.slides, start=1):
