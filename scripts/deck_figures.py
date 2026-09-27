@@ -149,8 +149,61 @@ def shap_summary() -> None:
     pd.DataFrame(rows).to_csv(ARTIFACT_DIR / "shap_importance_full.csv", index=False)
 
 
+def interpretability_matrix() -> None:
+    """Which interpretability method was applied to which model, grouped as in the course syllabus
+    (global, local, explaining performance), with where each result is shown."""
+    DONE, PART, NONE, NATIVE = "#2A9D8F", "#E9C46A", "#D9D9D9", "#1D6F63"
+    rows = [
+        ("GLOBAL — what drives the model", None),
+        ("Coefficients / odds ratios", [("native", NATIVE, "notebook"), ("—", NONE, ""), ("—", NONE, "")]),
+        ("Average marginal effects", [("✓", DONE, "slide 9"), ("—", NONE, ""), ("—", NONE, "")]),
+        ("SHAP summary", [("✓", DONE, "slide 9"), ("✓", DONE, "slide 9"), ("✗ too slow", NONE, "no exact explainer")]),
+        ("PDP / ICE", [("✓", DONE, "slide 10"), ("✓", DONE, "slide 10"), ("✓", DONE, "slide 10 · only view")]),
+        ("Global surrogate tree", [("not needed", NONE, "already linear"), ("✓ R² 0.61", PART, "slide 10 · A4"), ("—", NONE, "")]),
+        ("LOCAL — one person", None),
+        ("SHAP (one person)", [("✓", DONE, "slide 11"), ("✓", DONE, "slide 11"), ("✗ too slow", NONE, "")]),
+        ("LIME + fidelity check", [("✓", DONE, "slide 11"), ("✓", DONE, "slide 11"), ("—", NONE, "")]),
+        ("What-if: change one field", [("✓", DONE, "app · notebook"), ("✓", DONE, "app · notebook"), ("✓", DONE, "app · notebook")]),
+        ("PERFORMANCE — what drives the AUC", None),
+        ("Permutation importance", [("✓", DONE, "slide 12"), ("✓", DONE, "slide 12"), ("partial", PART, "10 of 29 fields")]),
+        ("XPER", [("✓", DONE, "slide 12"), ("✓", DONE, "slide 12"), ("✗ too slow", NONE, "")]),
+        ("Method agreement (SHAP·PI·XPER)", [("✓", DONE, "slide 12 · A3"), ("✓", DONE, "slide 12 · A3"), ("—", NONE, "")]),
+    ]
+    fig, ax = plt.subplots(figsize=(14, 8.4))
+    ax.axis("off")
+    n = len(rows)
+    ax.set_xlim(0, 4.3)
+    ax.set_ylim(-0.4, n + 0.9)
+    for j, h in enumerate(["Logistic regression", "XGBoost", "TabICLv2"]):
+        ax.text(1.75 + j * 0.9, n + 0.3, h, ha="center", va="center", fontsize=13, fontweight="bold")
+    for i, (label, cells) in enumerate(rows):
+        y = n - 0.5 - i
+        if cells is None:
+            ax.add_patch(plt.Rectangle((0, y - 0.4), 4.3, 0.8, color="#264653"))
+            ax.text(0.05, y, label, color="white", fontweight="bold", fontsize=11.5, va="center")
+            continue
+        ax.text(0.05, y, label, fontsize=11.5, va="center")
+        for j, (mark, colour, where) in enumerate(cells):
+            x = 1.33 + j * 0.9
+            ax.add_patch(plt.Rectangle((x, y - 0.38), 0.84, 0.76, color=colour, alpha=0.85))
+            ax.text(x + 0.42, y + (0.12 if where else 0), mark, ha="center", va="center", fontsize=11.5,
+                    fontweight="bold", color="white" if colour in (DONE, NATIVE) else "#333333")
+            if where:
+                ax.text(x + 0.42, y - 0.17, where, ha="center", va="center", fontsize=8.5,
+                        color="white" if colour in (DONE, NATIVE) else "#333333")
+    ax.set_title("Interpretability methods applied, by model (course grouping: global · local · performance)",
+                 fontsize=14, fontweight="bold", pad=6)
+    fig.text(0.5, 0.01, "Logistic explains itself; XGBoost needs post-hoc tools; TabICLv2 can only be probed from outside "
+             "(PDP/ICE, what-if) — exact SHAP, LIME and XPER need too many foundation-model predictions.",
+             ha="center", fontsize=10, style="italic")
+    fig.tight_layout(rect=[0, 0.03, 1, 1])
+    fig.savefig(FIGURE_DIR / "interpretability_matrix.png", dpi=180, bbox_inches="tight")
+    plt.close(fig)
+
+
 def main() -> None:
     sys.path.insert(0, str(ROOT / "scripts"))
+    interpretability_matrix()
     shap_summary()
     eda_overview()
     attribute_gaps("Race", "Black minus White", "fairness_race_gaps.png")
