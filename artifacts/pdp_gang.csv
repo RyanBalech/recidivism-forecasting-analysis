@@ -1,0 +1,7 @@
+model,feature,value,pdp
+logistic,Gang_Affiliated,No,0.5630885530536396
+logistic,Gang_Affiliated,Yes,0.7304634083672786
+xgboost,Gang_Affiliated,No,0.5621315240859985
+xgboost,Gang_Affiliated,Yes,0.7181236147880554
+tabicl,Gang_Affiliated,No,0.5672921538352966
+tabicl,Gang_Affiliated,Yes,0.7402703762054443

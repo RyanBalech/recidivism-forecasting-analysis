@@ -154,22 +154,26 @@ def interpretability_matrix() -> None:
     (global, local, explaining performance), with where each result is shown."""
     DONE, PART, NONE, NATIVE = "#2A9D8F", "#E9C46A", "#D9D9D9", "#1D6F63"
     rows = [
-        ("GLOBAL — what drives the model", None),
+        ("NATIVELY INTERPRETABLE (white box)", None),
         ("Coefficients / odds ratios", [("native", NATIVE, "notebook"), ("—", NONE, ""), ("—", NONE, "")]),
-        ("Average marginal effects", [("✓", DONE, "slide 9"), ("—", NONE, ""), ("—", NONE, "")]),
+        ("Average marginal effects", [("✓", DONE, "notebook"), ("—", NONE, ""), ("—", NONE, "")]),
+        ("AdaLogit / PLTR (white-box variants)", [("✓ tie", DONE, "AUC 0.7296 / 0.7292"), ("—", NONE, ""), ("—", NONE, "")]),
+        ("GLOBAL — what drives the model", None),
+        ("Impurity (gain) importance", [("—", NONE, "trees only"), ("✓", DONE, "artifact"), ("—", NONE, "")]),
         ("SHAP summary", [("✓", DONE, "slide 9"), ("✓", DONE, "slide 9"), ("✗ too slow", NONE, "no exact explainer")]),
-        ("PDP / ICE", [("✓", DONE, "slide 10"), ("✓", DONE, "slide 10"), ("✓", DONE, "slide 10 · only view")]),
+        ("PDP (average curve)", [("✓", DONE, "slides 9-10"), ("✓", DONE, "slides 9-10"), ("✓", DONE, "slides 9-10")]),
         ("Global surrogate tree", [("not needed", NONE, "already linear"), ("✓ R² 0.61", PART, "slide 10 · A4"), ("—", NONE, "")]),
         ("LOCAL — one person", None),
+        ("ICE (one curve per person)", [("✓", DONE, "slide 10"), ("✓", DONE, "slide 10"), ("✓", DONE, "slide 10")]),
         ("SHAP (one person)", [("✓", DONE, "slide 11"), ("✓", DONE, "slide 11"), ("✗ too slow", NONE, "")]),
-        ("LIME + fidelity check", [("✓", DONE, "slide 11"), ("✓", DONE, "slide 11"), ("—", NONE, "")]),
-        ("What-if: change one field", [("✓", DONE, "app · notebook"), ("✓", DONE, "app · notebook"), ("✓", DONE, "app · notebook")]),
+        ("LIME + fidelity check", [("✓", DONE, "slide 11 · A8"), ("✓", DONE, "slide 11 · A8"), ("—", NONE, "")]),
+        ("What-if: change one field", [("✓", DONE, "app"), ("✓", DONE, "app"), ("✓", DONE, "app")]),
         ("PERFORMANCE — what drives the AUC", None),
-        ("Permutation importance", [("✓", DONE, "slide 12"), ("✓", DONE, "slide 12"), ("partial", PART, "10 of 29 fields")]),
+        ("Permutation importance", [("✓", DONE, "slide 12 · A9"), ("✓", DONE, "slide 12 · A9"), ("partial", PART, "10 of 29 fields")]),
         ("XPER", [("✓", DONE, "slide 12"), ("✓", DONE, "slide 12"), ("✗ too slow", NONE, "")]),
         ("Method agreement (SHAP·PI·XPER)", [("✓", DONE, "slide 12 · A3"), ("✓", DONE, "slide 12 · A3"), ("—", NONE, "")]),
     ]
-    fig, ax = plt.subplots(figsize=(14, 8.4))
+    fig, ax = plt.subplots(figsize=(14, 10.2))
     ax.axis("off")
     n = len(rows)
     ax.set_xlim(0, 4.3)
@@ -191,7 +195,7 @@ def interpretability_matrix() -> None:
             if where:
                 ax.text(x + 0.42, y - 0.17, where, ha="center", va="center", fontsize=8.5,
                         color="white" if colour in (DONE, NATIVE) else "#333333")
-    ax.set_title("Interpretability methods applied, by model (course grouping: global · local · performance)",
+    ax.set_title("Interpretability methods applied, by model (course grouping)",
                  fontsize=14, fontweight="bold", pad=6)
     fig.text(0.5, 0.01, "Logistic explains itself; XGBoost needs post-hoc tools; TabICLv2 can only be probed from outside "
              "(PDP/ICE, what-if) — exact SHAP, LIME and XPER need too many foundation-model predictions.",
@@ -201,8 +205,47 @@ def interpretability_matrix() -> None:
     plt.close(fig)
 
 
+def permutation_figure() -> None:
+    """Permutation importance for the three models (course: explaining performance), readable labels."""
+    from recidivism.config import pretty
+
+    pi = pd.read_csv(ARTIFACT_DIR / "permutation_importance.csv")
+    sns.set_theme(style="whitegrid", context="talk")
+    fig, axes = plt.subplots(1, 3, figsize=(21, 6.5))
+    for ax, model in zip(axes, MODELS):
+        part = pi[pi.model == model].sort_values("importance", ascending=False).head(8)[::-1]
+        ax.barh(part.feature.map(pretty), part.importance, color=PALETTE[model])
+        n = int((pi.model == model).sum())
+        ax.set_title(f"{DISPLAY[model]}" + ("" if n == 29 else f" ({n} of 29 fields measured)"), fontsize=15)
+        ax.set_xlabel("Increase in Brier loss when shuffled", fontsize=12)
+        ax.tick_params(axis="y", labelsize=12)
+    fig.suptitle("Permutation importance: how much worse the model gets when one field is shuffled", fontsize=15)
+    fig.tight_layout()
+    fig.savefig(FIGURE_DIR / "permutation_importance_readable.png", dpi=180, bbox_inches="tight")
+    plt.close(fig)
+
+
+def impurity_importance() -> None:
+    """XGBoost impurity (total gain) importance per raw field, normalised to sum to 1 (course p112)."""
+    import joblib
+
+    from interpretability import original_feature
+    from recidivism.config import FEATURE_COLUMNS, MODEL_DIR
+
+    pipe = joblib.load(MODEL_DIR / "xgboost.joblib")
+    names = list(pipe[-2].get_feature_names_out())
+    total = pipe[-1].get_booster().get_score(importance_type="total_gain")
+    gain = pd.Series({original_feature(names[int(k[1:])], FEATURE_COLUMNS): 0.0 for k in total})
+    for k, v in total.items():
+        gain[original_feature(names[int(k[1:])], FEATURE_COLUMNS)] += v
+    (gain / gain.sum()).sort_values(ascending=False).rename("normalized_total_gain").rename_axis("feature") \
+        .reset_index().to_csv(ARTIFACT_DIR / "xgboost_impurity_importance.csv", index=False)
+
+
 def main() -> None:
     sys.path.insert(0, str(ROOT / "scripts"))
+    impurity_importance()
+    permutation_figure()
     interpretability_matrix()
     shap_summary()
     eda_overview()

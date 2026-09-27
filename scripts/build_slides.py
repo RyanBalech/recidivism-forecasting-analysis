@@ -162,6 +162,9 @@ ml_lo, ml_hi, ml_n = _others.test_roc_auc.min(), _others.test_roc_auc.max(), len
 _con = pd.read_csv(ART / "probability_contrasts.csv")
 _con = _con[_con.model == "logistic"].set_index(["feature", "level"]).average_probability_contrast
 age_contrast, gang_contrast = _con[("Age_at_Release", "48 or older")], _con[("Gang_Affiliated", "Yes")]
+_pdpc = pd.read_csv(ART / "pdp_contrasts.csv").set_index(["contrast", "model"]).pdp_difference
+pdp_age = [_pdpc[("Age 23-27 -> 48 or older", m)] * 100 for m in ["logistic", "xgboost", "tabicl"]]
+pdp_gang = [_pdpc[("Gang No -> Yes", m)] * 100 for m in ["logistic", "xgboost", "tabicl"]]
 _lime = pd.read_csv(ART / "lime_fidelity.csv").groupby("model").local_r2.mean()
 lime_lo, lime_hi = _lime.min(), _lime.max()
 _cal = pd.read_csv(ART / "calibration_tests.csv").set_index("model")
@@ -267,10 +270,10 @@ textbox(s, "Models beat the historical score at every capacity. Dollars are a sc
 # 9 — Global drivers
 s = make_slide(prs); title(s, "What drives the score", "Interpretability · Global")
 picture(s, FIG / "shap_summary.png", .3, 1.75, 8.8)
-card(s, "AGE 23–27 → 48+", f"{age_contrast*100:+.0f} pts", 9.35, 1.9, TEAL, "logistic, average probability change")
-card(s, "GANG AFFILIATION", f"{gang_contrast*100:+.0f} pts", 9.35, 3.5, RED, "recorded 'Yes' vs 'No'")
+card(s, "PDP · AGE 23–27 → 48+", slash(pdp_age, "{:+.0f}"), 9.35, 1.9, TEAL, "pts · logistic / XGBoost / TabICL", size=17)
+card(s, "PDP · GANG NO → YES", slash(pdp_gang, "{:+.0f}"), 9.35, 3.5, RED, "pts · logistic / XGBoost / TabICL", size=17)
 card(s, "TOP DRIVERS", "Age · gang · priors", 9.35, 5.1, ORANGE, "same in logistic and XGBoost", size=17)
-textbox(s, "Each dot is one person (all 7,807); red = high value of the field. Right = raises risk. Cards: marginal effects in probability points.",
+textbox(s, "Each dot is one person (all 7,807); red = high value of the field. Right = raises risk. Cards: PDP differences in probability points.",
         1.0, 6.85, 11, .3, 11, GREY, True, PP_ALIGN.CENTER); footer(s, 9)
 
 # 10 — Model-agnostic view: PDP/ICE for all three models, and what each model costs to explain
@@ -383,7 +386,7 @@ textbox(s, "streamlit run app.py   ·   backup: screenshots / recording", 3.2, 6
 s = make_slide(prs)
 textbox(s, "APPENDIX", .72, 2.6, 8, .5, 14, ORANGE, True)
 textbox(s, "Supporting evidence\nfor questions", .72, 3.15, 9, 1.5, 34, WHITE, True)
-textbox(s, "Learning curve · economic sensitivity · explanation disagreement · global surrogate · threshold frontier · age · process log", .76, 4.95, 9.5, .9, 15, PALE)
+textbox(s, "Learning curve · economics · explanation disagreement · surrogate · threshold frontier · age · process · LIME · permutation importance · method overview", .76, 4.95, 9.5, .9, 15, PALE)
 
 s = make_slide(prs); title(s, "Which model for which agency size?", "A1 · Learning curve")
 picture(s, FIG / "learning_curve.png", .8, 1.8, 11.7)
@@ -425,6 +428,19 @@ s = make_slide(prs); title(s, "How we got here: what we tried, where we landed",
 picture(s, FIG / "improvement_journey.png", .55, 1.75, 12.2)
 textbox(s, "Full log in docs/JOURNEY.md — every step measured, including the attempts we rejected.", 1.0, 6.82, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER)
 
+s = make_slide(prs); title(s, "LIME for three people, with its fidelity", "A8 · LIME")
+picture(s, FIG / "lime_individual.png", .35, 1.75, 12.6)
+textbox(s, "Category-aware LIME on raw fields: local R² 0.33–0.49, every condition keeps its sign across three seeds. Quote it for direction, SHAP for size.",
+        .8, 6.82, 11.7, .3, 11, ORANGE, True, PP_ALIGN.CENTER)
+
+s = make_slide(prs); title(s, "Permutation importance: shuffle one field, measure the loss", "A9 · Permutation importance")
+picture(s, FIG / "permutation_importance_readable.png", .35, 1.75, 12.6)
+textbox(s, "Same drivers as SHAP and XPER. TabICLv2 was measured on 10 of 29 fields only: each shuffle needs a full foundation-model prediction pass.",
+        .8, 6.82, 11.7, .3, 11, ORANGE, True, PP_ALIGN.CENTER)
+
+s = make_slide(prs); title(s, "Which interpretability method, for which model", "A10 · Method overview")
+picture(s, FIG / "interpretability_matrix.png", 1.3, 1.6, 10.7)
+
 # ---------------------------------------------------------------- SPEAKER NOTES
 # Timings follow reports/presentation_outline.md: 14:25 of talk across 20 core slides,
 # leaving a buffer in the 15-minute slot. [P1]…[P6] marks who speaks.
@@ -437,7 +453,7 @@ NOTES = {
  6: """[P3 · 3:00 · 50s] Three families, as the brief requires, each tuned by cross-validation on training data only. Logistic with L1, C chosen by grid search. XGBoost with a 60-draw random search; deeper trees overfit and were rejected. TabICL with 16 ensemble members; gains level off near 8. Six other ML models all land in the same narrow AUC band.""",
  7: """[P3 · 3:50 · 50s] Finding one: performance cannot pick the model. All three within 0.003 AUC. XGBoost beats logistic by 0.0025 on a PAIRED bootstrap — real, but small. Calibration: logistic and XGBoost are indistinguishable from perfect; TabICL's slope is 0.91, significantly below 1 — its probabilities are too extreme.""",
  8: """[P3 · 4:40 · 50s] The client's real question: is this better than the score agencies already have? The historical Georgia score in the data reaches 0.60 AUC; our models reach 0.73, and roughly double the scenario net value at 20% capacity. Caveats in the same breath: it is a historical score, and the dollars are a scenario. Over to [P4].""",
- 9: """[P4 · 5:30 · 40s] What drives the score. This is a SHAP summary for all 7,807 people: each dot is a person, red means a high value of that field, and dots to the right raise risk. Age comes first in both models - young people (blue) sit on the right - then gang affiliation and prior record. Logistic draws straight bars because it is linear; XGBoost spreads out because it picks up interactions. In probability points: moving from age 23-27 to 48+ lowers predicted risk by about 27 points; a recorded gang affiliation raises it by about 17.""",
+ 9: """[P4 · 5:30 · 40s] What drives the score. This is a SHAP summary for all 7,807 people: each dot is a person, red means a high value of that field, and dots to the right raise risk. Age comes first in both models - young people (blue) sit on the right - then gang affiliation and prior record. Logistic draws straight bars because it is linear; XGBoost spreads out because it picks up interactions. The cards turn this into probability points with partial dependence, for all three models: set everyone to age 23-27, then to 48+, and the average predicted risk falls by 26 to 29 points; switching gang affiliation from No to Yes raises it by 16 to 17. The three models agree - including TabICL, which SHAP cannot reach. For logistic regression this PDP difference is exactly the course's average marginal effect.""",
  10: """[P4 · 6:10 · 40s] Now from the outside, without opening the model. Partial dependence shows the average effect of one feature; the faint individual curves show each person. All three models agree that risk falls with age. This is the only way we can look inside TabICL at all: it has no native attribution. XGBoost can be summarised by a small surrogate tree, but that tree reproduces only 61% of it. Logistic needs none of this: its coefficients are the explanation.""",
  11: """[P4 · 6:50 · 40s] One person, explained by both models. Red raises risk, green lowers it — this is what an appeal would contest. We checked faithfulness: LIME on raw features fits locally about twice as well as before, and all 63 conditions keep their sign across seeds. We quote LIME for direction and SHAP for size.""",
  12: """[P4 · 7:30 · 40s] Last, explaining PERFORMANCE rather than predictions — XPER, from this course. It splits the AUC itself into contributions: an uninformative model gets about 0.47, and each feature adds its share; age alone adds about 0.09. Compared with SHAP and permutation importance, the three methods agree on WHICH features matter but not on their order, because they answer different questions: prediction, loss, performance. So we quote the set, not the rank. Over to [P5].""",
@@ -450,7 +466,7 @@ NOTES = {
  19: """[P6 · 12:40 · 60s] Reading across the four dimensions: performance is a tie; interpretability and stability favour logistic; fairness gaps are shared by all three. So: logistic for a shadow pilot, XGBoost as challenger. The two select 85% of the same people and the difference in captured re-arrests includes zero. We do NOT claim logistic is fairer or better calibrated. It reverses if the client quotes scores numerically, or operates at a scale where a dozen extra offers matter.""",
  20: """[P1 · 13:40 · 45s] Demo one person: scores from all three models, the explanation, how many of eight refits select them, then edit an input and watch the score move. If the app fails, switch to the screenshots.
 
-[APPENDIX CUES] A1 learning curve · A2 economics · A3 explanation disagreement · A4 global surrogate · A5 threshold frontier · A6 age · A7 process""",
+[APPENDIX CUES] A1 learning curve · A2 economics · A3 explanation disagreement · A4 global surrogate · A5 threshold frontier · A6 age · A7 process · A8 LIME · A9 permutation importance · A10 method overview""",
 }
 
 for index, slide in enumerate(prs.slides, start=1):
