@@ -242,7 +242,7 @@ def interpretability_matrix() -> None:
     ax.set_title("Interpretability methods applied, by model (course grouping)",
                  fontsize=14, fontweight="bold", pad=6)
     fig.text(0.5, 0.01, "Logistic explains itself; XGBoost needs post-hoc tools; TabICLv2 can only be probed from outside "
-             "(PDP/ICE, what-if) — exact SHAP, LIME and XPER need too many foundation-model predictions.",
+             "(PDP/ICE, LIME with fewer samples, what-if) — exact SHAP and XPER need too many foundation-model predictions.",
              ha="center", fontsize=10, style="italic")
     fig.tight_layout(rect=[0, 0.03, 1, 1])
     fig.savefig(FIGURE_DIR / "interpretability_matrix.png", dpi=180, bbox_inches="tight")
