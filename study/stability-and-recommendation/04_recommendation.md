@@ -205,3 +205,19 @@ From the report and the app's governance tab:
 - ❌ "We beat today's agency tools": we beat a *historical* score in this dataset.
 - ❌ "The dollars are savings": the effectiveness is assumed.
 - ❌ "The evaluation set is untouched": it was inspected during development.
+
+## 4.9 Added 27 Sep: the second pilot arm without gang affiliation
+
+The merged deck's slide 19 now ends with **"Second arm without gang affiliation (A11)"**.
+Whether the no-gang model becomes the *primary* recommendation is a pending team decision.
+Everything you need is in [09_no_gang_pilot_arm.md](09_no_gang_pilot_arm.md). The short
+version:
+- **The cost of the arm:** −0.014 AUC and 27 fewer captured re-arrests. It's still $2M
+  above the historical score in the scenario.
+- **What it buys:** the gender FNR gap closes (−0.096 → 0.000), and the race gap stays
+  within ±5 points.
+- **Stability:** barely changes, and logistic still beats XGBoost (28/28 and 27/28 pairs).
+  Your slide-19 argument holds in both variants.
+- **New:** without gang, abstention is gender-neutral (09, 9.3). That strengthens the case
+  for the second arm.
+

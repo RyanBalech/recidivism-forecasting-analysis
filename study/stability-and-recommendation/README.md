@@ -26,9 +26,10 @@ It doesn't change the team pipeline, `artifacts/` or the deck.
 | 5 | [05_qa_bank.md](05_qa_bank.md) | 30 min | 25 questions with short answers, plus the traps list |
 | 6 | [06_slide_plan_and_script.md](06_slide_plan_and_script.md) | 15 min | Option A (+1 slide) or B (appendix), word-for-word script, timings |
 | 7 | [07_code_walkthrough.md](07_code_walkthrough.md) | 15 min | Which script, notebook cell and app tab does what, with line numbers |
+| 9 | [09_no_gang_pilot_arm.md](09_no_gang_pilot_arm.md) | 20 min | **New on 27 Sep:** the team added a no-gang second pilot arm (slide 19, A11). Slides 17–19 for both scenarios (second arm / primary), plus the **no-gang abstention result** |
 | 8 | [08_professor_slides_map.md](08_professor_slides_map.md) | 20 min | **The professor's slides → your section**: definitions, formulas and phrases with slide numbers (§7.1, §7.2, guest lecture, §8.3) |
 
-**Short on time?** Read 08, then the cheat sheet below, then 03 part C, then 05.
+**Short on time?** Read 08, then the cheat sheet below, then 09, then 03 part C, then 05.
 
 ## Cheat sheet: memorise these
 
@@ -70,6 +71,15 @@ It doesn't change the team pipeline, `artifacts/` or the deck.
   points ever changes.
 - **On another machine: 0 decisions change for logistic, 80 for XGBoost.**
 
+**No-gang pilot arm (09; added to the deck on 27 Sep; primary or not is a team decision)**
+- Without gang affiliation: AUC 0.730 → 0.715, gender FNR gap −0.096 → **0.000**, race
+  +0.026 (still within ±5 pts), and 27 fewer re-arrests captured.
+- Stability under the slide-17 protocol: logistic 0.032 / J 0.754, XGBoost 0.035 / J 0.723.
+  Logistic is more stable on 28/28 (drift) and 27/28 (Jaccard) pairs.
+- **Slide 18 changes:** without gang, 33% of selected women and 33% of selected men are at
+  the margin (47% vs 30% with gang). Abstention leaves the gender gap at about 0
+  (+0.004 → −0.002), so the "not fairness-neutral" result comes from gang affiliation.
+
 **Recommendation**
 - **Shadow pilot of L1 logistic, with XGBoost as challenger.**
 - XGBoost: +0.0025 AUC [0.0006, 0.0044], but the two share 85% of the selected people
@@ -97,7 +107,8 @@ study/stability-and-recommendation/
 ├── 08_professor_slides_map.md       ← course slides → your section
 ├── analysis/
 │   ├── stability_course_aligned.py  ← part E extras (CPU, ~2.5 min)
-│   └── course_stability_methods.py  ← part C: slides 186/187/43–44 on our data (CPU, ~1 min)
+│   ├── course_stability_methods.py  ← part C: slides 186/187/43–44 on our data (CPU, ~1 min)
+│   └── no_gang_stability.py         ← slides 17–18 for the no-gang arm, published protocol (CPU, ~1–2 min)
 └── results/
     ├── stability_by_regime_summary.csv     seed / bootstrap / halves × model
     ├── stability_pairs_by_regime.csv       every pair, every distance
@@ -107,6 +118,10 @@ study/stability-and-recommendation/
     ├── course_slide186_lambda_path.csv     slide 186: every λ, every draw
     ├── course_slide186_chosen.csv          slide 186: CV-chosen λ vs naive retrain
     ├── course_penalty_stability.csv        slides 43–44: L1 vs L2 vs elastic net
+    ├── no_gang_stability_summary.csv       no-gang vs with-gang: drift, Jaccard, contested, abstention
+    ├── no_gang_stability_pair_wins.csv     logistic vs XGBoost per refit pair, both variants
+    ├── no_gang_abstention_curve.csv        slide 18's abstention curve for both variants
+    ├── no_gang_contested_by_gender.csv     who sits at the margin, by gender and variant
     ├── contested_profile.csv               who is contested, and how close to the cut
     ├── run_info.json                       versions, CPU count, reproduction checks
     ├── fig_stability_regimes.png
@@ -142,6 +157,12 @@ study/stability-and-recommendation/
 - [ ] **Agree Option A or B with the team** (see 06), because of the time budget.
 - [ ] **Ask the team to fix the app's governance tab.** It says "smaller subgroup gaps".
 - [ ] **Fix "14%" on slide 18** and **"all 28 pairs" for Jaccard** in the report and notes.
+      *Update 27 Sep: the redesigned deck's slide 18 now says ≈13% (fixed by the team). Slide
+      17 says "28/28 pairs more stable", which is correct for drift. The "all 28" wording for
+      Jaccard remains in the report and notes.*
+- [ ] **Team decision: is the no-gang model primary or a second arm?** Scripts for both are
+      in 09. Slide 19 still says "Calibration and fairness are tied"; suggest the slide-263
+      wording from 06.
 - [ ] Rehearse 05 out loud, especially Q7, Q10, Q13, Q14, Q17, Q18 and Q26–Q29.
 
 *Environment for the extras: Python 3.9.6, scikit-learn 1.6.1 and XGBoost 2.1.4 on macOS

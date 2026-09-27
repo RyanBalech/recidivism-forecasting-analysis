@@ -92,14 +92,29 @@
   quote (40 s).
 - **Slide 18:** fix "14%" as above (50 s).
 - **Slide 19:** rewrite the two bullets as above (60 s).
-- **Appendix A8** "The course's stability constraint (slide 186) on our data": the
+> ⚠️ *Update 27 Sep: the redesigned deck now uses A8 (LIME), A9 (permutation importance),
+> A10 (method overview) and A11 (no-gang arm). Use **A12** and **A13** for the two
+> appendix slides below. The labels are shifted; the content is unchanged.*
+
+- **Appendix A12** (was "A8") "The course's stability constraint (slide 186) on our data": the
   frontier figure plus the λ table from 03 C2.
-- **Appendix A9** "Stability extras": disjoint halves, 0 vs 80 decisions across machines,
+- **Appendix A13** (was "A9") "Stability extras": disjoint halves, 0 vs 80 decisions across machines,
   L1/L2/elastic net (`fig_penalty_stability.png`), coefficient stability.
 
 **My suggestion:** Option A. Slide 18b is the one slide that shows the jury you took a
 method from the lecture and implemented it on a new problem. If the team can't give you
 45 s, use Option B and bring up A8 in Q&A.
+
+## Added 27 Sep: the no-gang second arm on slide 19
+
+- **The merged slide 19** already has the bullet "Second arm without gang affiliation (A11)",
+  and its speaker notes end with it.
+- **If the team makes no-gang primary**, use the rewritten slides 17–19 lines in
+  [09_no_gang_pilot_arm.md](09_no_gang_pilot_arm.md) §9.5.
+- **Either way,** have the slide-18 no-gang line ready: the margin asymmetry comes from
+  gang affiliation.
+- **Slide 19 still says** "Calibration and fairness are tied — not a reason to choose".
+  Consider the slide-263 wording from Option A above.
 
 ## Figures you can use
 
@@ -112,6 +127,7 @@ method from the lecture and implemented it on a new problem. If the team can't g
 | Coefficient stability | `results/fig_coefficient_stability.png` | A9 only (see the trap in 03, E3) |
 | Per person + abstention | `artifacts/figures/individual_stability.png` | Slide 18 |
 | Trade-off matrix | `artifacts/figures/tradeoff_matrix.png` | Slide 19 |
+| With vs without gang, four dimensions | `artifacts/figures/gang_variant_comparison.png` (team) | A11 / the re-check slide in scenario B |
 
 ## Hand-over lines
 

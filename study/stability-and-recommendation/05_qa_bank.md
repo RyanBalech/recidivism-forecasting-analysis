@@ -211,6 +211,22 @@ interpretability, stability and frugality. On fairness the models don't separate
 - Logistic beats XGBoost in both. TabICL ranks last against its own original but ties
   logistic between refits; we didn't isolate why.
 
+## The no-gang pilot arm (added 27 Sep; full answers in 09)
+
+**Q33. Why is there a second pilot arm?**
+**"Gang affiliation is never recorded for women. Dropping it closes the gender FNR gap
+(−0.096 → 0.000) for 0.014 AUC. We let the pilot show whether that trade is worth it,
+instead of deciding it for the client."**
+
+**Q34. Is the no-gang model less stable?**
+**"Slightly: Jaccard 0.77 → 0.75 for logistic, with the same score drift. Logistic still
+beats XGBoost on 28/28 pairs for drift and 27/28 for selection."**
+
+**Q35. Does the abstention result on slide 18 hold for the no-gang model?**
+**"No, and that's informative. The margin asymmetry came from gang affiliation. Without
+it, 33% of selected women and 33% of selected men are contested, and abstention leaves the
+gender gap at about zero."**
+
 ## Traps: things *not* to say
 
 - ❌ "Logistic is more stable than every model" → only more than XGBoost; it ties with TabICL on selection.

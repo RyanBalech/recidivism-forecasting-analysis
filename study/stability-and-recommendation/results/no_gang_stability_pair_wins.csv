@@ -1,0 +1,3 @@
+variant,n_pairs,logistic_lower_drift,logistic_higher_jaccard
+no_gang,28,28,27
+with_gang,28,28,26
