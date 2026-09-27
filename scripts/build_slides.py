@@ -7,6 +7,7 @@ one native chart (slide 8) keep the deck editable in PowerPoint.
 from pathlib import Path
 import json
 import re
+import sys
 
 import pandas as pd
 from pptx import Presentation
@@ -22,7 +23,8 @@ from pptx.util import Inches, Pt
 
 ROOT = Path(__file__).resolve().parents[1]
 ART, FIG, REPORTS = ROOT / "artifacts", ROOT / "artifacts" / "figures", ROOT / "reports"
-OUT = REPORTS / "ISAF_Recidivism_Presentation.pptx"
+# An optional path writes a copy instead, e.g. to try a slide without touching the team deck.
+OUT = Path(sys.argv[1]) if len(sys.argv) > 1 else REPORTS / "ISAF_Recidivism_Presentation.pptx"
 
 FONT = "Calibri"
 INK, NAVY, CORAL, TEAL, TEAL_L, GOLD = "1B2B3A", "24506E", "D9573A", "1F7A70", "2A9D8F", "C99A2E"
@@ -526,55 +528,100 @@ source(s, "incumbent_economics.csv · incumbent_capacity_sweep.csv · incumbent_
           "Dollar figures are scenarios, not causal estimates.", y=6.7)
 
 # ================================================================ P4 · INTERPRETABILITY (2.7 min)
-# 9 — Global drivers
-s = new_slide("Interpretability · Global", "Global drivers: what moves the score", "Interpretability", 9)
-picture(s, "shap_summary.png", LM, 1.75, 8.5, 4.75, align="left")
-text(s, 9.45, 1.8, 3.28, 0.3, "LOGISTIC, IN PROBABILITY POINTS", size=11.5, color=NAVY, bold=True)
-stat(s, 9.45, 2.2, 3.28, 1.55, f"{pct(age_contrast)} pts", f"age 23–27 → 48+\nPDP, all three models: {sl(pdp_age, '{:+.0f}')}",
-     color=TEAL, fill=CARD_T)
-stat(s, 9.45, 3.95, 3.28, 1.3, f"{pct(gang_contrast)} pts", f"recorded gang affiliation\nPDP, all three models: {sl(pdp_gang, '{:+.0f}')}",
-     color=CORAL, fill=CARD_C)
-text(s, 9.45, 5.45, 3.28, 1.0, "SHAP beeswarm on all 7,807 evaluation people: importance and direction in one chart.",
-     size=12, color=MUTED)
-source(s, "shap_summary.png · shap_importance_full.csv · probability_contrasts.csv · pdp_contrasts.csv", y=6.7)
+# 9 — Global drivers: each model read with the tool that suits it
+_or = pd.read_csv(ART / "logistic_odds_ratios.csv").set_index("contrast").odds_ratio
+_ice = pd.read_csv(ART / "ice_age_gang.csv", dtype={"value": str})
+_fel = _ice[_ice.feature == "Prior_Arrest_Episodes_Felony"].groupby(["model", "value"]).p.mean()
+pdp_felony = [(_fel[(m, "10 or more")] - _fel[(m, "1")]) * 100 for m in m3]
+s = new_slide("Interpretability · Global", "Global drivers: each model, read with its own tool", "Interpretability", 9)
+col_w, gap = (CW - 2 * 0.25) / 3, 0.25
+for i, (name, tool, col, fill, fig) in enumerate([
+        ("Logistic", "coefficients → odds ratios", NAVY, CARD_N, "logistic_odds_ratios.png"),
+        ("XGBoost", "SHAP summary, all 7,807 people", TEAL, CARD_T, "shap_summary_xgboost.png"),
+        ("TabICLv2", "PDP + ICE, 200 people", CORAL, CARD_C, "pdp_ice_tabicl.png")]):
+    x = LM + i * (col_w + gap)
+    box(s, x, 1.62, col_w, 0.42, fill=fill)
+    text(s, x + 0.15, 1.62, col_w - 0.3, 0.42, f"**{name}** · {tool}", size=13, color=col, anchor=MSO_ANCHOR.MIDDLE)
+    picture(s, fig, x, 2.1, col_w, 3.55)
+box(s, LM, 5.78, CW, 0.82, fill=CARD)
+text(s, LM + 0.25, 5.78, CW - 0.5, 0.82,
+     f"**Three tools, one answer: age · gang · prior record.** Logistic odds: 18–22 vs 48+ ×{_or['18-22 vs 48+']:.1f}, "
+     f"gang ×{_or['Gang affiliated: Yes vs No']:.1f}, 10+ felony arrests vs 1 ×{_or['10 or more vs 1']:.1f}. "
+     f"PDP (logistic / XGBoost / TabICL): age 23–27 → 48+ {sl(pdp_age, '{:+.0f}')} pts; gang No → Yes {sl(pdp_gang, '{:+.0f}')} pts; "
+     f"felony arrests 1 → 10+ {sl(pdp_felony, '{:+.0f}')} pts.",
+     size=13, anchor=MSO_ANCHOR.MIDDLE)
+source(s, "logistic_odds_ratios.csv · shap_summary_xgboost.png · ice_age_gang.csv · pdp_contrasts.csv. Logistic SHAP: A12 · all three PDP/ICE: A13", y=6.7)
 
-# 10 — PDP/ICE for all three models
-s = new_slide("Interpretability · Model-agnostic", "Looking from outside: PDP/ICE for all three models", "Interpretability", 10)
-picture(s, "pdp_ice.png", LM, 1.7, 6.5, 4.9, align="left")
-text(s, 7.35, 1.85, 5.38, 0.3, "THREE EXPLANATION ROUTES", size=12, color=NAVY, bold=True)
-for i, (name, col, fill, body) in enumerate([
-        ("Logistic", NAVY, CARD_N, "Coefficients read directly: the model is the explanation."),
-        ("XGBoost", TEAL, CARD_T, f"Needs SHAP; a depth-3 surrogate tree reproduces only R² = {surrogate_r2:.2f}."),
-        ("TabICL", CORAL, CARD_C, "No native attribution: PDP/ICE is the only view.")]):
-    y = 2.25 + i * 1.12
-    box(s, 7.35, y, 5.38, 0.98, fill=fill)
-    text(s, 7.55, y, 1.35, 0.98, name, size=15, color=col, bold=True, anchor=MSO_ANCHOR.MIDDLE)
-    text(s, 8.9, y, 3.7, 0.98, body, size=13, anchor=MSO_ANCHOR.MIDDLE)
-text(s, 7.35, 5.7, 5.38, 0.9, "PDP = average effect; ICE = one curve per person. Age, prior felony arrests and the "
-     "Georgia score: **all three models agree risk falls with age.**", size=13)
-source(s, "pdp_ice.png · interpretability_summary.json")
+# 10 — One person on the cut-off, each model with its own local tool
+_lp = pd.read_csv(ART / "local_person.csv").set_index("model")
+_ll = pd.read_csv(ART / "local_person_lime.csv")
+_ll_top = _ll.loc[_ll.groupby(["model", "seed"]).weight.apply(lambda w: w.abs().idxmax())].condition.unique()
+_ll_cmp = _ll[_ll.shap.notna()]  # TabICLv2 has no SHAP to compare signs with
+s = new_slide("Interpretability · Local", "One person on the cut-off: why in, why out", "Interpretability", 10)
+for i, (name, tool, col, fill, fig) in enumerate([
+        ("Logistic", "coefficient × value (= SHAP)", NAVY, CARD_N, "local_logistic.png"),
+        ("XGBoost", "TreeSHAP", TEAL, CARD_T, "local_xgboost.png"),
+        ("TabICLv2", "this person's ICE", CORAL, CARD_C, "local_tabicl.png")]):
+    x = LM + i * (col_w + gap)
+    box(s, x, 1.62, col_w, 0.42, fill=fill)
+    text(s, x + 0.15, 1.62, col_w - 0.3, 0.42, f"**{name}** · {tool}", size=13, color=col, anchor=MSO_ANCHOR.MIDDLE)
+    picture(s, fig, x, 2.1, col_w, 3.55)
+box(s, LM, 5.78, 8.1, 0.82, fill=CARD_C)
+text(s, LM + 0.25, 5.78, 7.6, 0.82,
+     f"**Age 28–32, gang Yes, 3 felony arrests: risk {slash(_lp.risk.loc[m3])} vs cut-off {slash(_lp.cutoff.loc[m3])}.** "
+     f"Gang is the largest push in every model; set it to No and risk falls to {slash(_lp.risk_if_gang_no.loc[m3], '{:.2f}')}: "
+     "no model would offer support.", size=12.5, anchor=MSO_ANCHOR.MIDDLE)
+box(s, LM + 8.3, 5.78, CW - 8.3, 0.82, fill=CARD)
+text(s, LM + 8.5, 5.78, CW - 8.7, 0.82,
+     f"**LIME on the same person:** top reason {'gang = Yes' if list(_ll_top) == ['Gang_Affiliated=Yes'] else ', '.join(_ll_top)} "
+     f"in all three models; {int((_ll_cmp.weight.gt(0) == _ll_cmp.shap.gt(0)).sum())}/{len(_ll_cmp)} conditions point the same way as SHAP. "
+     f"Local R² only {_ll.local_r2.mean():.2f}: SHAP for size.", size=11.5, anchor=MSO_ANCHOR.MIDDLE)
+source(s, "local_person.csv · local_person_contributions.csv · ice_age_gang.csv · local_person_lime.csv (3 models × 3 seeds). "
+          "Contributions in log-odds, relative to the average person", y=6.7)
 
-# 11 — One person, and a faithfulness check
-s = new_slide("Interpretability · Local", "Explaining one person — and checking it is faithful", "Interpretability", 11)
-picture(s, "shap_individual.png", LM, 1.7, CW, 3.55)
-for i, (big, label, col, fill) in enumerate([
-        (f"0.25 → {lime_lo:.2f}–{lime_hi:.2f}", "LIME local fit (R²) after moving it to the raw feature space", NAVY, CARD_N),
-        ("3 cases × 3 seeds", "highest, median and lowest risk, each with three random seeds", TEAL, CARD_T),
-        ("63 / 63", "feature conditions keep the same sign across seeds", CORAL, CARD_C)]):
-    stat(s, LM + i * ((CW - 0.6) / 3 + 0.3), 5.35, (CW - 0.6) / 3, 1.25, big, label, color=col, fill=fill, big_size=22)
-source(s, "shap_individual.png · lime_individual.png · lime_fidelity.csv")
+# 11 — Explaining performance: XPER and permutation importance
+xper_felony = _xper[_xper.feature == "Prior_Arrest_Episodes_Felony"].set_index("model").xper
+s = new_slide("Interpretability · Performance", "Explaining performance: which fields earn the accuracy", "Interpretability", 11)
+picture(s, "performance_explanations.png", LM, 1.65, CW, 3.6)
+cards3(s, 5.35, 1.3, [
+    ("XPER (course)", NAVY, CARD_N, f"Splits the AUC itself. A model with no information scores **≈ {xper_bench:.2f}**; "
+     f"age adds **+{xper_age.mean():.2f}**, prior felony arrests **+{xper_felony.mean():.2f}**."),
+    ("Permutation importance", TEAL, CARD_T, "Shuffle one field, measure the loss. **Age first in all three models**, TabICL "
+     "included; gang and prior felonies next."),
+    ("Takeaway", CORAL, CARD_C, f"Same drivers, order varies (Spearman {agree_sp.min():.2f}–{agree_sp.max():.2f} SHAP vs "
+     f"permutation, {agree_xp.min():.2f}–{agree_xp.max():.2f} vs XPER): **quote the set, not the rank.**")], size=12.5)
+source(s, "xper_values.csv · permutation_importance.csv · explanation_agreement.csv. XPER not run on TabICLv2 and "
+          "permutation on 10 of its 29 fields: each needs many full prediction passes on CPU", y=6.72)
 
-# 12 — XPER and method agreement
-s = new_slide("Interpretability · XPER", "Explaining performance with XPER: methods disagree on order", "Interpretability", 12)
-picture(s, "xper.png", LM, 1.7, 8.9, 3.3, align="left")
-stat(s, 9.75, 1.8, 2.98, 1.45, f"≈ {xper_bench:.2f}", "benchmark AUC share", color=NAVY, fill=CARD_N, big_size=30)
-stat(s, 9.75, 3.45, 2.98, 1.45, f"+{xper_age.mean():.2f}", "AUC contributed by age", color=TEAL, fill=CARD_T, big_size=30)
-cards3(s, 5.2, 1.4, [
-    ("Rank agreement", NAVY, CARD_N, f"Spearman **{agree_sp.min():.2f}–{agree_sp.max():.2f}** SHAP vs permutation; only "
-     f"**{agree_xp.min():.2f}–{agree_xp.max():.2f}** either vs XPER."),
-    ("Shared drivers", TEAL, CARD_T, f"The three methods share **{top10_lo}–{top10_hi} of their top-10** features."),
-    ("Takeaway", CORAL, CARD_C, "Quote the **set** of main drivers, not their exact ranking.")])
-source(s, "xper.png · explanation_agreement.png · global_surrogate.png")
+# 12 — Interpretability verdict
+_n_tab_perm = int((pd.read_csv(ART / "permutation_importance.csv").model == "tabicl").sum())
+s = new_slide("Interpretability · Summary", "Verdict: logistic explains itself, TabICL only from outside", "Interpretability", 12)
+EXACT, APPROX = CARD_T, "FBF1D9"
+head_w, cell_w, gx, top = 2.05, (CW - 2.05 - 3 * 0.12) / 3, 0.12, 1.62
+for j, (name, col) in enumerate([("Logistic", NAVY), ("XGBoost", TEAL), ("TabICLv2", CORAL)]):
+    text(s, LM + head_w + gx + j * (cell_w + gx), top, cell_w, 0.36, name, size=15, color=col, bold=True, align=PP_ALIGN.CENTER)
+grid = [
+    ("Global · slide 9", [("Coefficients → odds ratios", EXACT), ("SHAP summary", EXACT), ("PDP / ICE, from outside", APPROX)]),
+    ("Local · slide 10", [("Coefficient × value", EXACT), ("TreeSHAP", EXACT), ("ICE + LIME, approximate", APPROX)]),
+    ("Performance · slide 11", [("XPER + permutation", EXACT), ("XPER + permutation", EXACT),
+                                (f"Permutation only, {_n_tab_perm} of 29 fields", APPROX)]),
+    ("Cost to explain", [("None: read the model", EXACT), ("Seconds", EXACT),
+                         ("≈ 1 h per 200 ICE curves; SHAP, XPER out of reach", APPROX)]),
+]
+for i, (label, cells) in enumerate(grid):
+    y = top + 0.44 + i * 0.6
+    text(s, LM, y, head_w, 0.52, label, size=12.5, color=MUTED, bold=True, anchor=MSO_ANCHOR.MIDDLE)
+    for j, (body, fill) in enumerate(cells):
+        x = LM + head_w + gx + j * (cell_w + gx)
+        box(s, x, y, cell_w, 0.52, fill=fill)
+        text(s, x + 0.12, y, cell_w - 0.24, 0.52, body, size=12.5, anchor=MSO_ANCHOR.MIDDLE, align=PP_ALIGN.CENTER)
+cards3(s, 4.8, 1.55, [
+    ("All three agree", NAVY, CARD_N, "Age, gang affiliation and prior record lead **in every model and every method**."),
+    ("Interpretability favours logistic", TEAL, CARD_T, "Only logistic answers **“why me?” exactly and for free**; "
+     "TabICL can only be probed from outside, at a cost."),
+    ("Hand-over to fairness", CORAL, CARD_C, "The person on the cut-off is in **because of gang affiliation**, a field never "
+     "recorded for women. → Fairness")], size=13)
+source(s, "Green = exact, amber = approximate or partial. Full method × model matrix: A10", y=6.72)
 
 # ================================================================ P5 · FAIRNESS (3 min)
 # 13 — Race (1)
@@ -759,9 +806,9 @@ APPENDIX = [
      "through criminal history. Rank by risk or by need is the client's policy choice."),
     ("Process", "How we got here: what we tried, where we landed", "improvement_journey.png",
      "Full log in docs/JOURNEY.md — every step measured, including the attempts we rejected."),
-    ("LIME", "LIME for three people, with its fidelity", "lime_individual.png",
-     "Category-aware LIME on raw fields: local R² 0.33–0.49; every condition keeps its sign across three seeds. "
-     "Quote it for direction, SHAP for size."),
+    ("LIME", "LIME on the slide-10 person, all three models", "lime_person.png",
+     "Gang = Yes is the top reason in every model and seed; for logistic and XGBoost every condition has SHAP's sign. "
+     "Local R² 0.23–0.25 here (0.33–0.49 on the highest-, median- and lowest-risk people): quote LIME for direction, SHAP for size."),
     ("Permutation importance", "Permutation importance: shuffle one field, measure the loss", "permutation_importance_readable.png",
      "Same drivers as SHAP and XPER. TabICLv2 was measured on 10 of 29 fields only: each shuffle needs a full "
      "foundation-model prediction pass."),
@@ -770,6 +817,12 @@ APPENDIX = [
     ("Pilot arm 2", "Dropping gang affiliation, re-evaluated on all four dimensions", "gang_variant_comparison.png",
      "Gender gap closes; stability and drivers barely change; race stays within ±5 pts but flips sign. "
      "Cost: AUC −0.014, 27 fewer re-arrests captured."),
+    ("Logistic SHAP", "SHAP on logistic regression only redraws the coefficients", "shap_summary_logistic.png",
+     "For a linear model SHAP = coefficient × (value − average): everyone in the same category gets the same "
+     "contribution, hence vertical bars. The odds ratios on slide 9 say the same thing more directly."),
+    ("PDP/ICE", "Age, gang and prior felony arrests: PDP/ICE for all three models", "pdp_ice_age_gang_felony.png",
+     "Same 200 evaluation people for every model. Near-identical average effects: the three models learned the "
+     "same shape, not only the same ranking."),
 ]
 for k, (kicker, title, fig, caption) in enumerate(APPENDIX, start=1):
     s = new_slide(f"A{k} · {kicker}", title, None, f"A{k}")
@@ -797,10 +850,10 @@ NOTES = {
  6: """[P3 · 3:00 · 40s] Three families, as the brief requires, each tuned by cross-validation on training data only. Logistic with L1, C chosen by grid search. XGBoost with a 60-draw random search; deeper trees overfit and were rejected. TabICL with 16 ensemble members; gains level off near 8. Five other ML models all land in the same narrow AUC band.""",
  7: """[P3 · 3:40 · 45s] Finding one: performance cannot pick the model. The three ROC curves lie on top of each other: AUC 0.730 to 0.733. Is 0.73 good? Reviews of US recidivism tools call an AUC above 0.71 "excellent"; the historical Georgia score, at 0.60, is only "fair". XGBoost beats logistic by 0.0025 on a paired bootstrap: real, but small. Brier, the score NIJ used for this challenge, agrees: about 16% better than predicting the base rate, for all three. It also checks calibration, whether a predicted 70% means 70%: logistic and XGBoost pass; TabICL is slightly overconfident.""",
  8: """[P3 · 4:25 · 65s] The client's real question: is this worth paying for, compared with the score they already have? The scenario: 20% capacity, 1,561 offers. Support costs $5,000 a person, a re-arrest costs $50,000, and we ASSUME support prevents 20% of re-arrests. So net value is the number of offered people later re-arrested, times $10,000, minus $7.8M of programme cost. The cost is identical for every ranking, so only precision matters: 82% of our offers reach someone later re-arrested, against 67% for the historical score. That turns $2.7M into $5.0M. Put differently: with our ranking the programme breaks even if it prevents 12% of re-arrests; with the historical score it needs 15%. The dollars are a scenario, not a causal estimate: the data cannot tell us whether support works. Over to [P4].""",
- 9: """[P4 · 5:30 · 40s] What drives the score. This is a SHAP summary for all 7,807 people: each dot is a person, red means a high value of that field, and dots to the right raise risk. Age comes first in both models - young people (blue) sit on the right - then gang affiliation and prior record. Logistic draws straight bars because it is linear; XGBoost spreads out because it picks up interactions. The cards turn this into probability points with partial dependence, for all three models: set everyone to age 23-27, then to 48+, and the average predicted risk falls by 26 to 29 points; switching gang affiliation from No to Yes raises it by 16 to 17. The three models agree - including TabICL, which SHAP cannot reach. For logistic regression this PDP difference is exactly the course's average marginal effect.""",
- 10: """[P4 · 6:10 · 40s] Now from the outside, without opening the model. Partial dependence shows the average effect of one feature; the faint individual curves show each person. All three models agree that risk falls with age. This is the only way we can look inside TabICL at all: it has no native attribution. XGBoost can be summarised by a small surrogate tree, but that tree reproduces only 61% of it. Logistic needs none of this: its coefficients are the explanation.""",
- 11: """[P4 · 6:50 · 40s] One person, explained by both models. Red raises risk, green lowers it — this is what an appeal would contest. We checked faithfulness: LIME on raw features fits locally about twice as well as before, and all 63 conditions keep their sign across seeds. We quote LIME for direction and SHAP for size.""",
- 12: """[P4 · 7:30 · 40s] Last, explaining PERFORMANCE rather than predictions — XPER, from this course. It splits the AUC itself into contributions: an uninformative model gets about 0.47, and each feature adds its share; age alone adds about 0.09. Compared with SHAP and permutation importance, the three methods agree on WHICH features matter but not on their order, because they answer different questions: prediction, loss, performance. So we quote the set, not the rank. Over to [P5].""",
+ 9: """[P4 · 5:30 · 40s] What drives the score, and each model is read with the tool that suits it. Logistic regression is its own explanation: its coefficients become odds ratios - an 18-to-22-year-old has almost six times the odds of re-arrest of someone over 48, gang affiliation more than doubles them, and so do ten or more prior felony arrests compared with one. XGBoost has no coefficients, so we use SHAP on all 7,807 people: each dot is a person, red is a high value, right raises risk - age first, then gang, then prior record. TabICL is a foundation model with neither, so we look from outside with PDP and ICE: the black line is the average, each faint line one person, and almost every line falls with age and rises with gang. The bottom line puts the three on one scale: moving everyone from 23-27 to 48+ lowers predicted risk by 26 to 29 points, gang adds 16 to 17. Three tools, one answer.""",
+ 10: """[P4 · 6:10 · 40s] Now one person - the kind of case where an explanation matters most, because they sit right on the top-20% cut-off. Aged 28 to 32, gang affiliated, three prior felony arrests. Logistic puts them just below the line, XGBoost and TabICL just above. Why? Each model with its own tool again. For logistic, each bar is simply coefficient times how this person differs from the average - that is exactly SHAP for a linear model. For XGBoost, TreeSHAP. For TabICL, we move one field at a time for this person and watch the risk against the cut-off. All three give the same reason: gang affiliation is by far the largest push. Set it to No and the risk falls to about 0.57 - no model would offer support. That is the field we saw is never recorded for women. As a check we ran LIME on the same person, for all three models: every one puts gang first, and for logistic and XGBoost every condition points the same way as SHAP. But its local fit is low, so we quote SHAP for the size and LIME only for the direction.""",
+ 11: """[P4 · 6:50 · 40s] So far we explained predictions. Now we explain PERFORMANCE: which fields actually earn the model its accuracy. Left, XPER from the course: it splits the AUC itself. A model with no information would score about 0.47; age alone adds about 0.09, prior felony arrests about 0.04. Right, permutation importance: shuffle one field and see how much worse the model gets. Age comes first in all three models, including TabICL, then gang and prior felonies. The two methods, and SHAP, agree on which fields matter but not on the exact order, because they answer different questions. So we quote the set of drivers, not a ranking.""",
+ 12: """[P4 · 7:30 · 40s] To sum up interpretability. Across all three models and all the methods we used, the same drivers come out on top: age, gang affiliation and prior record. But explaining them is not equally easy. Logistic regression explains itself: its coefficients are the explanation, exact and free. XGBoost needs SHAP, which is exact for trees and takes seconds. TabICL can only be probed from outside, with PDP, ICE and LIME, and the exact tools - SHAP, XPER - are out of reach on our hardware. So if someone asks "why was I not offered support?", logistic gives the most direct answer. On this dimension, logistic wins. And remember the person on the cut-off: they were in because of gang affiliation - a field that is never recorded for women. That is where [P5] picks up.""",
  13: """[P5 · 8:10 · 45s] Fairness. Our primary metric is FNR: people later re-arrested but not offered support — the real harm here. Race first, the question everyone expects after COMPAS. Base rates are almost equal, so the data does not force a gap. Excluding race guarantees twins get the same score, but race is still recoverable at 0.71 through criminal history. So we audit outcomes, not inputs.""",
  14: """[P5 · 8:55 · 45s] The outcome audit: every race gap is within five points by an equivalence test, and none survives Holm correction. Three caveats: the small gap runs toward MORE support for Black people; the label is recorded arrest, which may carry policing bias; and prediction quality is lower for Black people, AUC 0.72 vs 0.75.""",
  15: """[P5 · 9:40 · 45s] Gender is where we found a problem. Re-arrested women miss support 10 to 12 points more often, in all three models — so it comes from the features. Every model over-predicts women, yet selects them less: with different base rates, calibration and equal FNR cannot both hold. Age shows an even larger gap, but by design — age is a validated risk factor — so it is the client's policy choice; details in the appendix.""",
