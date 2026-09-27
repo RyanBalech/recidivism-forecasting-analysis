@@ -16,7 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 STEPS = ["leakage_audit", "estimator_sweep", "train_evaluate", "incumbent_benchmark", "fairness_audit",
-         "fairness_interpretability", "mitigation_nested", "validate_project", "learning_curve",
+         "fairness_interpretability", "gang_imputation_check", "mitigation_nested", "validate_project", "learning_curve",
          "interpretability", "lime_local_fidelity", "logistic_effects", "explanation_agreement", "calibration_tests",
          "stability_structural", "individual_stability", "proxy_inference_audit",
          "race_ab_test", "xper_attribution",
