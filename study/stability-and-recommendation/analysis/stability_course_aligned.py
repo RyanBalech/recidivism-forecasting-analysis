@@ -1,18 +1,21 @@
-"""Course-aligned stability extras for the P6 study pack (course §7).
+"""Course-aligned stability extras for the P6 study pack (course §7.1, slides 182–194).
 
 The team's stability audit (scripts/stability_structural.py, scripts/individual_stability.py)
 measures how much predictions and selected sets move between bootstrap refits. The course
 defines stability more literally, and this script adds the pieces docs/PLAN.md item P1.9
 left open:
 
-1. **Distance between models, the course's way.** ‖θ₁ − θ₂‖₂ on the logistic coefficients,
-   and ‖φ(f₁) − φ(f₂)‖₂ on normalised feature-importance vectors for both models.
-2. **Two disjoint halves of the training set** ("two datasets from the same population"),
-   next to the bootstrap refits the deck already reports.
-3. **Seed-only versus data-only randomness** (course §7.2): same data with different model
-   seeds, against different data with the same seed.
-4. **Stability versus performance over the L1 penalty C** for logistic (course p192),
-   with performance measured by training-only cross-validation.
+1. **Distance between models, the course's way.** ‖θ₁ − θ₂‖₂ on the logistic coefficients
+   (slide 185), and ‖φ(f₁) − φ(f₂)‖₂ on normalised feature-importance vectors for both
+   models (slide 193).
+2. **Two disjoint halves of the training set** ("two datasets from the same population",
+   slide 182), next to the bootstrap refits the deck already reports.
+3. **Seed-only versus data-only randomness**: same data with different model seeds, against
+   different data with the same seed. The seed and floating-point sources mirror slides
+   207 and 210–212 (§7.2).
+4. **Stability versus performance over the L1 penalty C** for logistic, the same kind of
+   frontier as slide 192, with performance measured by training-only cross-validation.
+   The professor's own method (slide 186) is in course_stability_methods.py.
 5. **Which logistic coefficients survive resampling**: how often L1 keeps each one non-zero,
    and whether its sign ever flips.
 6. **Where the contested decisions are**, re-read from the saved per-person file.
@@ -230,7 +233,7 @@ def coefficient_stability(boot_coefs: pd.DataFrame, full_fit) -> pd.DataFrame:
 
 
 def c_sweep(split) -> pd.DataFrame:
-    """Course p192: how stability and performance move together as the L1 penalty changes.
+    """How stability and performance move together as the L1 penalty changes (cf. slide 192).
 
     Performance is 5-fold CV AUC inside the training partition, so no evaluation label
     chooses anything. Stability uses the published bootstrap resamples.
@@ -311,7 +314,7 @@ def figure_regimes(pairs: pd.DataFrame) -> None:
         ax.spines[["top", "right"]].set_visible(False)
     axes[1].set_ylim(0, 1.05)
     axes[0].legend(frameon=False)
-    fig.suptitle("Three sources of instability, from mildest to harshest (course §7)", fontsize=14)
+    fig.suptitle('Three ways to draw "two datasets from the same population" (slide 182), mildest to harshest', fontsize=14)
     fig.tight_layout()
     fig.savefig(OUT / "fig_stability_regimes.png", dpi=180, bbox_inches="tight")
     plt.close(fig)
@@ -330,7 +333,7 @@ def figure_c_sweep(sweep: pd.DataFrame) -> None:
     ax.axvline(chosen.C, color="grey", ls=":", lw=1.5)
     ax.annotate(f"chosen C = {chosen.C:.4g}", (chosen.C, 0.5), xycoords=("data", "axes fraction"),
                 xytext=(6, 0), textcoords="offset points", color="grey")
-    ax.set_title("Stability vs performance over the L1 penalty (course p192)")
+    ax.set_title("Stability vs performance over the L1 penalty (cf. slide 192)")
     lines = ax.get_lines()[:1] + twin.get_lines()[:1]
     ax.legend(lines, [l.get_label() for l in lines], loc="center right", bbox_to_anchor=(1, 0.3), frameon=False)
     fig.tight_layout()
@@ -363,7 +366,7 @@ def main() -> None:
     split = load_official_split()
     X_imp = split.X_test.sample(1000, random_state=0)   # features only; no evaluation labels used
 
-    # Environment check against the published run (course §7.2: randomness includes software).
+    # Environment check against the published run (slides 210–215: order of operations, "two machines can disagree").
     published = pd.read_csv(ARTIFACT_DIR / "test_predictions.csv")
     env = {"python": platform.python_version(), "platform": platform.platform(), "logical_cpus": os.cpu_count(),
            "scikit_learn": sklearn.__version__, "xgboost": xgb.__version__}

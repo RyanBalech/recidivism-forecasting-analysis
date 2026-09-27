@@ -1,15 +1,26 @@
 # 1 · Stability: concepts and maths
 
 > Read this first. It explains every idea and formula behind slides 17–18, with worked
-> examples that use our own numbers. The course section is §7 (stability); the page
-> references come from `docs/PLAN.md`. Check the wording against the course slides.
+> examples that use our own numbers. Checked against the professor's deck
+> (`Slides ISAF 2026_2027.pdf`, §7.1, slides 182–194). "Slide N" means the number printed
+> on the professor's slide. The full map is in [08_professor_slides_map.md](08_professor_slides_map.md).
 
 ---
 
 ## 1.1 What "stability" means in the course
 
-**Course definition (§7.1):** if two datasets are drawn from the same population, a
-stable method should produce *approximately the same model*.
+**Definition (slide 182, citing Turney 1995):**
+> "If we obtain two datasets from the same population (same underlying probability
+> distribution), then the ML algorithm should induce approximately the same model from
+> both datasets."
+
+**Why it matters (slides 183–184), the professor's story:**
+1. A doctor gives patient files to an analyst, and the analyst returns a decision tree.
+2. More patient files arrive, and the analyst retrains.
+3. The analyst returns a *different-looking* tree, and the doctor asks "?!".
+
+**Our version:** the agency's quarterly retrain changes about 13% of the people offered
+support, and the caseworker asks "why is this person no longer on the list?"
 
 Why the client should care:
 
@@ -34,13 +45,18 @@ former, and the dev log (`docs/JOURNEY.md`) records the switch to structural sta
 3. **Performance stability.** Does AUC stay the same? This is the weakest notion, and we
    only mention it.
 
-## 1.3 Where the randomness comes from (course §7.2)
+## 1.3 Where the randomness comes from
 
-| Source | Example | How we isolate it |
-|---|---|---|
-| **Training data** | A different sample of people | Bootstrap refits with the model seed fixed; disjoint halves |
-| **Algorithm seed** | XGBoost subsamples 82% of rows and 62% of columns per tree | Refit on the same data with different seeds |
-| **Hardware / software** | Thread count, package version, CPU vs GPU | Measured separately (thread-sensitivity file) |
+§7.1 is about the **data** (two samples, two models). §7.2 (slides 195–223) is the
+professor's own 2026 paper on randomness in LLMs. Its mechanisms carry over to our
+models:
+
+| Source | Example in our project | Professor's slide | How we isolate it |
+|---|---|---|---|
+| **Training data** | A different sample of people | 182, 185 | Bootstrap refits with the seed fixed; disjoint halves; 50% vs full |
+| **Algorithm seed** | XGBoost subsamples 82% of rows and 62% of columns per tree | 207: "report the seed, but do not rely on it" | Same data, different seeds |
+| **Order of floating-point operations** | XGBoost sums gradients in a thread-dependent order; TabICL's attention kernels depend on batch size | 210–212: "finite precision arithmetic is not associative"; "batch size changes the numerics" | Thread and batch-size checks; re-running on another machine |
+| **Model version** | Package versions, the TabICL checkpoint | 208: silent model updates | Pinned versions and checkpoint hash in the manifests |
 
 The published audit varies **only the data**. The eight resamples are shared by all
 three models, and the model seed is fixed at 42. That is what makes the three models
@@ -96,18 +112,44 @@ share is (1 − 0.667)/(1 + 0.667) = 0.2, which is 1 person out of 5. ✓
 **Say:** "A Jaccard of 0.77 means about 13% of the people offered support change when we
 retrain, not 23%."
 
-### The course's distance between models (added in `03_*`)
-- **Parameter distance**, for models with parameters (logistic):
-  $$\|\theta_1 - \theta_2\|_2 = \sqrt{\textstyle\sum_j (\theta_{1j} - \theta_{2j})^2}$$
-  We also report it *relative* to the size of the coefficients, since the raw number
-  depends on scale.
-- **Explanation distance**, which works for any model:
-  $$\|\varphi(f_1) - \varphi(f_2)\|_2$$
-  where φ is the vector of feature importances. We normalise φ to shares that sum to 1,
-  so logistic and XGBoost are on the same scale. The distance is 0 when the explanations
-  are identical and at most √2.
-- **Why two measures:** XGBoost has no single θ, since it is 1,196 trees. That is why the
-  course also compares importance vectors.
+### The course's distance between models (slides 185 and 193; computed in `03_*`)
+
+**Setup (slide 185):**
+- Estimate the same model y = f(x; θ) + ε on two datasets:
+  - D₁ = (xᵢ, yᵢ), i = 1…n₁
+  - D₂ = (xᵢ, yᵢ), i = 1…n₂, with **n₂ > n₁**
+- This gives f̂₁ = f(x; θ̂(D₁)) and f̂₂ = f(x; θ̂(D₂)).
+- Think of it as "the old model, and the model retrained once more data arrive".
+
+**Parameter distance (slide 185):**
+$$d(\hat f_1, \hat f_2) = \|\hat\theta_1 - \hat\theta_2\|_2 = \sqrt{\textstyle\sum_{j=1}^{p} (\hat\theta_{1,j} - \hat\theta_{2,j})^2}$$
+We also report it *relative* to ‖θ̂‖, since the raw number depends on scale.
+
+**Feature-importance distance (slide 193):**
+$$d(f_1, f_2) = \|\varphi(f_1) - \varphi(f_2)\|_2$$
+- φ is the vector of importances, one score per feature.
+- We normalise φ to shares that sum to 1, so logistic and XGBoost are on the same scale.
+  The distance is 0 when the explanations are identical and at most √2.
+
+**Why two measures:** XGBoost has no single θ, since it is 1,196 trees. The course's tree
+distances (slides 189–190: matching paths between two trees) are defined for *one* tree,
+so for an ensemble we use slide 193.
+
+### Making a model stable on purpose (slides 186, 191–192, 194)
+**Stability-constrained re-estimation (slide 186):**
+$$\hat\theta_2 = \arg\min_\theta \; \|y - X\theta\|_2^2 + \lambda \|\theta - \hat\theta_1\|_2^2 \qquad (\lambda \text{ chosen by cross-validation})$$
+- In words: when you retrain on D₂, pay a price for moving away from the old model.
+- λ = 0 is a normal retrain; a very large λ keeps the old model.
+- We apply it to our logistic regression, using the log-likelihood instead of squared
+  error (03, part C).
+
+**The price of stability (slides 191–192):**
+- Bertsimas & Digalakis (2023) report a small loss in predictive power (**−4.6%**) for a
+  large gain in stability (**+38%**).
+- Slide 192 plots the frontier: stability loss (L2 norm) against predictive-power loss.
+
+**Slide 194** is the same idea for any model: penalise ‖φ(f) − φ(f̂₁)‖² instead of
+‖θ − θ̂₁‖².
 
 ### Decision stability for one person
 - Refit 8 times and count how many refits select the person (0–8).
@@ -140,8 +182,8 @@ The report says exactly this.
 
 ## 1.8 One-line summaries to memorise
 
-- "Stability asks: if we had drawn a different sample, would we have built the same model,
-  and would the same people get help?"
+- "Two datasets from the same population should induce approximately the same model"
+  (slide 182). "We checked whether they do, and whether the same people get help."
 - "Jaccard of 0.77 means 13% of the selected change, not 23%."
 - "Stable is not the same as fair: abstention makes decisions more reliable and the
   gender gap wider."

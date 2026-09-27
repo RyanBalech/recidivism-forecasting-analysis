@@ -9,9 +9,9 @@
 ## Stability: definitions
 
 **Q1. What do you mean by stability?**
-**"If we had drawn a different sample from the same population, would we build the same
-model, and would the same people get help?"**
-- It follows the course's §7 definition.
+**"As on slide 182: two datasets from the same population should induce approximately the
+same model. We check the model, and also whether the same people get help."**
+- It's the course definition (Turney, 1995).
 - We measure it at three levels: the scores, the selected set, and one person's decision.
 
 **Q2. Why bootstrap and not something else?**
@@ -52,7 +52,8 @@ set on 26 of 28. Under disjoint halves, 9 of 10 and 10 of 10."**
 **"On its own, no. It matters because it's the only dimension besides interpretability
 where the two models genuinely differ at the decision."**
 - Performance differences don't change who gets help.
-- Calibration and fairness are ties.
+- Calibration and fairness show no difference between the two models. On the gender gap
+  they're equivalent within ±5 points.
 
 **Q9. Are the explanations stable?**
 **"Yes, for both. Age is the top driver in every refit, and the same 8 features lead each
@@ -60,13 +61,15 @@ time."**
 - On the course's importance distance ‖φ₁ − φ₂‖₂, XGBoost is even slightly more stable.
 - Logistic's advantage is in decisions, not explanations. (Being honest here earns trust.)
 
-**Q10. Did you compute the course's ‖θ₁ − θ₂‖₂?**
+**Q10. Did you compute the course's ‖θ₁ − θ₂‖₂ (slide 185)?**
 **"Yes: 0.70 between bootstrap refits and 0.90 between disjoint halves. But it overstates
 instability for our model."**
 - With a full one-hot encoding the coefficients aren't identified.
 - Two refits with different seeds give *identical* predictions but ‖Δθ‖ = 0.31.
 - So we judge on predictions and on the large coefficients. The 22 largest never change
   sign.
+- This is the guest lecture's point (slide 43): standard logistic regression is "unstable
+  under collinearity".
 
 **Q11. What causes the instability: data or algorithm?**
 **"Mostly data."**
@@ -112,9 +115,13 @@ instability for our model."**
 - Logistic wins on stability, direct interpretability, reproducibility and 9× speed.
 
 **Q18. So logistic is fairer / better calibrated?**
-**"No, and we don't claim it. Both are ties."**
-- Gender-gap difference: −0.013, CI −0.036 to +0.011.
-- Cox calibration slopes: 0.999 vs 1.005.
+**"No, and we don't claim it."**
+- Fairness: the gender-gap difference is −0.013, 95% CI [−0.036, +0.011], entirely inside
+  ±5 points, so they're *equivalent within ±5 points* (TOST, slide 272).
+- We don't say "equal because not significant"; that's the mistake slide 263 warns about.
+- Calibration: Cox slopes 0.999 vs 1.005, no detectable difference.
+- If asked: the ±5-point tolerance was fixed in code before running TOST, but after the
+  team had seen the gap estimates. The team discloses this.
 
 **Q19. Why not TabICL? It has the best AUC.**
 **"Its probabilities are measurably too extreme, it has no native explanation, and it
@@ -157,11 +164,51 @@ a retrain moved someone below the cut."**
   points of Jaccard.
 - That's modest, and it was measured with training-only CV.
 
+## From the professor's slides
+
+**Q26. Did you implement the stability constraint from slide 186?**
+**"Yes, for our logistic regression. We retrain on D₂ while penalising ‖θ − θ̂₁‖², with λ
+chosen by 5-fold cross-validation."**
+- Without it, a retrain swaps about 19% of the selected people. With it, about 12%.
+- The coefficients move half as much, and CV AUC doesn't fall (0.731 → 0.733). That holds
+  in all 5 random draws.
+- Caveat: pooling old and new data gives similar numbers. The anchor's value is that λ is
+  a dial, and it works when old records can't be kept.
+
+**Q27. Why not use the tree distance from slides 189–190 for XGBoost?**
+**"It's defined for a single tree: matching paths and comparing feature ranges. XGBoost is
+1,196 trees, so we used the feature-importance distance from slide 193."**
+
+**Q28. Slide 191 says stability costs 4.6% of predictive power. What did it cost you?**
+**"At the λ chosen by cross-validation, nothing. The naive retrain was dominated. Beyond
+λ ≈ 100 we're on the frontier of slide 192: at λ = 1,000 only 4% of the selected change,
+for about 0.0015 CV AUC."**
+
+**Q29. §7.2 is about LLMs. Is it relevant to you?**
+**"Yes. TabICL is a transformer, and the mechanisms are the same."**
+- Floating-point order of operations (slide 210): XGBoost changes with the thread count.
+- Batch size (slide 212): TabICL's scores change with the query batch size.
+- "Two machines can disagree" (slide 215): on another machine, 80 XGBoost decisions change
+  and 0 logistic decisions do.
+- We follow the reporting items of slide 222: versions, hashes, seeds and runtime are in
+  the manifests.
+
+**Q30. L1, L2 or elastic net: which is most stable (slides 43–44)?**
+**"Ridge moves the coefficients least (−10%), and elastic net is the sparsest and most
+sign-stable. Who gets selected is the same with all three (Jaccard 0.77)."**
+
+**Q31. Where does your recommendation sit on the course's trade-off picture (slide 16)?**
+**"We move a fraction of a point left on predictive performance and gain on
+interpretability, stability and frugality. On fairness the models don't separate."**
+
 ## Traps: things *not* to say
 
 - ❌ "Logistic is more stable than every model" → only more than XGBoost; it ties with TabICL on selection.
 - ❌ "Logistic is better on all 28 pairs" for Jaccard → 26 of 28.
 - ❌ "23% of people change" → 13%.
-- ❌ "Logistic has smaller subgroup gaps" (the app's governance tab still says this) → a tie.
+- ❌ "Logistic has smaller subgroup gaps" (the app's governance tab still says this) → equivalent within ±5 points.
+- ❌ "The models are equally fair because the difference isn't significant" → slide 263; say "equivalent within ±5 points (TOST)".
+- ❌ "Slide 192 is a C sweep" → it's Bertsimas & Digalakis's stability-loss vs MSE frontier. Our λ path is the analogue.
+- ❌ "Stability is free" → free only up to λ ≈ 100 here; beyond that it's a trade-off.
 - ❌ "The data has a performance ceiling" → three models converging doesn't prove one.
 - ❌ "Stable means fair" → abstention shows the opposite.

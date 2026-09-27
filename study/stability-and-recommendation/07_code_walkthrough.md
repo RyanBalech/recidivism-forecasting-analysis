@@ -100,6 +100,15 @@ noise from algorithm noise. The extras measure the seed separately.
 | `c_sweep()` | 9 values of C: 5-fold training-only CV AUC plus bootstrap stability |
 | `contested_profile()` | Re-reads `individual_stability.csv`: contested share by group and by distance to the cut |
 
+### The professor's methods: `analysis/course_stability_methods.py`
+
+| Function | Purpose |
+|---|---|
+| `retrain_on_more_data()` | Slides 187/191: production model on a random 50% (D₁) vs all the data (D₂), 5 draws, logistic and XGBoost |
+| `_anchored_logit()` | **Slide 186:** minimises Σ NLL + γ‖w‖² + λ‖w − w₁‖² with L-BFGS and an analytic gradient; the intercept is unpenalised |
+| `stability_constrained()` | D₁ = 40%, D₂ = 60% (separate, n₂ > n₁). Fits θ̂₁ on D₁; for each λ runs 5-fold CV inside D₂, then refits on D₂; records ‖θ̂₂ − θ̂₁‖, Jaccard with the old model and AUC |
+| `penalty_comparison()` | Slides 43–44: L1 / L2 / elastic net, C by 5-fold CV, then stability over the 8 published resamples |
+
 ## 7.8 How to regenerate
 
 ```bash
@@ -107,4 +116,5 @@ python scripts/stability_structural.py        # needs a GPU for TabICL (8 refits
 python scripts/individual_stability.py        # CPU; add --with-tabicl on a GPU
 python scripts/tradeoff_matrix.py
 python study/stability-and-recommendation/analysis/stability_course_aligned.py   # CPU, ~2.5 min
+python study/stability-and-recommendation/analysis/course_stability_methods.py    # CPU, ~1 min
 ```

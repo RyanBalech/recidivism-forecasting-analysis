@@ -6,6 +6,26 @@
 
 ---
 
+## 4.0 The professor's frame: slide 16
+
+The course opens (slide 16) with one picture: **predictive performance** on the x-axis,
+**interpretability** on the y-axis, and **stability, fairness, frugality and data
+privacy** as further axes. The brief asks us to place the three models on that picture
+and pick one "reflecting the requirements of a trustworthy AI system rather than
+predictive performance alone".
+
+| Axis (slide 16) | Logistic | XGBoost | TabICLv2 |
+|---|---|---|---|
+| Predictive performance | ≈ (−0.0025 AUC) | ≈ best | ≈ best |
+| Interpretability | **direct coefficients** | SHAP + surrogate (R² 0.61) | none native |
+| Stability | **most stable decisions; slide 186 applies** | least stable | stable selection |
+| Fairness | no detectable difference between models; equivalent within ±5 pts | same | same |
+| Frugality | **1 s, CPU** | 9 s, CPU | 42 s, GPU |
+| Data privacy | same inputs for all; the slide-186 anchor retrains without keeping old records | same inputs | same inputs |
+
+**Say:** "On the course's own picture we move a fraction of a point left on predictive
+performance and gain on interpretability, stability and frugality."
+
 ## 4.1 The recommendation in one sentence
 
 **Pilot L1 logistic regression prospectively in shadow mode, with XGBoost running as the
@@ -36,12 +56,18 @@ passes pre-agreed gates.**
    - Its coefficients are read directly, with no second tool.
    - XGBoost needs SHAP, and its depth-3 surrogate tree reproduces only R² = 0.61.
    - TabICL has no native attribution at all.
-5. **Calibration and fairness are ties, so they are *not* reasons.**
-   - Both models are statistically perfectly calibrated (Cox slopes 0.999 and 1.005).
-   - The gender-gap difference is not significant (−0.013, CI −0.036 to +0.011).
-   - No race test survives Holm correction for either model.
-   - The disparity comes from the *feature set* (gang-affiliation missingness), not from
-     the model choice.
+5. **Calibration and fairness don't separate the models, so they are *not* reasons.**
+   Word this carefully. Slide 263: failing to reject a difference "does not certify"
+   equality.
+   - **Fairness.** The logistic-minus-XGBoost difference in the gender FNR gap is −0.013,
+     95% CI [−0.036, +0.011]. That interval lies entirely inside the team's ±5-point
+     tolerance, so the two are **equivalent within ±5 points (TOST, slide 272)**, not just
+     "not different". No race test survives Holm correction for either model.
+   - **Calibration.** Both are indistinguishable from perfect calibration (Cox slopes 0.999
+     and 1.005). The paired difference in |slope − 1| is within ±0.015. Call it "no
+     detectable difference", since no tolerance was set in advance.
+   - The gender disparity comes from the *feature set* (gang-affiliation missingness), not
+     from the model choice.
 
 **Plus cost:** logistic is ≈ 9× faster than XGBoost (1.0 s vs 8.7 s) and ≈ 40× faster than
 TabICL (41.8 s, which needs a GPU).
@@ -52,18 +78,28 @@ Source: `artifacts/tradeoff_matrix.md` and `artifacts/figures/tradeoff_matrix.pn
 
 | Dimension | Row | Logistic | XGBoost | TabICLv2 | Verdict |
 |---|---|---|---|---|---|
-| Performance | AUC | 0.730 | 0.732 | 0.733 | Tie in practice |
-| | Brier | 0.205 | 0.204 | 0.204 | Tie in practice |
+| Performance | AUC | 0.730 | 0.732 | 0.733 | XGBoost +0.0025 (significant, small) |
+| | Brier | 0.205 | 0.204 | 0.204 | XGBoost −0.0010 (significant, small) |
 | | Net value @20% | $5.04M | $5.17M | $5.12M | Within noise; the ranking changes with capacity (4.5) |
 | Interpretability | Local explanation | coefficients | SHAP + surrogate | none native | **Logistic** |
 | | Surrogate fidelity | exact | R² = 0.61 | PDP/ICE only | **Logistic** |
 | Stability | Score drift | **0.032** | 0.035 | 0.035 | **Logistic** |
 | | Top-20% overlap | 77% | 75% | **78%** | Logistic ≈ TabICL > XGBoost |
 | Fairness | Race FNR gap | −0.005 | −0.017 | −0.023 | All within ±5 pts (TOST) |
-| | Gender FNR gap | −0.096 | −0.112 | −0.124 | Shared by all; differences not significant |
+| | Gender FNR gap | −0.096 | −0.112 | −0.124 | Shared by all; logistic vs XGBoost equivalent within ±5 pts |
 | | Age FNR gap | −0.245 | −0.228 | −0.237 | Shared; a policy choice (appendix A6) |
 | Cost | Train + predict | 1.0 s | 8.7 s | 41.8 s | **Logistic** |
 | | Auditability | high | medium | low | **Logistic** |
+
+**The course's own evidence for this choice:**
+- **Slide 61:** "there is no universally best model". Logistic regression suits cases where
+  "interpretability and inference on coefficients are important".
+- **Slide 52 (guest lecture):** across credit-scoring datasets, a well-regularised logistic
+  regression matches **TabPFN** (a tabular foundation model) on AUC and beats it on
+  calibration and sparsity. Our result is the same: 0.730 vs 0.733 AUC, and TabICL is
+  the worse calibrated.
+- **Slide 42:** post-hoc explainers can be "unfaithful, unstable and contradictory".
+  Logistic doesn't need one.
 
 **Why not TabICL?**
 - It has the best point AUC, but its probabilities are measurably too extreme
@@ -133,10 +169,16 @@ first-order."
 
 ## 4.6 Linking stability to the recommendation
 
-- **Retraining policy.** Even the most stable model swaps ≈ 13% of the selected people on
-  each retrain. The client should retrain on a fixed schedule rather than continuously,
-  and should *not* withdraw support already offered just because a retrain moved
-  someone below the cut.
+- **Retraining policy, using slide 186.** A naive retrain on new data swaps ≈ 19% of the
+  selected people. Retraining with the slide-186 stability constraint (λ by CV) cuts that
+  to ≈ 12%, halves the coefficient movement, and costs no accuracy (03, C2). This is only
+  possible because logistic has a parameter vector θ; XGBoost would need slide 194's
+  custom objective.
+- **Retrain on a fixed schedule**, and don't withdraw support already offered just because
+  a retrain moved someone below the cut.
+- **Reproducibility.** Pin package versions, threads and model files (slides 208, 222). On
+  another machine, logistic's decisions are identical and XGBoost's change for 80 people
+  (03, E6).
 - **Contested cases.** Show the refit vote count per person (the app already does:
   "selected by 6 of 8 refits"). Caseworkers then see which decisions are borderline.
 - **Abstention.** Don't adopt abstention by default. If the client wants it, audit the
@@ -156,8 +198,10 @@ From the report and the app's governance tab:
 
 ## 4.8 What we do **not** claim
 
-- ❌ "Logistic is fairer": not significant.
-- ❌ "Logistic is better calibrated": a tie.
+- ❌ "Logistic is fairer": not significant. The two are *equivalent within ±5 points*.
+- ❌ "Logistic is better calibrated": no detectable difference.
+- ❌ "The two are equally fair because the difference isn't significant": slide 263. Say
+  "equivalent within ±5 points (TOST)".
 - ❌ "We beat today's agency tools": we beat a *historical* score in this dataset.
 - ❌ "The dollars are savings": the effectiveness is assumed.
 - ❌ "The evaluation set is untouched": it was inspected during development.

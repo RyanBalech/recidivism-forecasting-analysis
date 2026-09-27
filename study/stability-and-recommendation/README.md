@@ -4,9 +4,14 @@
 2:30 in the current plan · **Presentation:** Mon 28 Sep 2026
 
 This folder has everything needed to present and defend the stability section and the final
-recommendation: the team's results, verified against the raw files; the course-aligned
-analyses that go beyond the deck; a Q&A bank; and a slide plan with a speaking script. It
-doesn't change the team pipeline, `artifacts/` or the deck.
+recommendation:
+- the team's results, verified against the raw files;
+- the professor's stability methods (course slides 182–194) **implemented from scratch on
+  the recidivism data**;
+- a slide-by-slide map to the course deck, a Q&A bank, and a slide plan with a speaking
+  script.
+
+It doesn't change the team pipeline, `artifacts/` or the deck.
 
 ---
 
@@ -16,11 +21,14 @@ doesn't change the team pipeline, `artifacts/` or the deck.
 |---|---|---|---|
 | 1 | [01_stability_concepts_and_maths.md](01_stability_concepts_and_maths.md) | 30 min | The course definition, bootstrap vs halves, every formula (Jaccard → replaced share, ‖θ₁ − θ₂‖₂, ‖φ₁ − φ₂‖₂), worked examples |
 | 2 | [02_what_we_found.md](02_what_we_found.md) | 30 min | The deck's numbers, re-verified; who is contested; abstention; **7 inconsistencies to know** |
-| 3 | [03_beyond_the_deck_course_aligned_extras.md](03_beyond_the_deck_course_aligned_extras.md) | 40 min | **New results:** seed / bootstrap / halves, the course's distances, coefficient stability, stability vs C, instability only near the cut, 0 vs 80 decisions across machines |
+| 3 | [03_beyond_the_deck_course_aligned_extras.md](03_beyond_the_deck_course_aligned_extras.md) | 45 min | **New results.** Part C: the professor's methods on our data (50% vs full, **slide-186 stability constraint**, L1/L2/elastic net). Part E: seed / bootstrap / halves, the course's distances, stability vs C, instability only near the cut, 0 vs 80 decisions across machines |
 | 4 | [04_recommendation.md](04_recommendation.md) | 30 min | The five-step argument, the trade-off matrix row by row, reversal conditions, break-even economics, deployment gates |
 | 5 | [05_qa_bank.md](05_qa_bank.md) | 30 min | 25 questions with short answers, plus the traps list |
 | 6 | [06_slide_plan_and_script.md](06_slide_plan_and_script.md) | 15 min | Option A (+1 slide) or B (appendix), word-for-word script, timings |
 | 7 | [07_code_walkthrough.md](07_code_walkthrough.md) | 15 min | Which script, notebook cell and app tab does what, with line numbers |
+| 8 | [08_professor_slides_map.md](08_professor_slides_map.md) | 20 min | **The professor's slides → your section**: definitions, formulas and phrases with slide numbers (§7.1, §7.2, guest lecture, §8.3) |
+
+**Short on time?** Read 08, then the cheat sheet below, then 03 part C, then 05.
 
 ## Cheat sheet: memorise these
 
@@ -37,7 +45,18 @@ doesn't change the team pipeline, `artifacts/` or the deck.
   - 47% of the 118 women selected are at the margin, against 30% of the 1,490 men.
   - Race is balanced at the margin (32% vs 31%).
 
-**Extras (new; see 03)**
+**The professor's methods on our data (03, part C)**
+- **Slide 186** (retrain on D₂, penalise ‖θ − θ̂₁‖², λ by CV):
+  - A naive retrain swaps **19%** of the selected people; with the constraint, **12%**.
+  - ‖Δθ‖ is halved, and CV AUC doesn't fall (0.731 → 0.733). This holds in 5/5 draws.
+  - Caveat: pooling old and new data is similar; the anchor is a dial and works without
+    keeping old records.
+- **Slides 187/191** (50% sample vs full data): 9% (logistic) vs 10% (XGBoost) of the
+  selected people change.
+- **Slides 43–44:** ridge reduces coefficient drift by 10%, and elastic net is the sparsest
+  and most sign-stable. Who is selected doesn't change (Jaccard 0.77 for all three).
+
+**Other extras (03, part E)**
 - Seed-only: logistic Jaccard 0.999, XGBoost 0.956. Disjoint halves: 0.70 vs 0.68, and
   logistic is ahead on 10/10 splits.
 - Explanation distance ‖φ₁ − φ₂‖₂: XGBoost ties or is slightly *better*. Logistic's
@@ -56,7 +75,9 @@ doesn't change the team pipeline, `artifacts/` or the deck.
 - XGBoost: +0.0025 AUC [0.0006, 0.0044], but the two share 85% of the selected people
   (J 0.849; only 254 differ) and the captured-re-arrests CI includes 0.
 - Logistic: more stable, reproducible, directly interpretable, 9× faster.
-- Calibration and fairness are **ties**, so they are not reasons.
+- Fairness: **equivalent within ±5 points** (TOST; the CI [−0.036, +0.011] sits inside ±0.05).
+  Calibration: no detectable difference. So neither is a reason. Don't say "equal because
+  not significant" (slide 263).
 - It reverses if scores are quoted as probabilities, at large scale, or with a new feature
   set.
 - Break-even: support must prevent **≥ 12%** of re-arrests (15% with the current tool).
@@ -73,18 +94,26 @@ study/stability-and-recommendation/
 ├── 05_qa_bank.md
 ├── 06_slide_plan_and_script.md
 ├── 07_code_walkthrough.md
+├── 08_professor_slides_map.md       ← course slides → your section
 ├── analysis/
-│   └── stability_course_aligned.py  ← the extra analysis (CPU, ~2.5 min)
+│   ├── stability_course_aligned.py  ← part E extras (CPU, ~2.5 min)
+│   └── course_stability_methods.py  ← part C: slides 186/187/43–44 on our data (CPU, ~1 min)
 └── results/
     ├── stability_by_regime_summary.csv     seed / bootstrap / halves × model
     ├── stability_pairs_by_regime.csv       every pair, every distance
     ├── logistic_coefficient_stability.csv  per coefficient across 8 refits
-    ├── logistic_stability_vs_C.csv         course p192 trade-off
+    ├── logistic_stability_vs_C.csv         L1-penalty stability/accuracy frontier
+    ├── course_retrain_50pct_vs_full.csv    slides 187/191 replication
+    ├── course_slide186_lambda_path.csv     slide 186: every λ, every draw
+    ├── course_slide186_chosen.csv          slide 186: CV-chosen λ vs naive retrain
+    ├── course_penalty_stability.csv        slides 43–44: L1 vs L2 vs elastic net
     ├── contested_profile.csv               who is contested, and how close to the cut
     ├── run_info.json                       versions, CPU count, reproduction checks
     ├── fig_stability_regimes.png
     ├── fig_stability_vs_C.png
-    └── fig_coefficient_stability.png
+    ├── fig_coefficient_stability.png
+    ├── fig_slide186_frontier.png           ← our version of slide 192
+    └── fig_penalty_stability.png
 ```
 
 ## Source material in the repo
@@ -97,16 +126,17 @@ study/stability-and-recommendation/
 | Notebook | `Recidivism_Project_Submission.ipynb`: cells 36–37 (§8), 43–45, 142–144, 197–204, 205–217 |
 | App | `app.py` Stability tab (lines 272–318), Governance tab (340–351) |
 | Reports | `reports/technical_report.md` (Stability; Recommendation), `reports/presentation_notes.md` (Q&A), `reports/presentation_outline.md` (slides 17–19) |
+| Course deck | `Slides ISAF 2026_2027.pdf` (your Downloads; not committed, since it's course material): §7.1 slides 182–194, §7.2 slides 195–223, guest lecture 41–52, §8.3 slides 263–277 |
 
 ## Still to do
 
-- [ ] **Check against the course slides.** The §7 terminology and page references here come
-      from `docs/PLAN.md`. Once the professor's stability slides are available, align the
-      wording and notation.
+- [x] **Checked against the course slides** (27 Sep): definitions, notation and slide numbers
+      now follow the professor's deck; see 08. Corrections made: "p192" is the
+      Bertsimas–Digalakis frontier, not a C sweep; §7.2 is about LLM randomness.
 - [ ] **Agree Option A or B with the team** (see 06), because of the time budget.
 - [ ] **Ask the team to fix the app's governance tab.** It says "smaller subgroup gaps".
 - [ ] **Fix "14%" on slide 18** and **"all 28 pairs" for Jaccard** in the report and notes.
-- [ ] Rehearse 05 out loud, especially Q7, Q10, Q13, Q14 and Q17.
+- [ ] Rehearse 05 out loud, especially Q7, Q10, Q13, Q14, Q17, Q18 and Q26–Q29.
 
 *Environment for the extras: Python 3.9.6, scikit-learn 1.6.1 and XGBoost 2.1.4 on macOS
 ARM (10 CPUs). The pinned repo environment is scikit-learn 1.7.2 and XGBoost 3.0.5.
