@@ -342,7 +342,7 @@ panel(s, "FPDP → GANG", "Never recorded for women: record-keeping, not behavio
       f"Drop it, refit inside {int(nested_sel * 100)}% of 5 training folds\n\n"
       f"Out of fold: FNR gap {nested_base:+.3f} → {nested_mit:+.3f} (~70% closed), AUC {nested_auc:+.3f}\n\n"
       "Cost: men's FNR +2 pts; selection rates still differ", 9.0, 1.65, 3.95, 5.0, TEAL)
-textbox(s, "Evaluation cohort untouched. A mitigation option for the client, not applied to the recommended model.",
+textbox(s, "Evaluation cohort untouched. Re-evaluated on all four dimensions (A11): proposed as a second pilot arm.",
         1.0, 6.82, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 16)
 
 # ================================================================ P6 · STABILITY + TRADE-OFFS + RECOMMENDATION (2.5 min)
@@ -371,8 +371,8 @@ panel(s, "WHY LOGISTIC", f"Same people: {overlap_share:.0%} overlap with XGBoost
       "More stable than XGBoost on all 28 refit pairs\n\nCoefficients read directly · ~9× faster\n\n"
       "Fairness and calibration: tied — not reasons\n\nReverses if: scores are quoted numerically, or scale makes +12 offers matter",
       8.4, 1.6, 4.5, 5.1, TEAL)
-textbox(s, "Shadow pilot first: no temporal/external validation yet, and no evidence the support programme works.",
-        .8, 6.85, 11.7, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 19)
+textbox(s, "Shadow pilot, with a second arm that drops gang affiliation (A11). No temporal validation yet; no evidence the programme works.",
+        .8, 6.92, 11.7, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 19)
 
 # 19 — App
 s = make_slide(prs); title(s, "The application makes every trade-off testable", "Demo · App")
@@ -386,7 +386,7 @@ textbox(s, "streamlit run app.py   ·   backup: screenshots / recording", 3.2, 6
 s = make_slide(prs)
 textbox(s, "APPENDIX", .72, 2.6, 8, .5, 14, ORANGE, True)
 textbox(s, "Supporting evidence\nfor questions", .72, 3.15, 9, 1.5, 34, WHITE, True)
-textbox(s, "Learning curve · economics · explanation disagreement · surrogate · threshold frontier · age · process · LIME · permutation importance · method overview", .76, 4.95, 9.5, .9, 15, PALE)
+textbox(s, "Learning curve · economics · explanation disagreement · surrogate · threshold frontier · age · process · LIME · permutation importance · method overview · no-gang arm", .76, 4.95, 9.5, .9, 15, PALE)
 
 s = make_slide(prs); title(s, "Which model for which agency size?", "A1 · Learning curve")
 picture(s, FIG / "learning_curve.png", .8, 1.8, 11.7)
@@ -441,6 +441,11 @@ textbox(s, "Same drivers as SHAP and XPER. TabICLv2 was measured on 10 of 29 fie
 s = make_slide(prs); title(s, "Which interpretability method, for which model", "A10 · Method overview")
 picture(s, FIG / "interpretability_matrix.png", 1.3, 1.6, 10.7)
 
+s = make_slide(prs); title(s, "Dropping gang affiliation, re-evaluated on all four dimensions", "A11 · Pilot arm 2")
+picture(s, FIG / "gang_variant_comparison.png", 1.0, 1.6, 11.3)
+textbox(s, "Gender gap closes; stability and drivers barely change; race stays within ±5 pts but flips sign. Cost: AUC −0.014, 27 fewer re-arrests captured.",
+        .8, 6.92, 11.7, .3, 11, ORANGE, True, PP_ALIGN.CENTER)
+
 # ---------------------------------------------------------------- SPEAKER NOTES
 # Timings follow reports/presentation_outline.md: 14:25 of talk across 20 core slides,
 # leaving a buffer in the 15-minute slot. [P1]…[P6] marks who speaks.
@@ -460,13 +465,13 @@ NOTES = {
  13: """[P5 · 8:10 · 45s] Fairness. Our primary metric is FNR: people later re-arrested but not offered support — the real harm here. Race first, the question everyone expects after COMPAS. Base rates are almost equal, so the data does not force a gap. Excluding race guarantees twins get the same score, but race is still recoverable at 0.71 through criminal history. So we audit outcomes, not inputs.""",
  14: """[P5 · 8:55 · 45s] The outcome audit: every race gap is within five points by an equivalence test, and none survives Holm correction. Three caveats: the small gap runs toward MORE support for Black people; the label is recorded arrest, which may carry policing bias; and prediction quality is lower for Black people, AUC 0.72 vs 0.75.""",
  15: """[P5 · 9:40 · 45s] Gender is where we found a problem. Re-arrested women miss support 10 to 12 points more often, in all three models — so it comes from the features. Every model over-predicts women, yet selects them less: with different base rates, calibration and equal FNR cannot both hold. Age shows an even larger gap, but by design — age is a validated risk factor — so it is the client's policy choice; details in the appendix.""",
- 16: """[P5 · 10:25 · 45s] We located the cause with the course's FPDP: gang affiliation, never recorded for women. Dropping it, selected in every one of five training folds, closes about 70% of the gap out of sample for about one AUC point — at the cost of men's FNR rising two points. It is an option for the client, not applied to our recommended model. Over to [P6].""",
+ 16: """[P5 · 10:25 · 45s] We located the cause with the course's FPDP: gang affiliation, never recorded for women. Dropping it, selected in every one of five training folds, closes about 70% of the gap out of sample for about one AUC point — at the cost of men's FNR rising two points. We then re-evaluated the fix on all four dimensions (appendix A11): the gender gap closes, stability and the main drivers barely move, race stays within tolerance, and it costs about 0.014 AUC. So we propose it as a second pilot arm rather than deciding it for the client. Over to [P6].""",
  17: """[P6 · 11:10 · 40s] Stability, in the course's sense: two samples from the same population should give the same model. Eight bootstrap refits, same resamples for all three models. Logistic drifts less than XGBoost on all 28 pairs. Jaccard around 0.77 means about 13% of the selected people change per refit.""",
  18: """[P6 · 11:50 · 50s] At the level of one person, about one decision in seven flips across refits. Referring contested cases to a human raises precision — but WIDENS the gender gap, because women sit at the margin more often. Abstention is not fairness-neutral.""",
- 19: """[P6 · 12:40 · 60s] Reading across the four dimensions: performance is a tie; interpretability and stability favour logistic; fairness gaps are shared by all three. So: logistic for a shadow pilot, XGBoost as challenger. The two select 85% of the same people and the difference in captured re-arrests includes zero. We do NOT claim logistic is fairer or better calibrated. It reverses if the client quotes scores numerically, or operates at a scale where a dozen extra offers matter.""",
+ 19: """[P6 · 12:40 · 60s] Reading across the four dimensions: performance is a tie; interpretability and stability favour logistic; fairness gaps are shared by all three. So: logistic for a shadow pilot, XGBoost as challenger. The two select 85% of the same people and the difference in captured re-arrests includes zero. We do NOT claim logistic is fairer or better calibrated. It reverses if the client quotes scores numerically, or operates at a scale where a dozen extra offers matter. And the pilot runs a second arm without gang affiliation, the field never recorded for women; appendix A11 shows it on all four dimensions.""",
  20: """[P1 · 13:40 · 45s] Demo one person: scores from all three models, the explanation, how many of eight refits select them, then edit an input and watch the score move. If the app fails, switch to the screenshots.
 
-[APPENDIX CUES] A1 learning curve · A2 economics · A3 explanation disagreement · A4 global surrogate · A5 threshold frontier · A6 age · A7 process · A8 LIME · A9 permutation importance · A10 method overview""",
+[APPENDIX CUES] A1 learning curve · A2 economics · A3 explanation disagreement · A4 global surrogate · A5 threshold frontier · A6 age · A7 process · A8 LIME · A9 permutation importance · A10 method overview · A11 no-gang pilot arm""",
 }
 
 for index, slide in enumerate(prs.slides, start=1):
