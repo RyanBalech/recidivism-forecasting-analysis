@@ -107,7 +107,51 @@ def fpdp_focus(attribute: str, features: list[str], out: str) -> None:
     plt.close(fig)
 
 
+def shap_summary() -> None:
+    """SHAP summary (beeswarm) for logistic and XGBoost on the full evaluation cohort (course p159-160).
+
+    Exact explainers (linear / tree), so all 7,807 people are used. One-hot levels are summed back to
+    their raw field. Colour = the raw field's value: meaningful for ordered fields (age band, counts,
+    risk score) and yes/no fields; arbitrary for unordered categories (offence type, education).
+    """
+    import joblib
+    import shap
+
+    from interpretability import shap_for
+    from recidivism.config import MODEL_DIR, pretty
+    from recidivism.modeling import ordinal_encode
+
+    split = load_official_split()
+    X = split.X_test
+    colour = ordinal_encode(X)
+    for col in colour.columns:
+        if not pd.api.types.is_numeric_dtype(colour[col]):
+            cats = sorted(colour[col].dropna().astype(str).unique())
+            colour[col] = colour[col].map({c: i for i, c in enumerate(cats)})
+        colour[col] = colour[col].astype(float).fillna(colour[col].astype(float).median())
+
+    rows = []
+    fig = plt.figure(figsize=(17, 8.6))
+    for i, model in enumerate(["logistic", "xgboost"], start=1):
+        pipe = joblib.load(MODEL_DIR / f"{model}.joblib")
+        values, _ = shap_for(pipe, split.X_train, X, model)
+        values = values[list(X.columns)]
+        for feat, v in values.abs().mean().items():
+            rows.append({"model": model, "feature": feat, "mean_abs_shap": v, "n_people": len(X)})
+        plt.subplot(1, 2, i)
+        shap.summary_plot(values.to_numpy(), colour.to_numpy(), feature_names=[pretty(c) for c in X.columns],
+                          max_display=8, show=False, plot_size=None, color_bar=(i == 2))
+        plt.title(f"{DISPLAY[model]}: SHAP summary, all {len(X):,} people", fontsize=15)
+        plt.xlabel("SHAP value (log-odds): right = raises risk", fontsize=12)
+    fig.tight_layout()
+    fig.savefig(FIGURE_DIR / "shap_summary.png", dpi=180, bbox_inches="tight")
+    plt.close(fig)
+    pd.DataFrame(rows).to_csv(ARTIFACT_DIR / "shap_importance_full.csv", index=False)
+
+
 def main() -> None:
+    sys.path.insert(0, str(ROOT / "scripts"))
+    shap_summary()
     eda_overview()
     attribute_gaps("Race", "Black minus White", "fairness_race_gaps.png")
     attribute_gaps("Gender", "men minus women", "fairness_gender_gaps.png")

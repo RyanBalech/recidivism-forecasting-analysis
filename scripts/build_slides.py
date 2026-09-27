@@ -266,11 +266,11 @@ textbox(s, "Models beat the historical score at every capacity. Dollars are a sc
 # ================================================================ P4 · INTERPRETABILITY (2 min)
 # 9 — Global drivers
 s = make_slide(prs); title(s, "What drives the score", "Interpretability · Global")
-picture(s, FIG / "shap_global.png", .4, 1.7, 8.6)
+picture(s, FIG / "shap_summary.png", .3, 1.75, 8.8)
 card(s, "AGE 23–27 → 48+", f"{age_contrast*100:+.0f} pts", 9.35, 1.9, TEAL, "logistic, average probability change")
 card(s, "GANG AFFILIATION", f"{gang_contrast*100:+.0f} pts", 9.35, 3.5, RED, "recorded 'Yes' vs 'No'")
 card(s, "TOP DRIVERS", "Age · gang · priors", 9.35, 5.1, ORANGE, "same in logistic and XGBoost", size=17)
-textbox(s, "Marginal effects in probability points, not log-odds: the unit a caseworker understands.",
+textbox(s, "Each dot is one person (all 7,807); red = high value of the field. Right = raises risk. Cards: marginal effects in probability points.",
         1.0, 6.85, 11, .3, 11, GREY, True, PP_ALIGN.CENTER); footer(s, 9)
 
 # 10 — Model-agnostic view: PDP/ICE for all three models, and what each model costs to explain
@@ -437,7 +437,7 @@ NOTES = {
  6: """[P3 · 3:00 · 50s] Three families, as the brief requires, each tuned by cross-validation on training data only. Logistic with L1, C chosen by grid search. XGBoost with a 60-draw random search; deeper trees overfit and were rejected. TabICL with 16 ensemble members; gains level off near 8. Six other ML models all land in the same narrow AUC band.""",
  7: """[P3 · 3:50 · 50s] Finding one: performance cannot pick the model. All three within 0.003 AUC. XGBoost beats logistic by 0.0025 on a PAIRED bootstrap — real, but small. Calibration: logistic and XGBoost are indistinguishable from perfect; TabICL's slope is 0.91, significantly below 1 — its probabilities are too extreme.""",
  8: """[P3 · 4:40 · 50s] The client's real question: is this better than the score agencies already have? The historical Georgia score in the data reaches 0.60 AUC; our models reach 0.73, and roughly double the scenario net value at 20% capacity. Caveats in the same breath: it is a historical score, and the dollars are a scenario. Over to [P4].""",
- 9: """[P4 · 5:30 · 40s] What drives the score. Age at release, gang affiliation and prior record, in both models. In probability points: moving from age 23-27 to 48+ lowers predicted risk by about 27 points; a recorded gang affiliation raises it by about 17.""",
+ 9: """[P4 · 5:30 · 40s] What drives the score. This is a SHAP summary for all 7,807 people: each dot is a person, red means a high value of that field, and dots to the right raise risk. Age comes first in both models - young people (blue) sit on the right - then gang affiliation and prior record. Logistic draws straight bars because it is linear; XGBoost spreads out because it picks up interactions. In probability points: moving from age 23-27 to 48+ lowers predicted risk by about 27 points; a recorded gang affiliation raises it by about 17.""",
  10: """[P4 · 6:10 · 40s] Now from the outside, without opening the model. Partial dependence shows the average effect of one feature; the faint individual curves show each person. All three models agree that risk falls with age. This is the only way we can look inside TabICL at all: it has no native attribution. XGBoost can be summarised by a small surrogate tree, but that tree reproduces only 61% of it. Logistic needs none of this: its coefficients are the explanation.""",
  11: """[P4 · 6:50 · 40s] One person, explained by both models. Red raises risk, green lowers it — this is what an appeal would contest. We checked faithfulness: LIME on raw features fits locally about twice as well as before, and all 63 conditions keep their sign across seeds. We quote LIME for direction and SHAP for size.""",
  12: """[P4 · 7:30 · 40s] Last, explaining PERFORMANCE rather than predictions — XPER, from this course. It splits the AUC itself into contributions: an uninformative model gets about 0.47, and each feature adds its share; age alone adds about 0.09. Compared with SHAP and permutation importance, the three methods agree on WHICH features matter but not on their order, because they answer different questions: prediction, loss, performance. So we quote the set, not the rank. Over to [P5].""",

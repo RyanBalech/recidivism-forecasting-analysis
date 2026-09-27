@@ -114,11 +114,11 @@ P2 and P5 back each other up because both deal with proxies and leakage.
 ## P4 · Interpretability (2 min)
 
 ### Slide 9 · Global drivers
-- SHAP global importance.
+- SHAP summary (beeswarm) for logistic and XGBoost on all 7,807 evaluation people: importance and direction in one chart (course p159-160).
 - Logistic effects in probability points:
   - Moving from age 23–27 to 48+ lowers predicted risk by about 27 points. Here age appears as a risk factor, consistent with how we treat it in fairness.
   - A recorded gang affiliation raises predicted risk by about 17 points.
-- Sources: [shap_global.png](../artifacts/figures/shap_global.png), [marginal_effects.png](../artifacts/figures/marginal_effects.png), [probability_contrasts.csv](../artifacts/probability_contrasts.csv)
+- Sources: [shap_summary.png](../artifacts/figures/shap_summary.png), [shap_importance_full.csv](../artifacts/shap_importance_full.csv), [marginal_effects.png](../artifacts/figures/marginal_effects.png), [probability_contrasts.csv](../artifacts/probability_contrasts.csv)
 
 ### Slide 10 · Looking from outside: PDP/ICE for all three models
 - PDP (average effect) and ICE (one curve per person) for age, prior felony arrests and the Georgia score, for all three models. All agree risk falls with age.
