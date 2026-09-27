@@ -29,6 +29,40 @@ P2 and P5 back each other up because both deal with proxies and leakage.
 - **Gender is presented openly, as the problem we found and worked on.** All three models share the gap, so it comes from the feature set rather than from any one model. It also produced our strongest technical work: the missingness leak, the FPDP diagnosis and the nested mitigation.
 - **Fairness comes before Stability.** The stability section's key finding is that abstention widens the gender FNR gap, and that only makes sense once the audience knows what the gap is.
 
+### Open decision: with or without gang affiliation as the primary model
+
+**Status (27 Sep): team decision pending.** The current deck recommends the logistic model *with* gang affiliation and proposes the no-gang model as a second pilot arm (slides 16 and 19, evidence in A11). If the team makes the **no-gang model primary**, use the storyline below. Slides 1–15 and 17–18 do not change.
+
+**Why the earlier slides can stay: the story becomes a closed loop.**
+Detect (15: re-arrested women miss support more often) → cause (16: FPDP points to `Gang_Affiliated`, Cramér's V = 1.0 with gender) → fix (16: drop the field; nested 5-fold, gap closes ~70% out of fold) → **re-check that the fix creates no new problem** (new slide, all four dimensions) → recommend (19).
+This is the course's detect → explain → mitigate, plus a re-check step. Slides 1–15 describe the baseline *in which we found the problem*, so their numbers stay correct as the starting point. Slide 9 showing gang affiliation as the second-strongest driver sets up why dropping it has a cost.
+
+| Slide | Change |
+|---|---|
+| 16 | Last line: from "proposed as a second pilot arm (A11)" to "we then re-checked the full impact of dropping it on all four dimensions". |
+| **New core slide, between 18 and 19** | "Re-check: does the fix create new problems?" The with vs without gang comparison moves from A11 into the core. It sits after Stability so all four dimensions are introduced before they are re-checked. |
+| 19 | Recommendation becomes: L1 logistic **without gang affiliation** for the shadow pilot, XGBoost (no gang) as challenger. Update the trade-off matrix or say which variant it shows. |
+| A11 | Becomes a backup of the new slide, or is removed. |
+| Speaker notes | Rewrite 16 and 19; write notes for the new slide. |
+
+**What the re-check slide shows** (logistic, evaluation cohort, [gang_variant_eval.csv](../artifacts/gang_variant_eval.csv)):
+
+| Dimension | With gang | Without gang | Reading |
+|---|---:|---:|---|
+| ROC AUC | 0.730 | 0.715 | −0.014, the price of the fix |
+| Net value at 20% / captured re-arrests | $5.045M / 1,285 | $4.775M / 1,258 | still far above the historical score ($2.725M); break-even effect ≈12% vs 15% unchanged |
+| Calibration slope | 0.999 | 0.978 | still close to 1 |
+| Gender FNR gap (M − F) | −0.096 | **0.000** | closed; equal-opportunity p 0.00003 → 0.995 |
+| Race FNR gap (B − W) | −0.005 | +0.026 | still within ±5 pts (TOST) but **flips sign**; CI [0.000, 0.054] |
+| Stability: mean \|Δp\| / top-20% Jaccard | 0.032 / 0.77 | 0.032 / 0.75 | barely changes |
+
+**Prepare for Q&A if this option is chosen:**
+- **Who gets support changes.** Jaccard 0.61 against the with-gang model: about a quarter of support places go to different people. This is intended (the gender selection gap falls from 0.095 to 0.039), but say it openly.
+- **Gender statistical parity is still rejected**, and women's over-prediction worsens slightly (mean score 0.522 → 0.538 vs 0.454 observed).
+- **Logistic still beats XGBoost within the no-gang variant:** more stable (Jaccard 0.75 vs 0.72), gender FNR gap 0.000 vs −0.012, AUC 0.715 vs 0.719. The logistic-over-XGBoost argument on slide 19 survives.
+- **Slides 7–8 and 17–18 show with-gang numbers.** The new slide is the only place the deployed model's numbers appear. The slide 18 abstention result was not recomputed for the no-gang model.
+- **Timing:** one more core slide (~40 s) pushes the talk past 14:25; revisit if needed.
+
 ---
 
 ## P1 · Intro + EDA (1.5 min)
@@ -218,7 +252,7 @@ P2 and P5 back each other up because both deal with proxies and leakage.
   - The two models select 85% of the same people (Jaccard 0.849); only 254 people differ. The difference in re-arrests captured has a CI that includes zero.
   - Logistic is more stable, directly interpretable and about 9× faster.
   - Calibration and fairness are tied, so neither is a reason to choose.
-  - The pilot runs a **second arm without gang affiliation** (never recorded for women); evidence in A11. Team decision pending on whether to make it the primary configuration.
+  - The pilot runs a **second arm without gang affiliation** (never recorded for women); evidence in A11. Team decision pending on whether to make it the primary configuration; see "Open decision: with or without gang affiliation" near the top for the storyline if it becomes primary.
 - What would reverse it: the client values calibration more than direct interpretability (for example, scores quoted numerically to supervisees), or operates at a scale where a few extra captured events matter.
 - Limits, in one line: the evaluation set was inspected repeatedly during development, there is no temporal or external validation, and there is no evidence yet that the support programme helps.
 - ⚠️ [tradeoff_matrix.png](../artifacts/figures/tradeoff_matrix.png) contains an "Age FNR gap" row. Regenerate it without that row.
@@ -255,6 +289,7 @@ P2 and P5 back each other up because both deal with proxies and leakage.
 - [x] Readable FPDP for slide 15 and appendix A6: `fpdp_gender_focus.png`, `fpdp_age_focus.png` (3 panels instead of 29).
 - [x] Deck rebuilt to follow this outline: 20 core slides + 7 appendix, speaker notes with [P1]-[P6] owner and timing.
 - [x] Age decision (team, 26 Sep): one line on slide 14 plus appendix A6; the age row stays in the trade-off matrix.
+- [ ] **Team decision:** with or without gang affiliation as the primary model (see "Open decision" near the top). If without: rewrite slides 16 and 19, add the re-check slide before 19, update the notes.
 - [ ] Open the deck in PowerPoint and check every slide (it was checked with a layout preview, not rendered in PowerPoint).
 - [ ] Record a backup video of the app demo.
 - [ ] Everyone reads the Q&A section of [presentation_notes.md](presentation_notes.md).
