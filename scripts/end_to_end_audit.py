@@ -181,13 +181,12 @@ def main():
             if not np.isclose(part[metric].mean(), stability.loc[name, metric], atol=5.1e-5):
                 raise ValueError(f"Stale stability summary: {name}/{metric}")
     submission_notebook = ROOT / "Recidivism_Project_Submission.ipynb"
-    extended_notebook = ROOT / "notebooks/extended_artifact_review.ipynb"
     slides_path = ROOT / "reports/ISAF_Recidivism_Presentation.pptx"
-    for path in [submission_notebook, extended_notebook, slides_path]:
+    for path in [submission_notebook, slides_path]:
         if not path.is_file() or path.stat().st_size == 0:
             raise ValueError(f"Missing deliverable: {path}")
     notebook_counts = {}
-    for path in [submission_notebook, extended_notebook]:
+    for path in [submission_notebook]:
         notebook = json.loads(path.read_text(encoding="utf-8"))
         code_cells = [c for c in notebook["cells"] if c["cell_type"] == "code"]
         if any(c["execution_count"] is None or any(o["output_type"] == "error" for o in c["outputs"])
@@ -210,20 +209,16 @@ def main():
         if decoded != original or record["sha256"] != hashlib.sha256(original).hexdigest():
             raise ValueError(f"Submission notebook lacks current embedded source data: {filename}")
     markdown_cells = [c for c in submission["cells"] if c["cell_type"] == "markdown"]
-    appendix_present = any("# Appendix — complete earlier project review" in "".join(c["source"])
-                           for c in markdown_cells)
-    embedded_figures = sum(len(c.get("attachments", {})) for c in markdown_cells)
-    historical_code_listings = sum("Earlier analysis code cell" in "".join(c["source"])
-                                   for c in markdown_cells)
-    if not appendix_present or embedded_figures < 17 or historical_code_listings != notebook_counts[extended_notebook.name]:
-        raise ValueError("Submission notebook is missing earlier analysis content")
+    if any(c.get("attachments") for c in markdown_cells):
+        raise ValueError("Submission notebook contains detached image attachments")
+    if any("Appendix — complete earlier project review" in "".join(c["source"])
+           or "Earlier analysis code cell" in "".join(c["source"])
+           for c in markdown_cells):
+        raise ValueError("Submission notebook still contains the superseded snapshot appendix")
     from pptx import Presentation
     report["deliverables"] = {"submission_notebook": submission_notebook.name,
                               "executed_code_cells": notebook_counts[submission_notebook.name],
-                              "extended_notebook": str(extended_notebook.relative_to(ROOT)),
-                              "extended_executed_code_cells": notebook_counts[extended_notebook.name],
-                              "embedded_earlier_figures": embedded_figures,
-                              "historical_code_listings": historical_code_listings,
+                              "detached_image_attachments": 0,
                               "embedded_source_csvs": len(embedded_data_files),
                               "slides": len(Presentation(slides_path).slides)}
     report["checks_passed"] = ["original release and preprocessing boundaries", "prediction ID/label alignment",
@@ -231,7 +226,7 @@ def main():
                                "merged fairness point estimates", "paired stability summaries", "executed notebook and readable slide deck"]
     inputs = [ARTIFACT_DIR / name for name in ["test_predictions.csv", "model_metrics.csv", "fairness_inference.csv"]]
     inputs += list((ARTIFACT_DIR / "models").glob("*.joblib"))
-    inputs += [submission_notebook, extended_notebook, slides_path,
+    inputs += [submission_notebook, slides_path,
                ARTIFACT_DIR / "stability_pairs.csv", ARTIFACT_DIR / "stability_summary.csv"]
     report["input_sha256"] = {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in inputs}
     report["source_sha256"] = {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest()

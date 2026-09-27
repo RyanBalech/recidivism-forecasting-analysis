@@ -92,8 +92,7 @@ persisting even with the age field fixed.
 ## Repository map
 
 ```
-Recidivism_Project_Submission.ipynb   one submission notebook: executable analysis plus embedded earlier evidence
-notebooks/extended_artifact_review.ipynb  source snapshot used to rebuild the appendix
+Recidivism_Project_Submission.ipynb   one executable A–Z submission notebook
 app.py                                Streamlit client lab (6 tabs)
 src/recidivism/                       data loading, modelling, metrics
 scripts/                              analysis pipeline, one concern per file
@@ -112,8 +111,6 @@ in its own cells. Before training, a short decision section compares encoding,
 Logistic Regression grid search, XGBoost randomized search and rejected complexity
 experiments, and TabICL ensemble sizes using embedded historical tuning tables.
 It explicitly identifies the missing original XGBoost trial log and validation limits.
-The appendix embeds every earlier deep-dive narrative, table and figure
-in the same file; its historical project-code listings are reference text and do not run.
 The `.ipynb` is the only repository file needed to read or rerun the analysis;
 Python packages must be installed, and TabICL may download its checkpoint on first use.
 The course also requires the slide deck and interactive app as separate deliverables.
@@ -132,7 +129,7 @@ scikit-learn matches the pinned version, since saved `.joblib` models load only 
 | Fairness | `fairness_audit`, `fairness_interpretability`, `mitigation_nested`, `proxy_inference_audit`, `race_ab_test` |
 | Stability | `stability_structural`, `individual_stability` |
 | Validation | `calibration_tests`, `validate_project`, `end_to_end_audit`, `accuracy_review` |
-| Deliverables | `build_standalone_notebook`, `build_notebook` (extended artifact review), `build_slides`, `tradeoff_matrix`, `refresh_readme` |
+| Deliverables | `build_standalone_notebook`, `build_slides`, `tradeoff_matrix`, `refresh_readme` |
 
 ---
 

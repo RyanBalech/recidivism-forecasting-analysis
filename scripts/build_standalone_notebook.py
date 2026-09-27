@@ -8,7 +8,6 @@ import argparse
 import base64
 import csv
 import hashlib
-import html
 import json
 import os
 import tempfile
@@ -168,52 +167,6 @@ def load_nij_csv(name):
     return pd.read_csv(io.BytesIO(data))
 
 print('Three embedded NIJ CSVs found; each is SHA-256 checked when loaded.')""")
-
-
-def append_extended_evidence(notebook: nbf.NotebookNode) -> None:
-    """Embed the earlier notebook's narrative, source and outputs in one file.
-
-    The appendix consists only of markdown cells. Historical project-code calls are
-    visible as collapsed reference text, never executed by the submission notebook.
-    Figures are notebook attachments, so they remain visible without artifact paths.
-    """
-    if any(c.cell_type == "markdown" and c.source.startswith("# Appendix — complete earlier project review")
-           for c in notebook.cells):
-        return
-    previous_path = ROOT / "notebooks/extended_artifact_review.ipynb"
-    if not previous_path.is_file():
-        raise FileNotFoundError(f"Build the extended review first: {previous_path}")
-    previous = nbf.read(previous_path, as_version=4)
-    notebook.cells.append(md("""# Appendix — complete earlier project review
-
-The sections below preserve the **earlier 94-cell notebook** in this same file: its narrative, code listings, tables and figures. These are published exploratory results. The historical code is collapsed as reference text because it calls repository modules and saved artifacts; it is not executed when you run this notebook. The course workflow above is the independently executable analysis from raw NIJ CSVs. Embedded figures and tables remain visible even without the repository's `artifacts/` folder."""))
-    for cell_index, old in enumerate(previous.cells):
-        if cell_index == 0:
-            continue  # the old title is redundant inside this appendix
-        if old.cell_type == "markdown":
-            notebook.cells.append(md(old.source))
-            continue
-        if old.cell_type != "code":
-            continue
-        escaped = html.escape(old.source)
-        notebook.cells.append(md(
-            f"<details><summary>Earlier analysis code cell {cell_index} (reference)</summary>"
-            f"<pre><code>{escaped}</code></pre></details>"
-        ))
-        for output_index, output in enumerate(old.outputs):
-            if output.output_type == "stream":
-                notebook.cells.append(md(f"```text\n{output.text}\n```"))
-                continue
-            data = getattr(output, "data", {})
-            if "image/png" in data:
-                filename = f"earlier_figure_{cell_index}_{output_index}.png"
-                figure = md(f"![Earlier analysis figure](attachment:{filename})")
-                figure.attachments = {filename: {"image/png": data["image/png"]}}
-                notebook.cells.append(figure)
-            elif "text/html" in data:
-                notebook.cells.append(md(str(data["text/html"])))
-            elif "text/plain" in data:
-                notebook.cells.append(md(f"```text\n{data['text/plain']}\n```"))
 
 
 def main() -> None:
@@ -817,7 +770,7 @@ The fairness gaps are material, particularly for women who are later re-arrested
 
 **Reproduction notes.** Notebook functions live above the cells that call them. The three original CSVs are embedded above, so no other repository file is needed to read or rerun this notebook. Installed public Python packages and TabICL's model checkpoint are still required; a first checkpoint download may need internet access. Numerical fit times and the final digits of XGBoost/TabICL outputs may vary by hardware and package version.
 
-**What follows?** The appendix in this same notebook preserves the previous deep-dive tables and figures: estimator sweep, learning curve, incumbent benchmark, XPER, explanation agreement, FPDP/fairness frontier, proxy recovery, individual stability/abstention and detailed calibration tests. Those historical outputs are embedded snapshots with their earlier code visible as collapsed reference text. The main course analysis above is fully executable from raw CSVs without project functions."""),
+This is the end of the A–Z analysis. Every displayed chart and table above is produced by a visible executable cell in this notebook."""),
     ]
     nb.metadata["recidivism_embedded_csvs"] = embedded_data_metadata()
     nb.cells.insert(3, embedded_data_cell())
@@ -837,7 +790,6 @@ The fairness gaps are material, particularly for women who are later re-arrested
         else:
             os.environ["RECIDIVISM_NOTEBOOK_BUILD_SOURCE"] = previous_source
         temporary_path.unlink(missing_ok=True)
-    append_extended_evidence(nb)
     nbf.write(nb, OUT)
     print(OUT)
 
