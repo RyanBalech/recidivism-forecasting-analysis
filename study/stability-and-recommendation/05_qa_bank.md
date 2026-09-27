@@ -201,6 +201,16 @@ sign-stable. Who gets selected is the same with all three (Jaccard 0.77)."**
 **"We move a fraction of a point left on predictive performance and gain on
 interpretability, stability and frugality. On fairness the models don't separate."**
 
+**Q32. Your notebook says Jaccard 0.84 for logistic; your slide says 0.77. Which is right?**
+**"Both. They answer different questions."**
+- The notebook (§8, three refits) compares each refit with the **original** model, which
+  sits at the centre, so overlaps are higher.
+- The slide (8 refits) compares refits **with each other**, which is what a retrain does
+  to the people selected.
+- The notebook's "Reading the stability results" cell sets the two side by side.
+- Logistic beats XGBoost in both. TabICL ranks last against its own original but ties
+  logistic between refits; we didn't isolate why.
+
 ## Traps: things *not* to say
 
 - ❌ "Logistic is more stable than every model" → only more than XGBoost; it ties with TabICL on selection.

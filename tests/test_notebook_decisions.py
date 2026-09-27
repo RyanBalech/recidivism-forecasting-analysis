@@ -57,3 +57,40 @@ def test_submission_has_current_decisions_immediately_before_training(builder):
     training = next(i for i, cell in enumerate(notebook.cells)
                     if cell.cell_type == "markdown" and cell.source.startswith("## 5. Preprocess and train"))
     assert notebook.cells[training - 1].source == builder["modeling_decisions_cell"]().source
+
+
+def test_stability_reading_matches_saved_audit(builder):
+    text = builder["stability_reading_cell"]().source
+    for expected in ("| Logistic | 0.0322 | 0.7725 | 12.8% |", "| XGBoost | 0.0351 | 0.7468 | 14.5% |",
+                     "| TabICLv2 | 0.0350 | 0.7758 | 12.6% |", "**28 of 28**", "**26 of 28**",
+                     "**12.8%** of decisions are contested", "from 0.822 to 0.846",
+                     "from −0.090 to −0.119", "47% of the 118 women", "30% of the 1,490 men"):
+        assert expected in text
+    assert "not recomputed by this notebook" in text
+
+
+def test_stability_refresh_is_idempotent_and_preserves_code_outputs(builder):
+    code = nbf.v4.new_code_cell("stability=1", execution_count=7,
+                                outputs=[nbf.v4.new_output("stream", name="stdout", text="refits\n")])
+    notebook = nbf.v4.new_notebook(cells=[nbf.v4.new_markdown_cell(builder["STABILITY_HEADING"] + "\n\ntext"),
+                                        code, nbf.v4.new_markdown_cell("## 9. Fairness at the actual support rule")])
+    notebook.metadata["recidivism_embedded_csvs"] = {"preserve": "payload"}
+    original_code = copy.deepcopy(code)
+    original_metadata = copy.deepcopy(notebook.metadata)
+    refresh = builder["refresh_stability_reading"]
+    refresh(notebook)
+    refresh(notebook)
+    assert len(notebook.cells) == 4
+    assert notebook.cells[1] == original_code
+    assert notebook.cells[2].source.startswith(builder["STABILITY_READING_HEADING"])
+    assert notebook.cells[3].source.startswith("## 9.")
+    assert notebook.metadata == original_metadata
+    nbf.validate(notebook)
+
+
+def test_submission_interprets_stability_right_after_its_code(builder):
+    notebook = nbf.read(ROOT / "Recidivism_Project_Submission.ipynb", as_version=4)
+    heading = next(i for i, cell in enumerate(notebook.cells)
+                   if cell.cell_type == "markdown" and cell.source.startswith(builder["STABILITY_HEADING"]))
+    assert notebook.cells[heading + 1].cell_type == "code"
+    assert notebook.cells[heading + 2].source == builder["stability_reading_cell"]().source

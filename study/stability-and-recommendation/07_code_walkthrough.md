@@ -71,12 +71,11 @@ noise from algorithm noise. The extras measure the seed separately.
 | Cells | Content |
 |---|---|
 | 36–37 | **§8 Stability.** The *self-contained* version: **3** bootstrap draws, each refit compared with the **original** model. It gives Jaccard 0.84 / 0.82 / 0.78, higher than the deck's 0.77 / 0.75 / 0.78 because it compares refits with the original, not with each other. |
-| 43–44 | Four-dimensional comparison table |
-| 45 | §10 Recommendation and limits |
-| 142–144 | Appendix: stability summary (the deck's numbers) plus the replaced share (1 − J)/(1 + J) |
-| 197–204 | Appendix: one-person stability and the abstention table |
-| 205–216 | Appendix: "Testing the comparison instead of asserting it" (calibration, captured events, gender gap) |
-| 217 | Appendix: the full recommendation with the counter-case |
+| **38** | **"Reading the stability results"**: interprets §8 and reconciles it with the deck. It gives the paired 8-refit table (0.7725 / 0.7468 / 0.7758), 28/28 and 26/28, per-person contested shares and the abstention result (0.822 → 0.846, −0.090 → −0.119). It's generated from the stability artifacts by `scripts/build_standalone_notebook.py` (`--refresh-stability`). |
+| 44–45 | Four-dimensional comparison table |
+| 46 | §10 Recommendation and limits |
+
+**Changed on 27 Sep (Ryan, commit `a26ef45`).** The old appendix (cells 46–223: the deck's 8-refit numbers, one-person stability, abstention, paired calibration tests) was removed, and the notebook is now 25 executed code cells. Cell 38 was added on the `ayush-stability` branch so that slides 17–18 are again backed by the notebook. The detailed evidence lives in `artifacts/` and `scripts/`.
 
 ## 7.6 Where it appears in the app (`app.py`)
 

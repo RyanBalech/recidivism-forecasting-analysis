@@ -122,6 +122,94 @@ def refresh_modeling_decisions(notebook: nbf.NotebookNode) -> None:
     notebook.cells.insert(training, modeling_decisions_cell())
 
 
+STABILITY_HEADING = "## 8. Stability under training resampling"
+STABILITY_READING_HEADING = "### Reading the stability results"
+
+
+def stability_reading_cell() -> nbf.NotebookNode:
+    """Interpret section 8 and reconcile it with the repository's eight-refit audit.
+
+    The notebook's own check compares three refits with each original fit; the deck
+    quotes the paired eight-refit audit, which compares refits with each other and adds
+    per-person stability and abstention. Numbers come from the saved audit artifacts.
+    """
+    def records(relative):
+        with (ROOT / relative).open(encoding="utf-8", newline="") as handle:
+            return list(csv.DictReader(handle))
+
+    def signed(value):
+        return f"{value:+.3f}".replace("-", "−")
+
+    summary = {r["model"]: r for r in records("artifacts/stability_summary.csv")}
+    if {int(float(r["refits"])) for r in summary.values()} != {8}:
+        raise ValueError("Update the narrative: the stability audit no longer uses eight refits per model")
+    rows = []
+    for key, label in (("logistic", "Logistic"), ("xgboost", "XGBoost"), ("tabicl", "TabICLv2")):
+        drift, jaccard = float(summary[key]["mean_abs_prob_diff"]), float(summary[key]["top20_jaccard"])
+        rows.append((label, drift, jaccard, (1 - jaccard) / (1 + jaccard)))
+
+    pairs = records("artifacts/stability_pairs.csv")
+    logit = {(r["refit_i"], r["refit_j"]): r for r in pairs if r["model"] == "logistic"}
+    xgb = {(r["refit_i"], r["refit_j"]): r for r in pairs if r["model"] == "xgboost"}
+    drift_wins = sum(float(logit[k]["mean_abs_prob_diff"]) < float(xgb[k]["mean_abs_prob_diff"]) for k in logit)
+    jaccard_wins = sum(float(logit[k]["top20_jaccard"]) > float(xgb[k]["top20_jaccard"]) for k in logit)
+    if drift_wins <= len(logit) / 2:
+        raise ValueError("Update the narrative: logistic no longer drifts less than XGBoost in most refit pairs")
+
+    person = {r["model"]: r for r in records("artifacts/individual_stability_summary.csv")}
+    curve = [r for r in records("artifacts/abstention_curve.csv") if r["model"] == "logistic"]
+    decide_all = max(curve, key=lambda r: int(r["max_contested_votes"]))
+    unanimous = next(r for r in curve if int(r["max_contested_votes"]) == 0)
+    gap_all, gap_unanimous = float(decide_all["fnr_gap_gender"]), float(unanimous["fnr_gap_gender"])
+    if abs(gap_unanimous) <= abs(gap_all):
+        raise ValueError("Update the narrative: abstention no longer widens the gender FNR gap")
+
+    people = [r for r in records("artifacts/individual_stability.csv") if r["model"] == "logistic"]
+    refits = int(people[0]["n_refits"])
+    def contested(r):
+        return r["decision_unanimous"] != "True"
+    selected = {g: [r for r in people if r["Gender"] == g and int(r["times_selected"]) >= refits / 2] for g in ("F", "M")}
+    margin = {g: sum(map(contested, rows_g)) / len(rows_g) for g, rows_g in selected.items()}
+    order = sorted(range(len(people)), key=lambda i: float(people[i]["mean_probability"]))
+    percentile = {i: (rank + 1) / len(people) for rank, i in enumerate(order)}
+    contested_ix = [i for i, r in enumerate(people) if contested(r)]
+    within = lambda width: sum(abs(percentile[i] - 0.8) <= width for i in contested_ix) / len(contested_ix)
+
+    table = "\n".join(f"| {label} | {drift:.4f} | {jaccard:.4f} | {replaced:.1%} |"
+                      for label, drift, jaccard, replaced in rows)
+    cell = md(f"""{STABILITY_READING_HEADING}
+
+**What the table above measures.** Three bootstrap refits per model, each compared with *that model's original fit* on all training rows. Because the original sits near the centre of its refits, these overlaps are expected to be higher than overlaps between two refits.
+
+**The repository's expanded audit** (`scripts/stability_structural.py`, `scripts/individual_stability.py`; the figures quoted in the presentation) uses **eight** bootstrap resamples shared by all three models, fixes each model's seed, and compares refits **with each other** (28 pairs per model):
+
+| Model | Mean \\|Δp\\| between refits | Top-20% Jaccard between refits | Selected people replaced per refit, (1 − J)/(1 + J) |
+|---|---:|---:|---:|
+{table}
+
+Logistic regression has lower probability drift than XGBoost in **{drift_wins} of {len(logit)}** refit pairs and a more stable selected set in **{jaccard_wins} of {len(logit)}**. The pairs share refits, so read this as a consistent tendency rather than a significance test. Between refits, TabICL's selected set is about as stable as logistic's while its scores drift about as much as XGBoost's. A Jaccard of {rows[0][2]:.2f} means about {rows[0][3]:.0%} of the people offered support change, not {1 - rows[0][2]:.0%}.
+
+**Stability for one person.** Keeping every person's {refits} refit scores shows how many refits would select them. For logistic regression, **{float(person['logistic']['share_contested']):.1%}** of decisions are contested, meaning some refits select the person and others do not ({float(person['xgboost']['share_contested']):.1%} for XGBoost). They lie at the margin: {within(0.10):.0%} of contested people are within 10 percentile points of the 20% cut, and {within(0.20):.0%} within 20. Of the people most refits select, {float(person['logistic']['contested_share_of_selected']):.1%} are contested.
+
+Referring contested cases to human review keeps {float(unanimous['coverage']):.1%} of decisions automatic and raises precision from {float(decide_all['precision_at_capacity']):.3f} to {float(unanimous['precision_at_capacity']):.3f}. It also **widens** the men-minus-women FNR gap from {signed(gap_all)} to {signed(gap_unanimous)}: {margin['F']:.0%} of the {len(selected['F'])} women selected are contested, against {margin['M']:.0%} of the {len(selected['M']):,} men. Abstaining when uncertain is therefore not fairness-neutral. Here "deciding everyone" means the majority vote of the {refits} refits, which is why the baseline gap differs slightly from the single fitted model in section 9.
+
+These audit figures are recorded results of the repository scripts, not recomputed by this notebook. TabICL is left out of the per-person analysis because its eight refits need a GPU.""")
+    cell.metadata["recidivism_stability_reading"] = True
+    cell.id = "stability-reading"  # fixed id, so repeated refreshes are byte-identical
+    return cell
+
+
+def refresh_stability_reading(notebook: nbf.NotebookNode) -> None:
+    """Insert or replace only the stability interpretation; retain all executed outputs."""
+    notebook.cells = [c for c in notebook.cells
+                      if not (c.cell_type == "markdown" and c.source.startswith(STABILITY_READING_HEADING))]
+    heading = next(i for i, c in enumerate(notebook.cells)
+                   if c.cell_type == "markdown" and c.source.startswith(STABILITY_HEADING))
+    if notebook.cells[heading + 1].cell_type != "code":
+        raise ValueError("Expected the stability code cell directly after the section 8 heading")
+    notebook.cells.insert(heading + 2, stability_reading_cell())
+
+
 def embedded_data_metadata() -> dict:
     """Keep compressed NIJ inputs inside the notebook, away from visible code."""
     files = {}
@@ -775,6 +863,7 @@ This is the end of the A–Z analysis. Every displayed chart and table above is 
     nb.metadata["recidivism_embedded_csvs"] = embedded_data_metadata()
     nb.cells.insert(3, embedded_data_cell())
     refresh_modeling_decisions(nb)
+    refresh_stability_reading(nb)
     with tempfile.NamedTemporaryFile(prefix="_submission_build_", suffix=".ipynb",
                                      dir=ROOT, delete=False) as temporary:
         temporary_path = Path(temporary.name)
@@ -798,12 +887,17 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--refresh-decisions", action="store_true",
                         help="Update only the tuning narrative, preserving existing fits and outputs")
+    parser.add_argument("--refresh-stability", action="store_true",
+                        help="Update only the stability interpretation, preserving existing fits and outputs")
     args = parser.parse_args()
-    if args.refresh_decisions:
+    if args.refresh_decisions or args.refresh_stability:
         notebook = nbf.read(OUT, as_version=4)
-        refresh_modeling_decisions(notebook)
+        if args.refresh_decisions:
+            refresh_modeling_decisions(notebook)
+        if args.refresh_stability:
+            refresh_stability_reading(notebook)
         nbf.validate(notebook)
         nbf.write(notebook, OUT)
-        print(f"Updated modeling decisions only: {OUT}")
+        print(f"Updated narrative only: {OUT}")
     else:
         main()

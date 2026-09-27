@@ -123,7 +123,7 @@ study/stability-and-recommendation/
 | Scripts | `scripts/stability_structural.py`, `scripts/individual_stability.py`, `scripts/tradeoff_matrix.py`, `scripts/calibration_tests.py`, `scripts/incumbent_benchmark.py`, `scripts/learning_curve.py` |
 | Artifacts | `artifacts/stability_*.csv/json`, `artifacts/individual_stability*.csv`, `artifacts/abstention_curve.csv`, `artifacts/selected_set_overlap.csv`, `artifacts/tradeoff_matrix.md`, `artifacts/incumbent_*.csv` |
 | Figures | `artifacts/figures/structural_stability.png`, `individual_stability.png`, `tradeoff_matrix.png` |
-| Notebook | `Recidivism_Project_Submission.ipynb`: cells 36–37 (§8), 43–45, 142–144, 197–204, 205–217 |
+| Notebook | `Recidivism_Project_Submission.ipynb`: cells 36–37 (§8 code), **38 (stability reading, which reconciles with the deck)**, 44–45 (trade-off table), 46 (recommendation). The old appendix was removed on `main` on 27 Sep. |
 | App | `app.py` Stability tab (lines 272–318), Governance tab (340–351) |
 | Reports | `reports/technical_report.md` (Stability; Recommendation), `reports/presentation_notes.md` (Q&A), `reports/presentation_outline.md` (slides 17–19) |
 | Course deck | `Slides ISAF 2026_2027.pdf` (your Downloads; not committed, since it's course material): §7.1 slides 182–194, §7.2 slides 195–223, guest lecture 41–52, §8.3 slides 263–277 |
@@ -133,6 +133,12 @@ study/stability-and-recommendation/
 - [x] **Checked against the course slides** (27 Sep): definitions, notation and slide numbers
       now follow the professor's deck; see 08. Corrections made: "p192" is the
       Bertsimas–Digalakis frontier, not a C sweep; §7.2 is about LLM randomness.
+- [x] **Notebook stability evidence restored** (27 Sep, this branch). `main`'s cleanup
+      removed the appendix that backed slides 17–18. The notebook now has cell 38, "Reading
+      the stability results", generated from the artifacts, and all executed outputs are
+      untouched.
+- [ ] **After this branch is merged:** someone reruns `python scripts/end_to_end_audit.py`
+      (the GPU box), so `artifacts/end_to_end/audit.json` records the new notebook hash.
 - [ ] **Agree Option A or B with the team** (see 06), because of the time budget.
 - [ ] **Ask the team to fix the app's governance tab.** It says "smaller subgroup gaps".
 - [ ] **Fix "14%" on slide 18** and **"all 28 pairs" for Jaccard** in the report and notes.

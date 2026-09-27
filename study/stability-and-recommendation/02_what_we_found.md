@@ -153,11 +153,10 @@ Source: `artifacts/stability.json`.
 
 | Where | Says | The data says | What to say |
 |---|---|---|---|
-| Report, notes, notebook recommendation | Logistic's stability is better "on every one of the 28 pairs" for **both** drift and Jaccard | Drift 28/28, **Jaccard 26/28** | "Lower drift on all 28 pairs, a more stable selected set on 26 of 28" |
+| Report, notes | Logistic's stability is better "on every one of the 28 pairs" for **both** drift and Jaccard | Drift 28/28, **Jaccard 26/28** | "Lower drift on all 28 pairs, a more stable selected set on 26 of 28" |
 | Slide 18 | "14% of decisions flip" | 12.8% (logistic), 14.6% (XGBoost) | "About 13% for logistic, 15% for XGBoost; roughly one in seven" |
 | Slide 18 baseline | Gender FNR gap −0.090, precision 0.822 | The published fit has **−0.096** and **0.823** | The abstention baseline uses the *majority vote of 8 refits*, not the published fit. Both are correct for their definitions. |
-| Notebook §8 (cell 37) | Jaccard 0.84 / 0.82 / 0.78 | The deck has 0.77 / 0.75 / 0.78 | The notebook compares 3 refits **with the original model** (trained on all the data). The deck compares refits **with each other**. Refit-vs-original is higher because the original is the "centre". Different questions, same ordering. |
-| Notebook cell 204 | "11.9% of women" contested | 12.1% | Use 12.1% |
+| Notebook §8 (cell 37) | Jaccard 0.84 / 0.82 / 0.78 | The deck has 0.77 / 0.75 / 0.78 | The notebook compares 3 refits **with the original model** (trained on all the data). The deck compares refits **with each other**. Refit-vs-original is higher because the original is the "centre". Logistic > XGBoost in both. **TabICL differs:** last in the notebook (0.78), but level with logistic between refits (0.776 vs 0.773). The cause isn't isolated. Notebook cell 38 now explains all of this. |
 | App, governance tab | Logistic has "smaller subgroup gaps" | Withdrawn: the gender-gap difference is not significant (−0.013, CI −0.036 to +0.011) | Don't repeat it. The text should be fixed before the demo; see the note in the README. |
 | Report vs CSV | Captured re-arrest difference CI "−30 to +1.5" | `calibration_paired_tests.csv`: −29 to 0 | Either way it includes 0. Pick one version and use it consistently. |
 
