@@ -27,9 +27,11 @@ It doesn't change the team pipeline, `artifacts/` or the deck.
 | 6 | [06_slide_plan_and_script.md](06_slide_plan_and_script.md) | 15 min | Option A (+1 slide) or B (appendix), word-for-word script, timings |
 | 7 | [07_code_walkthrough.md](07_code_walkthrough.md) | 15 min | Which script, notebook cell and app tab does what, with line numbers |
 | 9 | [09_no_gang_pilot_arm.md](09_no_gang_pilot_arm.md) | 20 min | **New on 27 Sep:** the team added a no-gang second pilot arm (slide 19, A11). Slides 17–19 for both scenarios (second arm / primary), plus the **no-gang abstention result** |
+| 10 | [10_p6_slides_and_script_3min.md](10_p6_slides_and_script_3min.md) | 20 min | **Your final 3:00 talk:** check of the team deck vs your script (14 items), slide-by-slide content, word-for-word script, how to paste [`slides/P6_Stability_Recommendation.pptx`](slides/P6_Stability_Recommendation.pptx) into the deck |
 | 8 | [08_professor_slides_map.md](08_professor_slides_map.md) | 20 min | **The professor's slides → your section**: definitions, formulas and phrases with slide numbers (§7.1, §7.2, guest lecture, §8.3) |
 
 **Short on time?** Read 08, then the cheat sheet below, then 09, then 03 part C, then 05.
+**Rehearsing?** Use 10 and the speaker notes in `slides/P6_Stability_Recommendation.pptx`.
 
 ## Cheat sheet: memorise these
 
@@ -105,6 +107,11 @@ study/stability-and-recommendation/
 ├── 06_slide_plan_and_script.md
 ├── 07_code_walkthrough.md
 ├── 08_professor_slides_map.md       ← course slides → your section
+├── 09_no_gang_pilot_arm.md
+├── 10_p6_slides_and_script_3min.md  ← final 3:00 slides + script + deck check
+├── slides/
+│   ├── build_p6_slides.py           ← builds the separate P6 deck (team deck untouched)
+│   └── P6_Stability_Recommendation.pptx  ← slides 17, 18, 18b, 19 + backups A12, A13
 ├── analysis/
 │   ├── stability_course_aligned.py  ← part E extras (CPU, ~2.5 min)
 │   ├── course_stability_methods.py  ← part C: slides 186/187/43–44 on our data (CPU, ~1 min)

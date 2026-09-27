@@ -98,7 +98,7 @@ Sources: `results/no_gang_stability_summary.csv`, `no_gang_contested_by_gender.c
 - The FNR gap figures are point estimates on a few hundred women with no confidence
   interval here, so say "about zero", not "equal".
 
-XGBoost without gang: 16.5% contested; margin 36% (women) vs 42% (men); abstention moves
+XGBoost without gang: 16.4% contested; margin 36% (women) vs 42% (men); abstention moves
 the gap from −0.010 to +0.016.
 
 ## 9.4 Scenario A: the deck as merged (with gang primary, no-gang as second arm)
