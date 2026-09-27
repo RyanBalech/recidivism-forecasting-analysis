@@ -1,0 +1,5 @@
+model,cv_roc_auc,test_roc_auc,test_brier,nonzero_terms,seconds,note
+logistic (shipped L1),,0.7298327241325903,0.20542414693279365,95,0.4972367000300437,reference; CV AUC in logistic_tuning.json / ml_model_comparison.csv
+xgboost (shipped),,0.7324790027736818,0.204443329530386,-1,5.26523219991941,reference; CV AUC in logistic_tuning.json / ml_model_comparison.csv
+AdaLogit (adaptive L1),0.7321874565439108,0.7295810714792855,0.20549534181786341,82,38.90621800010558,"gamma=0.5, C=3.162"
+PLTR (trees → adaptive-L1 logit),0.7316116084977136,0.7292381527970488,0.2054603624282592,131,378.29273879993707,"819 candidate rules, 118 kept; gamma=0.5, C=0.1"

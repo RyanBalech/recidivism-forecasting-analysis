@@ -1,86 +1,198 @@
-from pathlib import Path
+"""Build reports/ISAF_Recidivism_Presentation.pptx, following reports/presentation_outline.md.
 
+Light theme, Calibri throughout, palette matched to the figures (navy / coral / teal).
+Numbers are read from artifacts/ so the deck stays in sync with the pipeline; native tables and
+one native chart (slide 8) keep the deck editable in PowerPoint.
+"""
+from pathlib import Path
 import json
+import re
+
 import pandas as pd
 from pptx import Presentation
+from pptx.chart.data import CategoryChartData
 from pptx.dml.color import RGBColor
+from pptx.enum.chart import XL_CHART_TYPE, XL_LABEL_POSITION
+from pptx.enum.shapes import MSO_SHAPE
 from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
+from pptx.oxml.ns import qn
+from pptx.parts.image import Image as PImage
 from pptx.util import Inches, Pt
-from PIL import Image
 
 
 ROOT = Path(__file__).resolve().parents[1]
 ART, FIG, REPORTS = ROOT / "artifacts", ROOT / "artifacts" / "figures", ROOT / "reports"
 OUT = REPORTS / "ISAF_Recidivism_Presentation.pptx"
-NAVY, CARD, WHITE = RGBColor(10, 31, 68), RGBColor(20, 48, 88), RGBColor(255, 255, 255)
-ORANGE, PURPLE, PALE = RGBColor(251, 133, 0), RGBColor(123, 44, 191), RGBColor(240, 244, 248)
-GREY, RED, TEAL = RGBColor(130, 143, 160), RGBColor(214, 67, 67), RGBColor(0, 180, 180)
+
+FONT = "Calibri"
+INK, NAVY, CORAL, TEAL, TEAL_L, GOLD = "1B2B3A", "24506E", "D9573A", "1F7A70", "2A9D8F", "C99A2E"
+MUTED, FAINT, LINE = "5F6E7C", "8795A2", "D5DDE5"
+CARD, CARD_T, CARD_C, CARD_N, BG, BG_TITLE = "F1F5F8", "E6F2F0", "FBEBE6", "E7EEF4", "FFFFFF", "F3F7FA"
+
+W, H = 13.333, 7.5
+LM = 0.6              # left/right margin
+CW = W - 2 * LM       # content width
+SECTIONS = ["Intro", "Features", "Models", "Interpretability", "Fairness", "Stability", "Demo"]
 
 
-def textbox(slide, text, x, y, w, h, size=20, color=WHITE, bold=False, align=PP_ALIGN.LEFT, font="Aptos", valign=MSO_ANCHOR.TOP):
-    box = slide.shapes.add_textbox(Inches(x), Inches(y), Inches(w), Inches(h))
-    frame = box.text_frame
-    frame.clear(); frame.word_wrap = True; frame.vertical_anchor = valign
-    p = frame.paragraphs[0]
-    p.text = text; p.alignment = align
-    p.font.name = font; p.font.size = Pt(size); p.font.bold = bold; p.font.color.rgb = color
-    return box
+def rgb(hex_):
+    return RGBColor.from_string(hex_)
 
 
-def make_slide(prs):
-    slide = prs.slides.add_slide(prs.slide_layouts[6])
-    slide.background.fill.solid(); slide.background.fill.fore_color.rgb = NAVY
-    return slide
+# ---------------------------------------------------------------- TEXT HELPERS
+def _runs(p, text, size, color, bold=False, italic=False):
+    """Add runs to paragraph p; **x** marks a bold segment."""
+    for i, seg in enumerate(re.split(r"\*\*", text)):
+        if not seg:
+            continue
+        r = p.add_run()
+        r.text = seg
+        f = r.font
+        f.name, f.size, f.bold, f.italic = FONT, Pt(size), bold or i % 2 == 1, italic
+        f.color.rgb = rgb(color)
 
 
-def title(slide, text, kicker):
-    textbox(slide, kicker.upper(), .65, .28, 12, .3, 10, ORANGE, True)
-    textbox(slide, text, .65, .68, 12, .65, 26, WHITE, True)
-    line = slide.shapes.add_shape(1, Inches(.65), Inches(1.42), Inches(1.1), Inches(.055))
-    line.fill.solid(); line.fill.fore_color.rgb = ORANGE; line.line.fill.background()
+def _bullet(p, color):
+    pPr = p._p.get_or_add_pPr()
+    pPr.set("marL", str(int(Inches(0.2))))
+    pPr.set("indent", str(-int(Inches(0.2))))
+    clr = pPr.makeelement(qn("a:buClr"), {})
+    clr.append(clr.makeelement(qn("a:srgbClr"), {"val": color}))
+    pPr.append(clr)
+    pPr.append(pPr.makeelement(qn("a:buFont"), {"typeface": "Arial"}))
+    pPr.append(pPr.makeelement(qn("a:buChar"), {"char": "•"}))
 
 
-def footer(slide, number):
-    textbox(slide, "HEC Paris · ISAF · 2026", .65, 7.12, 4, .18, 8, GREY)
-    textbox(slide, str(number), 12.15, 7.1, .45, .18, 8, GREY, align=PP_ALIGN.RIGHT)
+def text(slide, x, y, w, h, paras, size=15, color=INK, bold=False, italic=False, align=PP_ALIGN.LEFT,
+         anchor=MSO_ANCHOR.TOP, bullets=False, space=6, bullet_color=TEAL_L, line=None):
+    """paras: a string, or a list of strings / (string, options) pairs."""
+    tb = slide.shapes.add_textbox(Inches(x), Inches(y), Inches(w), Inches(h))
+    tf = tb.text_frame
+    tf.word_wrap, tf.vertical_anchor = True, anchor
+    tf.margin_left = tf.margin_right = tf.margin_top = tf.margin_bottom = 0
+    for i, item in enumerate([paras] if isinstance(paras, str) else paras):
+        t, o = (item, {}) if isinstance(item, str) else item
+        p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
+        p.alignment = o.get("align", align)
+        p.space_after = Pt(o.get("space", space))
+        if line:
+            p.line_spacing = line
+        _runs(p, t, o.get("size", size), o.get("color", color), o.get("bold", bold), o.get("italic", italic))
+        if o.get("bullet", bullets):
+            _bullet(p, o.get("bcolor", bullet_color))
+    return tb
 
 
-def bullets(slide, items, x=.8, y=1.8, w=11.7, h=4.8, size=21):
-    box = slide.shapes.add_textbox(Inches(x), Inches(y), Inches(w), Inches(h))
-    frame = box.text_frame; frame.clear(); frame.word_wrap = True
-    for i, item in enumerate(items):
-        p = frame.paragraphs[0] if i == 0 else frame.add_paragraph()
-        p.text = "•  " + item; p.font.name = "Aptos"; p.font.size = Pt(size); p.font.color.rgb = WHITE; p.space_after = Pt(12)
+def box(slide, x, y, w, h, fill=CARD, radius=0.06, shape=MSO_SHAPE.ROUNDED_RECTANGLE):
+    s = slide.shapes.add_shape(shape, Inches(x), Inches(y), Inches(w), Inches(h))
+    s.shadow.inherit = False
+    s.fill.solid(); s.fill.fore_color.rgb = rgb(fill)
+    s.line.fill.background()
+    if shape == MSO_SHAPE.ROUNDED_RECTANGLE:
+        s.adjustments[0] = radius
+    return s
 
 
-def card(slide, label, value, x, y, color=ORANGE, note="", size=24):
-    shape = slide.shapes.add_shape(5, Inches(x), Inches(y), Inches(2.65), Inches(1.38))
-    shape.fill.solid(); shape.fill.fore_color.rgb = CARD; shape.line.color.rgb = color
-    textbox(slide, value, x+.12, y+.15, 2.4, .48, size, color, True, PP_ALIGN.CENTER)
-    textbox(slide, label, x+.12, y+.72, 2.4, .3, 11, WHITE, True, PP_ALIGN.CENTER)
-    if note: textbox(slide, note, x+.12, y+1.06, 2.4, .18, 8, PALE, align=PP_ALIGN.CENTER)
+def circle(slide, x, y, d, fill, label, size=16):
+    s = box(slide, x, y, d, d, fill=fill, shape=MSO_SHAPE.OVAL)
+    tf = s.text_frame
+    tf.margin_left = tf.margin_right = tf.margin_top = tf.margin_bottom = 0
+    tf.vertical_anchor = MSO_ANCHOR.MIDDLE
+    tf.paragraphs[0].alignment = PP_ALIGN.CENTER
+    _runs(tf.paragraphs[0], label, size, "FFFFFF", bold=True)
 
 
-def picture(slide, path, x, y, w):
-    # Keep tall figures inside the content area rather than clipping the footer.
-    with Image.open(path) as img:
-        ratio = img.height / img.width
-    fitted_width = min(w, (6.85 - y) / ratio)
-    x += (w - fitted_width) / 2
-    w = fitted_width
-    slide.shapes.add_picture(str(path), Inches(x), Inches(y), width=Inches(w))
+def arrow(slide, x, y):
+    a = slide.shapes.add_shape(MSO_SHAPE.RIGHT_ARROW, Inches(x), Inches(y), Inches(0.28), Inches(0.32))
+    a.shadow.inherit = False
+    a.fill.solid(); a.fill.fore_color.rgb = rgb("A3AFBA"); a.line.fill.background()
 
 
-def panel(slide, heading, body, x, y, w=3.75, h=3.6, color=ORANGE):
-    shape = slide.shapes.add_shape(5, Inches(x), Inches(y), Inches(w), Inches(h))
-    shape.fill.solid(); shape.fill.fore_color.rgb = CARD; shape.line.color.rgb = color
-    textbox(slide, heading, x+.25, y+.3, w-.5, .4, 20, color, True, PP_ALIGN.CENTER)
-    textbox(slide, body, x+.35, y+1.08, w-.7, h-1.35, 15, PALE, align=PP_ALIGN.CENTER)
+def picture(slide, name, x, y, w, h, align="center"):
+    """Fit a figure inside the (x, y, w, h) box, keeping its aspect ratio."""
+    path = str(FIG / name)
+    pw, ph = PImage.from_file(path).size
+    iw, ih = (h * pw / ph, h) if w / h > pw / ph else (w, w * ph / pw)
+    ix = x + (w - iw) / 2 if align == "center" else x
+    slide.shapes.add_picture(path, Inches(ix), Inches(y + (h - ih) / 2), Inches(iw), Inches(ih))
+    return ix, iw
 
 
+def stat(slide, x, y, w, h, big, label, color=NAVY, fill=CARD, big_size=34, label_size=12):
+    """Big number with a small label, on a tinted card."""
+    box(slide, x, y, w, h, fill=fill)
+    text(slide, x + 0.2, y + 0.14, w - 0.4, 0.62, big, size=big_size, color=color, bold=True)
+    text(slide, x + 0.2, y + 0.14 + big_size / 72 * 1.25, w - 0.4, 0.7, label, size=label_size, color=MUTED)
+
+
+def card(slide, x, y, w, h, head, body, fill=CARD, head_color=NAVY, size=13, bullets=False, space=5):
+    box(slide, x, y, w, h, fill=fill)
+    text(slide, x + 0.22, y + 0.16, w - 0.44, 0.3, head.upper(), size=12, color=head_color, bold=True)
+    text(slide, x + 0.22, y + 0.5, w - 0.44, h - 0.62, body, size=size, bullets=bullets,
+         bullet_color=head_color, space=space)
+
+
+def table(slide, x, y, rows, col_w, row_h=0.4, size=13, highlight=()):
+    """Light table: navy header, zebra rows, rows in `highlight` tinted teal."""
+    gf = slide.shapes.add_table(len(rows), len(rows[0]), Inches(x), Inches(y),
+                                Inches(sum(col_w)), Inches(row_h * len(rows)))
+    tbl = gf.table
+    tbl._tbl.tblPr.set("firstRow", "0"); tbl._tbl.tblPr.set("bandRow", "0")
+    for j, cw in enumerate(col_w):
+        tbl.columns[j].width = Inches(cw)
+    for i, row in enumerate(rows):
+        tbl.rows[i].height = Inches(row_h)
+        for j, value in enumerate(row):
+            c = tbl.cell(i, j)
+            c.margin_left = c.margin_right = Inches(0.1)
+            c.margin_top = c.margin_bottom = Inches(0.03)
+            c.vertical_anchor = MSO_ANCHOR.MIDDLE
+            c.fill.solid()
+            c.fill.fore_color.rgb = rgb(NAVY if i == 0 else CARD_T if i in highlight else BG if i % 2 else CARD)
+            p = c.text_frame.paragraphs[0]
+            p.alignment = PP_ALIGN.LEFT if j == 0 else PP_ALIGN.RIGHT
+            _runs(p, str(value), size, "FFFFFF" if i == 0 else INK, bold=i == 0 or j == 0)
+
+
+def cards3(slide, y, h, items, size=13.5, gap=0.3):
+    """Three equal cards in a row: items = [(head, head_color, fill, body), ...]."""
+    w = (CW - 2 * gap) / 3
+    for i, (head, color, fill, body) in enumerate(items):
+        card(slide, LM + i * (w + gap), y, w, h, head, body, fill=fill, head_color=color, size=size)
+
+
+# ---------------------------------------------------------------- SLIDE CHROME
+def new_slide(kicker, title, section, number, title_size=28):
+    s = prs.slides.add_slide(prs.slide_layouts[6])
+    s.background.fill.solid(); s.background.fill.fore_color.rgb = rgb(BG)
+    text(s, LM, 0.42, 6.2, 0.3, kicker.upper(), size=12, color=TEAL, bold=True)
+    if section:  # section navigator, top right: the deck's wayfinding motif
+        tb = s.shapes.add_textbox(Inches(6.4), Inches(0.4), Inches(W - LM - 6.4), Inches(0.3))
+        tf = tb.text_frame
+        tf.margin_left = tf.margin_right = tf.margin_top = tf.margin_bottom = 0
+        p = tf.paragraphs[0]
+        p.alignment = PP_ALIGN.RIGHT
+        for i, name in enumerate(SECTIONS):
+            _runs(p, name, 10.5, CORAL if name == section else "A3AFBA", bold=name == section)
+            if i < len(SECTIONS) - 1:
+                _runs(p, "   ·   ", 10.5, "C5CED6")
+    text(s, LM, 0.78, CW, 0.75, title, size=title_size, bold=True)
+    text(s, LM, 7.02, 7, 0.25, "Team 11  ·  Trustworthy Recidivism Forecasting", size=10, color=FAINT)
+    text(s, W - LM - 1.5, 7.02, 1.5, 0.25, str(number), size=10, color=FAINT, align=PP_ALIGN.RIGHT)
+    return s
+
+
+def source(slide, txt, y=6.72):
+    text(slide, LM, y, CW, 0.25, "Source: " + txt, size=9.5, color=FAINT)
+
+
+# ---------------------------------------------------------------- INPUTS FROM artifacts/
 metrics = pd.read_csv(ART / "model_metrics.csv").set_index("model")
 inc_auc = pd.read_csv(ART / "incumbent_discrimination.csv").set_index("ranker")["roc_auc"]
-inc_econ = pd.read_csv(ART / "incumbent_economics.csv").set_index("ranker")["assumed_net_value"]
+econ = pd.read_csv(ART / "incumbent_economics.csv").set_index("ranker")
+inc_econ = econ["assumed_net_value"]
+baselines = pd.read_csv(ART / "validation_baselines.csv").set_index("model")
+brier_skill, base_brier = baselines.brier_skill_vs_prevalence, baselines.loc["training_prevalence", "brier"]
 inf = pd.read_csv(ART / "fairness_inference.csv")
 top20 = inf[inf.rule == "top_20pct"]
 fnr20 = top20[top20.metric == "fnr"].pivot_table(index="model", columns="attribute", values="gap")
@@ -149,9 +261,6 @@ _agree = pd.read_csv(ART / "explanation_agreement.csv")
 agree_lo, agree_hi = _agree.spearman_rank_correlation.min(), _agree.spearman_rank_correlation.max()
 stability = pd.read_csv(ART / "stability_summary.csv").set_index("model")
 
-prs = Presentation()
-prs.slide_width, prs.slide_height = Inches(13.333), Inches(7.5)
-
 # ---------------------------------------------------------------- EXTRA INPUTS FOR THE 19-SLIDE OUTLINE
 # Structure follows reports/presentation_outline.md: six speaking parts, 19 core slides.
 _pc = pd.read_csv(ART / "deep_review" / "INELIGIBLE_timing_positive_control.csv").set_index("condition")
@@ -162,6 +271,9 @@ ml_lo, ml_hi, ml_n = _others.test_roc_auc.min(), _others.test_roc_auc.max(), len
 _con = pd.read_csv(ART / "probability_contrasts.csv")
 _con = _con[_con.model == "logistic"].set_index(["feature", "level"]).average_probability_contrast
 age_contrast, gang_contrast = _con[("Age_at_Release", "48 or older")], _con[("Gang_Affiliated", "Yes")]
+_pdpc = pd.read_csv(ART / "pdp_contrasts.csv").set_index(["contrast", "model"]).pdp_difference
+pdp_age = [_pdpc[("Age 23-27 -> 48 or older", m)] * 100 for m in ["logistic", "xgboost", "tabicl"]]
+pdp_gang = [_pdpc[("Gang No -> Yes", m)] * 100 for m in ["logistic", "xgboost", "tabicl"]]
 _lime = pd.read_csv(ART / "lime_fidelity.csv").groupby("model").local_r2.mean()
 lime_lo, lime_hi = _lime.min(), _lime.max()
 _cal = pd.read_csv(ART / "calibration_tests.csv").set_index("model")
@@ -189,241 +301,489 @@ def slash(values, fmt="{:.3f}"):
     return " / ".join(fmt.format(v) for v in values)
 
 
-# ================================================================ P1 · INTRO + EDA (1.5 min)
-# 1 — Title
-s = make_slide(prs)
-textbox(s, "TRUSTWORTHY AI / RECIDIVISM", .72, .58, 8, .3, 12, ORANGE, True)
-textbox(s, "Forecasting risk,\nexamining trade-offs", .72, 1.42, 8, 1.65, 36, WHITE, True)
-textbox(s, "For a risk-assessment software vendor: which three-year re-arrest model to ship, judged on performance, interpretability, stability and fairness", .76, 3.35, 6.6, 1.4, 17, PALE)
-textbox(s, "Team 11 · HEC Paris · Fall 2026", .76, 6.62, 7, .3, 11, GREY)
-panel(s, f"{inc_auc['incumbent']:.2f} → {metrics.roc_auc.max():.2f}", "Historical score vs our models (ROC AUC)\n\n3 model families\n\n1 recommendation", 8.55, .9, 3.65, 5.75, PURPLE)
-
-# 2 — Client and decision
-s = make_slide(prs); title(s, "Our client, and the decision they sell", "Intro · Client")
-bullets(s, ["Client: a vendor selling risk tools to US community-supervision agencies",
-            "Decision: rank people at supervision start; the top 20% are offered voluntary re-entry support",
-            "Scope: support allocation only — never sanctions, detention or surveillance",
-            "Target: recorded re-arrest within 3 years — a proxy for need, not for offending"], y=1.85, size=21); footer(s, 2)
-
-# 3 — Data and EDA
-s = make_slide(prs); title(s, "Georgia parolees, official split, training-only EDA", "Intro · Data")
-picture(s, FIG / "eda_overview.png", .4, 1.7, 9.0)
+# Training re-arrest rate, as in the EDA chart.
 _raw = pd.read_csv(ROOT / "data" / "nij-challenge2021_full_dataset.csv", usecols=["Training_Sample", "Recidivism_Within_3years"])
 train_rate = _raw.loc[_raw.Training_Sample == 1, "Recidivism_Within_3years"].astype(str).eq("True").mean() if _raw.Recidivism_Within_3years.dtype == bool else _raw.loc[_raw.Training_Sample == 1, "Recidivism_Within_3years"].eq("Yes").mean()
-card(s, "RE-ARRESTED IN 3 YEARS", f"{train_rate:.1%}", 9.95, 1.8, ORANGE, "training data, as in the chart")
-card(s, "OFFICIAL SPLIT", "18,028 / 7,807", 9.95, 3.4, TEAL, "train / evaluation · NIJ flag", size=18)
-card(s, "GANG FIELD MISSING", "100% of women", 9.95, 5.0, RED, "and 0% of men → next part", size=20)
-textbox(s, "Cumulative 3-year target: not comparable with NIJ's annual leaderboard. The missingness is structured.",
-        1.0, 6.85, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 3)
+
+m3 = ["logistic", "xgboost", "tabicl"]
+_ci = paired.loc[("logistic", "xgboost", "roc_auc")]
+xgb_ci = (-_ci.ci_high, -_ci.ci_low)
+agree_sp = _agree[(_agree.method_a == "shap") & (_agree.method_b == "permutation_importance")].spearman_rank_correlation
+agree_xp = _agree[_agree.method_b == "xper"].spearman_rank_correlation
+top10_lo, top10_hi = _agree.top10_overlap.min(), _agree.top10_overlap.max()
+_overlap = pd.read_csv(ART / "selected_set_overlap.csv").query("model_a == 'logistic' and model_b == 'xgboost'").iloc[0]
+_nested_rows = pd.read_csv(ART / "mitigation_nested_summary.csv").set_index("model")
+_indiv_l = pd.read_csv(ART / "individual_stability_summary.csv").set_index("model").loc["logistic"]
+speedup = metrics.loc["xgboost", "fit_predict_seconds"] / metrics.loc["logistic", "fit_predict_seconds"]
+pct = lambda v: f"{v * 100:+.0f}".replace("-", "−")
+num = lambda v, fmt="{:.3f}": fmt.format(v).replace("-", "−")
+WORDS = {3: "three", 4: "four", 5: "five", 6: "six", 7: "seven"}
+sl = lambda vals, fmt="{:.3f}": " / ".join(num(v, fmt) for v in vals)
+
+prs = Presentation()
+prs.slide_width, prs.slide_height = Inches(W), Inches(H)
+
+# ================================================================ P1 · INTRO + EDA (1.5 min)
+# 1 — Title
+s = prs.slides.add_slide(prs.slide_layouts[6])
+s.background.fill.solid(); s.background.fill.fore_color.rgb = rgb(BG_TITLE)
+text(s, LM + 0.1, 1.2, 7, 0.35, "TRUSTWORTHY AI  ·  TEAM 11", size=14, color=TEAL, bold=True)
+text(s, LM + 0.1, 1.75, 7.2, 2.2, "Trustworthy\nRecidivism Forecasting", size=48, bold=True, line=0.95)
+text(s, LM + 0.1, 3.95, 6.6, 1.2, "Which three-year re-arrest model should a risk-tool vendor ship? "
+     "Judged on four dimensions, not accuracy alone.", size=18, color=MUTED)
+text(s, LM + 0.1, 6.35, 6.5, 0.35, "NIJ Recidivism Forecasting Challenge  ·  Georgia 2013–2015", size=12, color=FAINT)
+for k, (name, sub, col) in enumerate([("Performance", "AUC · Brier · $ value", NAVY),
+                                      ("Interpretability", "SHAP · PDP/ICE · LIME · XPER", TEAL_L),
+                                      ("Fairness", "Race · Gender · FNR", CORAL),
+                                      ("Stability", "Bootstrap refits · flips", GOLD)]):
+    cx, cy = 7.75 + (k % 2) * 2.6, 1.3 + (k // 2) * 2.5
+    box(s, cx, cy, 2.35, 2.25, fill="FFFFFF", radius=0.08)
+    circle(s, cx + 0.3, cy + 0.3, 0.55, col, str(k + 1))
+    text(s, cx + 0.3, cy + 1.1, 1.85, 0.4, name, size=18, bold=True)
+    text(s, cx + 0.3, cy + 1.5, 1.85, 0.6, sub, size=12, color=MUTED)
+
+# 2 — Client and decision
+s = new_slide("Intro · Client", "Our client, and the decision the score supports", "Intro", 2)
+for i, (head, body) in enumerate([("Client", "Vendor of risk tools to US community-supervision agencies"),
+                                  ("Rank", "Score every person at the start of supervision"),
+                                  ("Prioritise", "Top 20% by predicted risk"),
+                                  ("Offer", "Voluntary re-entry support: jobs, housing, treatment")]):
+    x = LM + i * 3.14
+    box(s, x, 1.85, 2.7, 1.95, fill=CARD_N if i < 3 else CARD_T)
+    circle(s, x + 0.22, 2.05, 0.46, NAVY if i < 3 else TEAL, str(i + 1), size=14)
+    text(s, x + 0.82, 2.1, 1.7, 0.4, head, size=17, bold=True)
+    text(s, x + 0.22, 2.68, 2.26, 1.0, body, size=13.5)
+    if i < 3:
+        arrow(s, x + 2.78, 2.66)
+card(s, LM, 4.15, 5.9, 1.75, "In scope", ["**Support allocation only.** Being selected means being offered help.",
+                                          "The harm to avoid: people who need support but are not selected."],
+     fill=CARD_T, head_color=TEAL, size=14, bullets=True)
+card(s, LM + 6.23, 4.15, 5.9, 1.75, "Never in scope",
+     ["Sanctions, detention or surveillance.",
+      "The same score used for control would turn every conclusion here upside down."],
+     fill=CARD_C, head_color=CORAL, size=14, bullets=True)
+text(s, LM, 6.15, CW, 0.3, "Caveat: the target is **recorded re-arrest**, which is only a proxy for need.",
+     size=13, color=MUTED, italic=True)
+
+# 3 — Data and EDA
+s = new_slide("Intro · Data", "Georgia parolees, official split, training-only EDA", "Intro", 3)
+for y, big, label, col, size in [(1.8, "18,028 / 7,807", "training / evaluation records\n(official NIJ split, released 2013–2015)", NAVY, 26),
+                                 (3.25, f"{train_rate:.1%}", "re-arrested within 3 years\n(training data)", CORAL, 34),
+                                 (4.7, "12.3% · 12.9%", "missing: Gang_Affiliated ·\nPrison_Offense", TEAL, 26)]:
+    text(s, LM, y, 3.0, 0.62, big, size=size, color=col, bold=True)
+    text(s, LM, y + size / 72 * 1.25, 3.0, 0.7, label, size=12, color=MUTED)
+picture(s, "eda_overview.png", 3.85, 1.7, 8.88, 3.35)
+box(s, 3.85, 5.3, 8.88, 1.25)
+text(s, 4.07, 5.42, 8.44, 1.05,
+     [(f"Base rates: **Black ≈ White**; women **{calib.loc[('Gender', 'F'), 'base_rate']:.2f}** vs men "
+       f"**{calib.loc[('Gender', 'M'), 'base_rate']:.2f}**.", {"bullet": True}),
+      ("Target = new arrest within 3 years (cumulative). NIJ scored annual forecasts, so results are "
+       "**not comparable** with the leaderboard.", {"bullet": True})], size=13.5, space=4)
+text(s, LM, 6.62, 3.1, 0.3, "“The missingness is structured” → P2", size=12.5, color=TEAL, italic=True, bold=True)
 
 # ================================================================ P2 · FEATURES + LEAKAGE (1.5 min)
 # 4 — Only information known when supervision starts
-s = make_slide(prs); title(s, "Only information known when supervision starts", "Features · Eligibility")
-panel(s, "IN THE MODEL", "29 baseline fields\n\nAge, prior arrests and convictions, offence, prison years, supervision level, Georgia's risk score",
-      .7, 1.8, 3.85, 4.7, TEAL)
-panel(s, "AUDIT ONLY", "Race, gender, residence (PUMA)\n\nNever model inputs — kept to measure who gets support",
-      4.75, 1.8, 3.85, 4.7, PURPLE)
-panel(s, "EXCLUDED", f"Everything after release: employment, drug tests, violations\n\nPositive control: adding them lifts AUC {posctrl_base:.3f} → {posctrl_leaky:.3f} — they leak the outcome",
-      8.8, 1.8, 3.85, 4.7, RED)
-footer(s, 4)
+s = new_slide("Features · Eligibility", "Only information known when supervision starts", "Features", 4)
+w3 = (CW - 0.7) / 3
+for i, (head, big, body, fill, col) in enumerate([
+        ("In the model", "29", "baseline fields known at the start of supervision", CARD_T, TEAL),
+        ("Audit only", "3", "race, gender and residence PUMA: excluded from the models, used to audit outcomes", CARD_N, NAVY),
+        ("Excluded", "post-release", "employment, drug tests, violations… anything recorded after release", CARD_C, CORAL)]):
+    x = LM + i * (w3 + 0.35)
+    box(s, x, 1.85, w3, 2.55, fill=fill)
+    text(s, x + 0.25, 2.02, w3 - 0.5, 0.3, head.upper(), size=12, color=col, bold=True)
+    text(s, x + 0.25, 2.38, w3 - 0.5, 0.75, big, size=40 if len(big) < 5 else 32, color=col, bold=True)
+    text(s, x + 0.25, 3.25, w3 - 0.5, 1.1, body, size=14)
+box(s, LM, 4.7, CW, 1.6)
+text(s, LM + 0.3, 4.88, 3.5, 0.3, "POSITIVE CONTROL", size=12, color=NAVY, bold=True)
+text(s, LM + 0.3, 5.25, 4.4, 0.8, f"AUC {posctrl_base:.3f} → {posctrl_leaky:.3f}", size=32, color=CORAL, bold=True)
+text(s, LM + 5.0, 4.7, 6.9, 1.6, [f"Adding the post-release fields back lifts AUC by {posctrl_leaky - posctrl_base:.2f}.",
+                                  "They really do leak outcome information — which is **why they are excluded**."],
+     size=15, bullets=True, bullet_color=NAVY, anchor=MSO_ANCHOR.MIDDLE)
+source(s, "src/recidivism/config.py · artifacts/deep_review/INELIGIBLE_timing_positive_control.csv", y=6.7)
 
 # 5 — The leak
-s = make_slide(prs); title(s, "The leak we found: gender was encoded in missingness", "Features · Leakage")
-picture(s, FIG / "proxy_recovery.png", .4, 1.7, 8.4)
-panel(s, "WHAT HAPPENED", "Gang affiliation: missing for every woman, no man\n\n"
-      f"Keep missingness → gender recovered at AUC {leak_auc:.3f}\n\n"
-      "TabICL treated NaN as a category: it saw gender\n\n"
-      f"Fix: mode-fill + regression test. After: AUC {gender_proxy_auc:.2f}", 9.1, 1.7, 3.8, 4.9, RED)
-textbox(s, "Excluding an attribute is not removing it: part of it survives in legitimate features. Fairness picks this up.",
-        1.0, 6.82, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 5)
+s = new_slide("Features · Leakage", "The leak we found: gender was encoded in missingness", "Features", 5)
+cards3(s, 1.8, 1.85, [
+    ("What happened", CORAL, CARD_C, "Gang_Affiliated is missing for **every woman** and **no man**. Keep missingness as a "
+     f"feature → gender recovered at **AUC {leak_auc:.3f}**; TabICL treats NaN as a category, so it effectively saw gender."),
+    ("The fix", TEAL, CARD_T, "Fill missing values with the mode, plus a **regression test** so the leak cannot return."),
+    ("What remains", NAVY, CARD_N, f"After the fix, gender is **still recoverable at AUC {gender_proxy_auc:.3f}** from the "
+     "other inputs. P5 picks this up.")])
+picture(s, "proxy_recovery.png", LM, 3.85, CW, 2.8)
+source(s, "artifacts/figures/proxy_recovery.png · artifacts/proxy_recovery.csv")
 
 # ================================================================ P3 · MODELS + PERFORMANCE (2.5 min)
 # 6 — Three models and tuning
-s = make_slide(prs); title(s, "Three model families, each tuned by cross-validation", "Models · Design")
-panel(s, "LOGISTIC (L1)", "White box\n\nOne-hot encoding\n\n5-fold grid search\nC = 0.2154\n\nCurve flat for C in [0.05, 1]", .7, 1.8, 3.85, 4.5, TEAL)
-panel(s, "XGBOOST", "Machine learning\n\nOrdinal counts\n\n5-fold random search, 60 draws\n\nDeeper trees overfit: rejected", 4.75, 1.8, 3.85, 4.5, ORANGE)
-panel(s, "TABICLv2", "Foundation model\n\nMixed types, mode-filled\n\n16-member ensemble\n\nGains level off near 8", 8.8, 1.8, 3.85, 4.5, PURPLE)
-textbox(s, f"{ml_n} other ML candidates (CatBoost, LightGBM, EBM, …) all land at test AUC {ml_lo:.3f}–{ml_hi:.3f}.",
-        1.0, 6.62, 11, .3, 13, ORANGE, True, PP_ALIGN.CENTER); footer(s, 6)
+s = new_slide("Models · Design", "Three models, each tuned by cross-validation", "Models", 6)
+for i, (name, col, fill, enc, tune) in enumerate([
+        ("L1 logistic regression", NAVY, CARD_N, "One-hot", "5-fold grid search\nC = 0.2154"),
+        ("XGBoost", TEAL, CARD_T, "Ordinal encoding for count fields", "5-fold random search, 60 draws\nDeeper trees overfit → rejected"),
+        ("TabICLv2", CORAL, CARD_C, "Mixed types, handled natively", "16 ensemble members\nResults level off at about 8")]):
+    x = LM + i * (w3 + 0.35)
+    box(s, x, 1.85, w3, 3.05, fill=fill)
+    circle(s, x + 0.25, 2.05, 0.5, col, str(i + 1), size=15)
+    text(s, x + 0.9, 2.1, w3 - 1.1, 0.45, name, size=18, bold=True)
+    for dy, lab, val in [(0.95, "ENCODING", enc), (1.75, "TUNING", tune)]:
+        text(s, x + 0.25, 1.85 + dy, w3 - 0.5, 0.25, lab, size=11, color=col, bold=True)
+        text(s, x + 0.25, 2.12 + dy, w3 - 0.5, 0.9, val, size=14)
+box(s, LM, 5.2, CW, 1.3)
+text(s, LM + 0.3, 5.36, 3.3, 0.8, f"{ml_lo:.3f}–{ml_hi:.3f}", size=34, color=NAVY, bold=True)
+text(s, LM + 3.8, 5.38, 8.0, 1.0, f"Test AUC of **{WORDS.get(ml_n, ml_n)} other ML candidates** — CatBoost, LightGBM, EBM, HistGB, random forest. "
+     "Model family barely matters on these features.", size=15, anchor=MSO_ANCHOR.MIDDLE)
+source(s, "artifacts/ml_model_comparison.csv · artifacts/figures/estimator_sweep.png", y=6.7)
 
 # 7 — Performance
-s = make_slide(prs); title(s, "Statistical performance: effectively a tie", "Models · Performance")
-picture(s, FIG / "performance_calibration.png", .45, 1.72, 8.05)
-card(s, "AUC", slash([metrics.loc[m, "roc_auc"] for m in m3], "{:.3f}"), 9.25, 1.9, ORANGE, "logistic / XGBoost / TabICL", size=15)
-card(s, "AUC GAP · XGB − LOGIT", f"+{xgb_minus_logit:.4f}", 9.25, 3.5, TEAL, "paired bootstrap: real, but small")
-card(s, "CALIBRATION SLOPE", slash([_cal.loc[m, "slope"] for m in m3], "{:.2f}"), 9.25, 5.1, PURPLE, "TabICL too extreme (significant)", size=16)
-textbox(s, "All three within ~0.003 AUC. Performance alone cannot pick the model.", 1.0, 6.85, 11, .3, 11, GREY, True, PP_ALIGN.CENTER); footer(s, 7)
+s = new_slide("Models · Performance", "Statistical performance: effectively a tie", "Models", 7)
+table(s, LM, 1.85, [["Model", "ROC AUC", "Brier ↓", "ECE ↓", "Fit + predict"]] +
+      [[n, f"{metrics.loc[m, 'roc_auc']:.4f}", f"{metrics.loc[m, 'brier']:.4f}", f"{metrics.loc[m, 'ece_10']:.4f}",
+        f"{metrics.loc[m, 'fit_predict_seconds']:.1f} s"]
+       for n, m in zip(["Logistic regression", "XGBoost", "TabICLv2"], m3)],
+      [2.3, 1.2, 1.2, 1.2, 1.2], row_h=0.44, size=14)
+sx, swd = 8.15, 4.58   # AUC quality scale (Desmarais & Singh 2013)
+text(s, sx, 1.85, swd, 0.3, f"HOW GOOD IS {metrics.roc_auc.max():.2f}?", size=12, color=NAVY, bold=True)
+lo, hi, by = 0.50, 0.80, 2.8
+for name, a, b, col in [("Poor", .50, .55, "E4E8EC"), ("Fair", .55, .64, "F3D9A4"),
+                        ("Good", .64, .71, "BFDCD6"), ("Excellent", .71, .80, "7CC2B7")]:
+    bx, bw = sx + (a - lo) / (hi - lo) * swd, (b - a) / (hi - lo) * swd
+    box(s, bx, by, bw, 0.42, fill=col, shape=MSO_SHAPE.RECTANGLE)
+    text(s, bx, by + 0.08, bw, 0.28, name, size=10.5, bold=True, align=PP_ALIGN.CENTER)
+for val, lab, col in [(inc_auc["incumbent"], f"Georgia score {inc_auc['incumbent']:.2f}", CORAL),
+                      (metrics.roc_auc.max(), f"Our models {metrics.roc_auc.max():.2f}", TEAL)]:
+    mx = sx + (val - lo) / (hi - lo) * swd
+    m = s.shapes.add_shape(MSO_SHAPE.ISOSCELES_TRIANGLE, Inches(mx - 0.1), Inches(by - 0.24), Inches(0.2), Inches(0.18))
+    m.rotation = 180; m.shadow.inherit = False
+    m.fill.solid(); m.fill.fore_color.rgb = rgb(col); m.line.fill.background()
+    text(s, mx - 1.0, by - 0.55, 2.0, 0.28, lab, size=11.5, color=col, bold=True, align=PP_ALIGN.CENTER)
+text(s, sx, by + 0.55, swd, 0.55, "Bands from Desmarais & Singh (2013), CSG Justice Center, Table 2; anchored via "
+     "Rice & Harris (2005).", size=9.5, color=MUTED)
+for i, (head, col, fill, big, body) in enumerate([
+        ("Real but small", NAVY, CARD_N, f"+{xgb_minus_logit:.4f}",
+         f"XGBoost vs logistic AUC; paired 95% CI [{xgb_ci[0]:.4f}, {xgb_ci[1]:.4f}]."),
+        ("Brier: NIJ's score", TEAL, CARD_T, f"≈{brier_skill[m3].min():.0%} better",
+         f"than predicting the base rate for everyone ({base_brier:.3f}). Brier = mean (p − y)², lower is better."),
+        ("Calibration", CORAL, CARD_C, " · ".join(f"{_cal.loc[m, 'slope']:.3f}" for m in m3),
+         "Cox slopes: does 70% mean 70%? LR and XGB ≈ perfect; TabICL slightly too extreme.")]):
+    x = LM + i * ((CW - 0.6) / 3 + 0.3)
+    box(s, x, 4.1, (CW - 0.6) / 3, 2.15, fill=fill)
+    text(s, x + 0.22, 4.25, 3.4, 0.3, head.upper(), size=12, color=col, bold=True)
+    text(s, x + 0.22, 4.6, 3.4, 0.6, big, size=26, color=col, bold=True)
+    text(s, x + 0.22, 5.2, 3.4, 1.0, body, size=13)
+source(s, "paired_comparisons.csv · validation_baselines.csv · calibration_tests.csv", y=6.45)
 
-# 8 — Incumbent
-s = make_slide(prs); title(s, "The client's real question: better than today's score?", "Models · Incumbent")
-picture(s, FIG / "incumbent_benchmark.png", .45, 1.75, 8.3)
-card(s, "HISTORICAL SCORE AUC", f"{inc_auc['incumbent']:.2f}", 9.25, 1.9, RED, "Georgia supervision score in the data")
-card(s, "OUR MODELS AUC", f"≈ {metrics.roc_auc.mean():.2f}", 9.25, 3.5, TEAL, "all three models")
-card(s, "NET VALUE @20%", f"${inc_econ['incumbent']/1e6:.2f}M → ${inc_econ['logistic']/1e6:.2f}M", 9.25, 5.1, ORANGE, "scenario: $5k cost, $50k event, 20% effect", size=18)
-textbox(s, "Models beat the historical score at every capacity. Dollars are a scenario, not a causal estimate.",
-        1.0, 6.85, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 8)
+# 8 — Incumbent, in dollars
+SUPPORT_COST, EVENT_COST, EFFECT = 5_000, 50_000, 0.20
+offers = int(econ.loc["logistic", "selected"])
+break_even = lambda r: SUPPORT_COST / (econ.loc[r, "precision_at_capacity"] * EVENT_COST)
+s = new_slide("Models · The client's real question", "Better than the current tool — in dollars?", "Models", 8)
+box(s, LM, 1.85, 4.6, 4.7)
+text(s, LM + 0.25, 2.0, 4.1, 0.3, "SCENARIO (ASSUMED, NOT ESTIMATED)", size=12, color=NAVY, bold=True)
+for k, (big, label) in enumerate([(f"{offers:,}", "offers (20% capacity)"), (f"${SUPPORT_COST:,}", "support cost / person"),
+                                  (f"${EVENT_COST:,}", "cost of a re-arrest"), (f"{EFFECT:.0%}", "re-arrests prevented")]):
+    ax, ay = LM + 0.25 + (k % 2) * 2.1, 2.45 + (k // 2) * 1.0
+    text(s, ax, ay, 2.0, 0.45, big, size=24, color=NAVY, bold=True)
+    text(s, ax, ay + 0.45, 2.0, 0.35, label, size=11.5, color=MUTED)
+text(s, LM + 0.25, 4.5, 4.1, 1.95,
+     [(f"Net value = re-arrested among offers × ${EVENT_COST * EFFECT:,.0f} − offers × ${SUPPORT_COST:,}", {"bold": True}),
+      f"Logistic: {econ.loc['logistic', 'captured_events']:,} × ${EVENT_COST * EFFECT / 1000:.0f}k − {offers:,} × "
+      f"${SUPPORT_COST / 1000:.0f}k = **${inc_econ['logistic'] / 1e6:.3f}M**",
+      ("Programme cost is the same for every ranking → only **precision** differs.", {"color": MUTED})], size=13, space=7)
+_names = {"random": "Random", "incumbent": "Historical Georgia score", "logistic": "Logistic",
+          "xgboost": "XGBoost", "tabicl": "TabICL"}
+_order = ["random", "incumbent", "logistic", "xgboost", "tabicl"]
+_auc = lambda r: inc_auc[r] if r in inc_auc else metrics.loc[r, "roc_auc"]
+cd = CategoryChartData()
+cd.categories = [f"{_names[r]}  (AUC {_auc(r):.2f} · prec. {econ.loc[r, 'precision_at_capacity']:.2f})"
+                 for r in reversed(_order)]
+cd.add_series("Net value ($M)", [inc_econ[r] / 1e6 for r in reversed(_order)])
+ch = s.shapes.add_chart(XL_CHART_TYPE.BAR_CLUSTERED, Inches(5.5), Inches(1.8), Inches(7.25), Inches(3.55), cd).chart
+ch.has_legend, ch.has_title = False, True
+ch.chart_title.text_frame.text = "Net value at 20% capacity ($M)"
+for r in ch.chart_title.text_frame.paragraphs[0].runs:
+    r.font.size, r.font.bold, r.font.name, r.font.color.rgb = Pt(13), True, FONT, rgb(INK)
+ch.font.name, ch.font.size, ch.font.color.rgb = FONT, Pt(11), rgb(INK)
+plot = ch.plots[0]
+plot.gap_width, plot.vary_by_categories, plot.has_data_labels = 55, False, True
+dl = plot.data_labels
+dl.number_format, dl.number_format_is_linked, dl.position = '"$"0.000"M"', False, XL_LABEL_POSITION.OUTSIDE_END
+dl.font.size, dl.font.bold, dl.font.name = Pt(11.5), True, FONT
+for idx, col in enumerate(reversed(["B8C2CC", CORAL, NAVY, TEAL_L, "7FA7C2"])):
+    pt = plot.series[0].points[idx]
+    pt.format.fill.solid(); pt.format.fill.fore_color.rgb = rgb(col)
+va = ch.value_axis
+va.minimum_scale, va.maximum_scale = 0, 6.2
+va.major_gridlines.format.line.color.rgb = rgb("E3E8ED")
+va.format.line.fill.background()
+va.tick_labels.font.size, va.tick_labels.font.color.rgb = Pt(10), rgb(MUTED)
+va.tick_labels.number_format, va.tick_labels.number_format_is_linked = '"$"0"M"', False
+ch.category_axis.format.line.color.rgb = rgb(LINE)
+box(s, 5.5, 5.5, 7.23, 1.05, fill=CARD_T)
+text(s, 5.72, 5.58, 1.9, 0.9, f"{break_even('logistic'):.0%} vs {break_even('incumbent'):.0%}", size=24, color=TEAL,
+     bold=True, anchor=MSO_ANCHOR.MIDDLE)
+text(s, 7.75, 5.58, 4.85, 0.9, "Break-even effect (= 10% / precision) with our ranking vs the historical score. "
+     "Models win at every capacity 5–50% (A2).", size=12.5, anchor=MSO_ANCHOR.MIDDLE)
+source(s, "incumbent_economics.csv · incumbent_capacity_sweep.csv · incumbent_effectiveness_sweep.csv. "
+          "Dollar figures are scenarios, not causal estimates.", y=6.7)
 
-# ================================================================ P4 · INTERPRETABILITY (2 min)
+# ================================================================ P4 · INTERPRETABILITY (2.7 min)
 # 9 — Global drivers
-s = make_slide(prs); title(s, "What drives the score", "Interpretability · Global")
-picture(s, FIG / "shap_global.png", .4, 1.7, 8.6)
-card(s, "AGE 23–27 → 48+", f"{age_contrast*100:+.0f} pts", 9.35, 1.9, TEAL, "logistic, average probability change")
-card(s, "GANG AFFILIATION", f"{gang_contrast*100:+.0f} pts", 9.35, 3.5, RED, "recorded 'Yes' vs 'No'")
-card(s, "TOP DRIVERS", "Age · gang · priors", 9.35, 5.1, ORANGE, "same in logistic and XGBoost", size=17)
-textbox(s, "Marginal effects in probability points, not log-odds: the unit a caseworker understands.",
-        1.0, 6.85, 11, .3, 11, GREY, True, PP_ALIGN.CENTER); footer(s, 9)
+s = new_slide("Interpretability · Global", "Global drivers: what moves the score", "Interpretability", 9)
+picture(s, "shap_summary.png", LM, 1.75, 8.5, 4.75, align="left")
+text(s, 9.45, 1.8, 3.28, 0.3, "LOGISTIC, IN PROBABILITY POINTS", size=11.5, color=NAVY, bold=True)
+stat(s, 9.45, 2.2, 3.28, 1.55, f"{pct(age_contrast)} pts", f"age 23–27 → 48+\nPDP, all three models: {sl(pdp_age, '{:+.0f}')}",
+     color=TEAL, fill=CARD_T)
+stat(s, 9.45, 3.95, 3.28, 1.3, f"{pct(gang_contrast)} pts", f"recorded gang affiliation\nPDP, all three models: {sl(pdp_gang, '{:+.0f}')}",
+     color=CORAL, fill=CARD_C)
+text(s, 9.45, 5.45, 3.28, 1.0, "SHAP beeswarm on all 7,807 evaluation people: importance and direction in one chart.",
+     size=12, color=MUTED)
+source(s, "shap_summary.png · shap_importance_full.csv · probability_contrasts.csv · pdp_contrasts.csv", y=6.7)
 
-# 10 — Model-agnostic view: PDP/ICE for all three models, and what each model costs to explain
-s = make_slide(prs); title(s, "Looking from outside: PDP/ICE for all three models", "Interpretability · Model-agnostic")
-picture(s, FIG / "pdp_ice.png", .4, 1.7, 8.3)
-panel(s, "THREE ROUTES", "LOGISTIC\nCoefficients: read directly\n\n"
-      f"XGBOOST\nNeeds SHAP; a depth-3 surrogate tree reproduces only R² = {surrogate_r2:.2f}\n\n"
-      "TABICLv2\nNo native attribution: PDP/ICE is the only view", 9.0, 1.7, 3.9, 4.9, ORANGE)
-textbox(s, "Black line = average effect (PDP); faint lines = individual people (ICE). All three models agree: risk falls with age.",
-        .8, 6.85, 11.7, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 10)
+# 10 — PDP/ICE for all three models
+s = new_slide("Interpretability · Model-agnostic", "Looking from outside: PDP/ICE for all three models", "Interpretability", 10)
+picture(s, "pdp_ice.png", LM, 1.7, 6.5, 4.9, align="left")
+text(s, 7.35, 1.85, 5.38, 0.3, "THREE EXPLANATION ROUTES", size=12, color=NAVY, bold=True)
+for i, (name, col, fill, body) in enumerate([
+        ("Logistic", NAVY, CARD_N, "Coefficients read directly: the model is the explanation."),
+        ("XGBoost", TEAL, CARD_T, f"Needs SHAP; a depth-3 surrogate tree reproduces only R² = {surrogate_r2:.2f}."),
+        ("TabICL", CORAL, CARD_C, "No native attribution: PDP/ICE is the only view.")]):
+    y = 2.25 + i * 1.12
+    box(s, 7.35, y, 5.38, 0.98, fill=fill)
+    text(s, 7.55, y, 1.35, 0.98, name, size=15, color=col, bold=True, anchor=MSO_ANCHOR.MIDDLE)
+    text(s, 8.9, y, 3.7, 0.98, body, size=13, anchor=MSO_ANCHOR.MIDDLE)
+text(s, 7.35, 5.7, 5.38, 0.9, "PDP = average effect; ICE = one curve per person. Age, prior felony arrests and the "
+     "Georgia score: **all three models agree risk falls with age.**", size=13)
+source(s, "pdp_ice.png · interpretability_summary.json")
 
 # 11 — One person, and a faithfulness check
-s = make_slide(prs); title(s, "Explaining one person, and checking the explanation", "Interpretability · Local")
-picture(s, FIG / "shap_individual.png", .4, 1.7, 8.3)
-panel(s, "IS IT FAITHFUL?", "SHAP: exact for these two models\n\n"
-      f"LIME on raw features: local R² 0.25 → {lime_lo:.2f}–{lime_hi:.2f}\n\n"
-      "3 cases × 3 seeds: all 63 conditions keep their sign\n\n"
-      "Quote LIME for direction, SHAP for size", 9.0, 1.7, 3.9, 4.9, PURPLE)
-textbox(s, "Red raises risk, green lowers it. The explanation is what an appeal would contest.",
-        1.0, 6.85, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 11)
+s = new_slide("Interpretability · Local", "Explaining one person — and checking it is faithful", "Interpretability", 11)
+picture(s, "shap_individual.png", LM, 1.7, CW, 3.55)
+for i, (big, label, col, fill) in enumerate([
+        (f"0.25 → {lime_lo:.2f}–{lime_hi:.2f}", "LIME local fit (R²) after moving it to the raw feature space", NAVY, CARD_N),
+        ("3 cases × 3 seeds", "highest, median and lowest risk, each with three random seeds", TEAL, CARD_T),
+        ("63 / 63", "feature conditions keep the same sign across seeds", CORAL, CARD_C)]):
+    stat(s, LM + i * ((CW - 0.6) / 3 + 0.3), 5.35, (CW - 0.6) / 3, 1.25, big, label, color=col, fill=fill, big_size=22)
+source(s, "shap_individual.png · lime_individual.png · lime_fidelity.csv")
 
-# 12 — Explaining performance: XPER (course method) and agreement with SHAP / permutation importance
-s = make_slide(prs); title(s, "Explaining performance: where does the AUC come from?", "Interpretability · XPER")
-picture(s, FIG / "xper.png", .4, 1.7, 8.4)
-panel(s, "XPER", f"Splits the AUC itself into feature contributions (Shapley values)\n\n"
-      f"Benchmark ≈ {xper_bench:.2f} (no information) + features = AUC\n\n"
-      f"Age alone adds ≈ {xper_age.mean():.2f} AUC\n\n"
-      f"Agrees with SHAP / permutation importance on the set (Spearman {agree_lo:.2f}–{agree_hi:.2f}), not the order", 9.1, 1.7, 3.8, 4.95, PURPLE)
-textbox(s, "SHAP explains a prediction; permutation importance explains loss; XPER explains performance. Quote the set of drivers, not the rank.",
-        .8, 6.85, 11.7, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 12)
+# 12 — XPER and method agreement
+s = new_slide("Interpretability · XPER", "Explaining performance with XPER: methods disagree on order", "Interpretability", 12)
+picture(s, "xper.png", LM, 1.7, 8.9, 3.3, align="left")
+stat(s, 9.75, 1.8, 2.98, 1.45, f"≈ {xper_bench:.2f}", "benchmark AUC share", color=NAVY, fill=CARD_N, big_size=30)
+stat(s, 9.75, 3.45, 2.98, 1.45, f"+{xper_age.mean():.2f}", "AUC contributed by age", color=TEAL, fill=CARD_T, big_size=30)
+cards3(s, 5.2, 1.4, [
+    ("Rank agreement", NAVY, CARD_N, f"Spearman **{agree_sp.min():.2f}–{agree_sp.max():.2f}** SHAP vs permutation; only "
+     f"**{agree_xp.min():.2f}–{agree_xp.max():.2f}** either vs XPER."),
+    ("Shared drivers", TEAL, CARD_T, f"The three methods share **{top10_lo}–{top10_hi} of their top-10** features."),
+    ("Takeaway", CORAL, CARD_C, "Quote the **set** of main drivers, not their exact ranking.")])
+source(s, "xper.png · explanation_agreement.png · global_surrogate.png")
 
 # ================================================================ P5 · FAIRNESS (3 min)
-# 12 — Race (1)
-s = make_slide(prs); title(s, "Race (1): excluding race is not the same as being fair", "Fairness · Race")
-panel(s, "BASE RATES", f"Black {calib.loc[('Race', 'BLACK'), 'base_rate']:.3f}\nWhite {calib.loc[('Race', 'WHITE'), 'base_rate']:.3f}\n\nNearly equal: the data does not force a gap",
-      .7, 1.8, 3.85, 4.5, TEAL)
-panel(s, "WHAT EXCLUSION GUARANTEES", f"Twins differing only in race get the same score\n\nAdding race back changes AUC by ≤ {race_ab_max:.3f}",
-      4.75, 1.8, 3.85, 4.5, PURPLE)
-panel(s, "WHAT IT DOES NOT", f"Race is recoverable from our features at AUC {race_proxy_auc:.2f}\n\nCriminal history carries part of it — and cannot be dropped",
-      8.8, 1.8, 3.85, 4.5, RED)
-textbox(s, "Selection = support offered, so the harm is missed support: FNR is our primary metric. We audit outcomes, not inputs.",
-        .8, 6.62, 11.7, .3, 13, ORANGE, True, PP_ALIGN.CENTER); footer(s, 13)
+# 13 — Race (1)
+s = new_slide("Fairness · Race", "Race (1): excluding race is not the same as being fair", "Fairness", 13)
+text(s, LM, 1.62, CW, 0.35, "Primary metric: **FNR** — re-arrested but not selected for support, i.e. missed help. "
+     "All results at the deployed top-20% rule.", size=13.5, color=MUTED)
+box(s, LM, 2.15, 3.6, 2.75)
+text(s, LM + 0.25, 2.3, 3.1, 0.3, "BASE RATES", size=12, color=NAVY, bold=True)
+for dy, grp, lab, col in [(0.55, "BLACK", "Black", NAVY), (1.3, "WHITE", "White", TEAL_L)]:
+    text(s, LM + 0.25, 2.15 + dy, 1.6, 0.6, f"{calib.loc[('Race', grp), 'base_rate']:.3f}", size=36, color=col, bold=True)
+    text(s, LM + 1.75, 2.33 + dy, 1.6, 0.4, lab, size=14, color=MUTED)
+text(s, LM + 0.25, 4.15, 3.1, 0.7, "Almost equal: the data does not force a gap. (Contrast: COMPAS / ProPublica 2016.)", size=12)
+cw2 = (CW - 3.9 - 0.3) / 2
+card(s, LM + 3.9, 2.15, cw2, 2.75, "What exclusion guarantees",
+     ["Two people who differ only in race get **exactly the same score**.",
+      f"Adding race back changes AUC by **≤ {race_ab_max:.3f}**."], fill=CARD_T, head_color=TEAL, size=14, bullets=True, space=8)
+card(s, LM + 4.2 + cw2, 2.15, cw2, 2.75, "What it does not guarantee",
+     [f"Race is still recoverable at **AUC {race_proxy_auc:.3f}** from the remaining features.",
+      "Criminal-history variables carry part of the same information — and are the core of risk assessment."],
+     fill=CARD_C, head_color=CORAL, size=14, bullets=True, space=8)
+box(s, LM, 5.15, CW, 1.25, fill=CARD_N)
+text(s, LM + 0.3, 5.15, CW - 0.6, 1.25, "“Excluding race guarantees the model never uses it directly. It cannot guarantee "
+     "equal outcomes. That is why we **audit outcomes, not inputs**.”", size=16, color=NAVY, italic=True, anchor=MSO_ANCHOR.MIDDLE)
+source(s, "race_ab_test.csv · proxy_recovery.csv · fairness_impossibility.csv")
 
-# 13 — Race (2)
-s = make_slide(prs); title(s, "Race (2): the outcome audit, with three caveats", "Fairness · Race")
-picture(s, FIG / "fairness_race_gaps.png", .4, 1.7, 8.3)
-panel(s, "RESULT + CAVEATS", f"All race gaps within ±5 pts (TOST); none survives Holm\n\nSelection ratio W/B {slash(race_ratio, '{:.2f}')} (> 4/5)\n\n"
-      "1. Direction: slightly MORE Black people offered support\n2. Label: recorded arrest may carry policing bias\n"
-      f"3. AUC Black {min(race_auc[0::2]):.2f} vs White {min(race_auc[1::2]):.2f}", 9.0, 1.7, 3.95, 4.95, TEAL)
-footer(s, 14)
 
-# 14 — Gender (1)
-s = make_slide(prs); title(s, "Gender (1): women are over-predicted, yet selected less", "Fairness · Gender")
-picture(s, FIG / "fairness_gender_gaps.png", .4, 1.7, 8.3)
-panel(s, "WHY", f"FNR gap M − F {span(fnr20['Gender'])}, all models: the feature set, not one model\n\n"
-      f"Women's mean score {calib.loc[('Gender', 'F'), 'mean_score_logistic']:.2f} vs observed {calib.loc[('Gender', 'F'), 'base_rate']:.3f}\n\n"
-      f"Base rates {calib.loc[('Gender', 'M'), 'base_rate']:.2f} vs {calib.loc[('Gender', 'F'), 'base_rate']:.2f}: calibration and equal FNR cannot both hold",
-      9.0, 1.7, 3.95, 4.95, RED)
-textbox(s, f"Age: the largest gap ({span(fnr20['Age'])}), but by design: a validated risk factor. Risk vs need is the client's choice (A6).",
-        .6, 6.82, 12.1, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 15)
+def results(slide, head, rows):
+    """Right-hand column of three big numbers with labels (slides 14 and 15)."""
+    text(slide, 7.2, 1.75, 5.5, 0.3, head, size=12, color=NAVY, bold=True)
+    for i, (big, label, col) in enumerate(rows):
+        text(slide, 7.2, 2.12 + i * 0.88, 5.5, 0.4, big, size=19, color=col, bold=True)
+        text(slide, 7.2, 2.52 + i * 0.88, 5.5, 0.45, label, size=12, color=MUTED)
 
-# 15 — Gender (2)
-s = make_slide(prs); title(s, "Gender (2): cause located, mitigated, validated out of sample", "Fairness · Gender")
-picture(s, FIG / "fpdp_gender_focus.png", .35, 1.9, 8.4)
-panel(s, "FPDP → GANG", "Never recorded for women: record-keeping, not behaviour\n\n"
-      f"Drop it, refit inside {int(nested_sel * 100)}% of 5 training folds\n\n"
-      f"Out of fold: FNR gap {nested_base:+.3f} → {nested_mit:+.3f} (~70% closed), AUC {nested_auc:+.3f}\n\n"
-      "Cost: men's FNR +2 pts; selection rates still differ", 9.0, 1.65, 3.95, 5.0, TEAL)
-textbox(s, "Evaluation cohort untouched. A mitigation option for the client, not applied to the recommended model.",
-        1.0, 6.82, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 16)
+
+# 14 — Race (2)
+s = new_slide("Fairness · Race", "Race (2): the outcome audit, with three caveats", "Fairness", 14)
+picture(s, "fairness_race_gaps.png", LM, 1.7, 6.3, 3.06, align="left")
+results(s, "RESULT  (LOGISTIC / XGBOOST / TABICL)", [
+    (sl(fnr20.loc[m3, "Race"]), "FNR gap, Black − White", NAVY),
+    ("within ±5 pts", "every gap, by TOST equivalence; none significant after Holm", TEAL),
+    (sl(race_ratio, "{:.2f}"), "selection-rate ratio White : Black — above the four-fifths rule", NAVY)])
+for i, (head, body) in enumerate([
+        ("Direction is reversed", "XGBoost and TabICL select ~2 pts **more** Black people — here that means more help. "
+         "Used for sanctions, the same gap would be harm."),
+        ("The label may be biased", "We measure **recorded arrest**, not reoffending. Differences in policing intensity "
+         "cannot be seen in this data."),
+        ("Prediction quality differs", f"Within-group AUC **{min(race_auc[0::2]):.3f}–{max(race_auc[0::2]):.3f}** for Black "
+         f"vs **{min(race_auc[1::2]):.3f}–{max(race_auc[1::2]):.3f}** for White people.")]):
+    x = LM + i * ((CW - 0.6) / 3 + 0.3)
+    box(s, x, 4.95, (CW - 0.6) / 3, 1.65, fill=CARD_C)
+    circle(s, x + 0.2, 5.1, 0.38, CORAL, str(i + 1), size=12)
+    text(s, x + 0.7, 5.1, 3.0, 0.38, head, size=14, color=CORAL, bold=True, anchor=MSO_ANCHOR.MIDDLE)
+    text(s, x + 0.2, 5.55, 3.44, 1.05, body, size=12)
+source(s, "fairness_inference.csv · fairness_tests_holm.csv · fairness_by_group.csv")
+
+# 15 — Gender (1)
+s = new_slide("Fairness · Gender", "Gender (1): women are over-predicted, yet selected less", "Fairness", 15)
+picture(s, "fairness_gender_gaps.png", LM, 1.7, 6.3, 3.06, align="left")
+results(s, "LOGISTIC / XGBOOST / TABICL", [
+    (sl(fnr20.loc[m3, "Gender"]), "FNR gap, men − women: shared by all three models (feature set)", CORAL),
+    (sl(gender_ratio, "{:.2f}"), "selection-rate ratio women : men — about half", NAVY),
+    (f"{calib.loc[('Gender', 'F'), 'mean_score_logistic']:.2f} vs {calib.loc[('Gender', 'F'), 'base_rate']:.3f}",
+     "women's mean predicted score vs observed re-arrest rate", TEAL)])
+card(s, LM, 4.95, 5.95, 1.65, "Impossibility result",
+     f"Base rates differ by ~{(calib.loc[('Gender', 'M'), 'base_rate'] - calib.loc[('Gender', 'F'), 'base_rate']) * 100:.0f} pts "
+     f"(men **{calib.loc[('Gender', 'M'), 'base_rate']:.3f}**, women **{calib.loc[('Gender', 'F'), 'base_rate']:.3f}**): "
+     "calibration and equal error rates **cannot both hold**.", fill=CARD_N, head_color=NAVY, size=13.5)
+card(s, LM + 6.18, 4.95, 5.95, 1.65, "Over-prediction helps women here",
+     "Recalibrating by gender would lower their scores, select fewer women and **widen** the FNR gap. "
+     "(Cf. State v. Loomis.)", fill=CARD_C, head_color=CORAL, size=13.5)
+source(s, "fairness_impossibility.csv · fairness_inference.csv")
+
+# 16 — Gender (2)
+s = new_slide("Fairness · Gender", "Gender (2): cause found, mitigated, validated out of sample", "Fairness", 16)
+picture(s, "fpdp_gender_focus.png", LM, 1.7, 8.2, 2.6, align="left")
+card(s, 9.1, 1.75, 3.63, 2.5, "FPDP → Gang_Affiliated", "Never recorded for women; raw field has **Cramér's V = 1.0** "
+     "with gender. It reflects record-keeping, not behaviour.", fill=CARD_C, head_color=CORAL, size=13)
+text(s, LM, 4.5, 6.5, 0.3, "MITIGATION: DROP THE FIELD, REFIT  ·  5-FOLD NESTED, OUT-OF-FOLD", size=11.5, color=NAVY, bold=True)
+table(s, LM, 4.85, [["Model", "Gender FNR gap (before → after)", "AUC cost"]] +
+      [[n, f"{num(_nested_rows.loc[m, 'baseline_fnr_gap'])} → {num(_nested_rows.loc[m, 'mitigated_fnr_gap'])}",
+        num(_nested_rows.loc[m, "auc_change"])] for n, m in [("Logistic", "logistic"), ("XGBoost", "xgboost")]],
+      [1.5, 3.5, 1.6], row_h=0.42, size=13.5)
+stat(s, 7.45, 4.5, 2.35, 2.1, f"≈{round((1 - nested_mit / nested_base) * 20) / 20:.0%}",
+     "of the gap closed;\nsame field chosen in " + ("every fold" if nested_sel == 1 else f"{nested_sel:.0%} of folds"), color=TEAL, fill=CARD_T, big_size=32)
+card(s, 10.0, 4.5, 2.73, 2.1, "Costs · decision", ["Men's FNR +2 pts (partly levelling down).",
+                                                   "Proposed as a **second pilot arm** (A11)."],
+     head_color=NAVY, size=12, bullets=True, space=3)
+source(s, "fpdp_gender.png · mitigation_nested_summary.csv · fairness_mitigation.csv")
 
 # ================================================================ P6 · STABILITY + TRADE-OFFS + RECOMMENDATION (2.5 min)
-# 16 — Structural stability
-s = make_slide(prs); title(s, "Would a different sample give the same model?", "Stability · Structural")
-picture(s, FIG / "structural_stability.png", .5, 1.75, 8.3)
-card(s, "SCORE DRIFT (mean |Δp|)", slash([stability.loc[m, "mean_abs_prob_diff"] for m in m3]), 9.35, 1.9, ORANGE,
-     "logistic below XGBoost on all 28 pairs", size=15)
-card(s, "TOP-20% JACCARD", slash([stability.loc[m, "top20_jaccard"] for m in m3], "{:.2f}"), 9.35, 3.5, TEAL,
-     "≈ 13% of the selected change per refit", size=16)
-card(s, "PROTOCOL", "8 refits", 9.35, 5.1, PURPLE, "same bootstrap resamples for all 3")
-textbox(s, "Course definition: two samples from the same population should give approximately the same model.",
-        1.0, 6.82, 11, .3, 11, GREY, True, PP_ALIGN.CENTER); footer(s, 17)
+# 17 — Structural stability
+s = new_slide("Stability · Structural", "Structural stability: 8 bootstrap refits", "Stability", 17)
+table(s, LM, 1.8, [["Model", "Mean |Δp| between refits", "Top-20% Jaccard"]] +
+      [[n, f"{stability.loc[m, 'mean_abs_prob_diff']:.3f}", f"{stability.loc[m, 'top20_jaccard']:.2f}"]
+       for n, m in zip(["Logistic", "XGBoost", "TabICLv2"], m3)], [1.8, 2.6, 2.0], size=13.5, highlight=(1,))
+stat(s, 7.3, 1.8, 2.6, 1.62, "13–15%", "of selected people change between refits (not 23%)", color=NAVY, fill=CARD_N,
+     big_size=30, label_size=11.5)
+stat(s, 10.13, 1.8, 2.6, 1.62, "28 / 28", "refit pairs where logistic is more stable than XGBoost", color=TEAL,
+     fill=CARD_T, big_size=30, label_size=11.5)
+picture(s, "structural_stability.png", LM, 3.65, CW, 2.95)
+source(s, "structural_stability.png · stability_summary.csv")
 
-# 17 — Per-person stability and abstention
-s = make_slide(prs); title(s, "Stability for one person: abstaining is not fairness-neutral", "Stability · Individual")
-picture(s, FIG / "individual_stability.png", .35, 1.7, 12.6)
-textbox(s, f"{contested_share:.0%} of decisions flip. Unanimous only: precision {abst_full.precision_at_capacity:.3f} → {abst_strict.precision_at_capacity:.3f}, "
-        f"gender FNR gap {abst_full.fnr_gap_gender:+.3f} → {abst_strict.fnr_gap_gender:+.3f}.",
-        .8, 6.72, 11.7, .45, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 18)
+# 18 — Per-person stability and abstention
+s = new_slide("Stability · Individual", "Stability for one person: abstaining is not fairness-neutral", "Stability", 18)
+w4 = (CW - 0.75) / 4
+for i, (big, label, col, fill) in enumerate([
+        (f"≈{_indiv_l.share_contested:.0%}", f"of decisions flip between refits; {_indiv_l.contested_share_of_selected:.0%} of "
+         "selected sit at that margin", NAVY, CARD_N),
+        (f"{abst_full.precision_at_capacity:.3f} → {abst_strict.precision_at_capacity:.3f}",
+         "precision when keeping only unanimous decisions (8/8)", TEAL, CARD_T),
+        (f"{num(abst_full.fnr_gap_gender)} → {num(abst_strict.fnr_gap_gender)}", "gender FNR gap: abstention widens it",
+         CORAL, CARD_C),
+        ("47% vs 30%", "of selected women vs men sit at the margin", CORAL, CARD_C)]):
+    stat(s, LM + i * (w4 + 0.25), 1.8, w4, 1.35, big, label, color=col, fill=fill, big_size=24)
+picture(s, "individual_stability.png", LM, 3.35, CW, 3.25)
+source(s, "individual_stability.png · individual_stability_summary.csv · abstention_curve.csv  ·  links back to P5 (gender gap)")
 
-# 18 — Trade-off matrix and recommendation
-s = make_slide(prs); title(s, "Pilot logistic regression; run XGBoost as the challenger", "Conclusion · Trade-offs")
-picture(s, FIG / "tradeoff_matrix.png", .35, 1.6, 7.7)
-panel(s, "WHY LOGISTIC", f"Same people: {overlap_share:.0%} overlap with XGBoost; captured re-arrests CI includes 0\n\n"
-      "More stable than XGBoost on all 28 refit pairs\n\nCoefficients read directly · ~9× faster\n\n"
-      "Fairness and calibration: tied — not reasons\n\nReverses if: scores are quoted numerically, or scale makes +12 offers matter",
-      8.4, 1.6, 4.5, 5.1, TEAL)
-textbox(s, "Shadow pilot first: no temporal/external validation yet, and no evidence the support programme works.",
-        .8, 6.85, 11.7, .3, 11, ORANGE, True, PP_ALIGN.CENTER); footer(s, 19)
+# 19 — Trade-off matrix and recommendation
+s = new_slide("Conclusion · Trade-offs", "Pilot logistic regression; run XGBoost as the challenger", "Stability", 19)
+picture(s, "tradeoff_matrix.png", LM, 1.65, 6.6, 4.95, align="left")
+rx, rw = 7.35, W - LM - 7.35
+box(s, rx, 1.7, rw, 2.95, fill=CARD_T)
+text(s, rx + 0.25, 1.83, rw - 0.5, 0.3, "RECOMMENDATION", size=12, color=TEAL, bold=True)
+text(s, rx + 0.25, 2.15, rw - 0.5, 0.65, "L1 logistic regression for a prospective **shadow pilot**; XGBoost as challenger.", size=15)
+text(s, rx + 0.25, 2.88, rw - 0.5, 1.75, [
+    f"Same people: Jaccard {overlap_share:.3f}, only {int(_overlap.chosen_by_only_one)} differ; captured re-arrest "
+    "difference CI includes 0.",
+    f"More stable, directly interpretable, ~{speedup:.0f}× faster.",
+    "Calibration and fairness are tied — not a reason to choose.",
+    "**Second arm without gang affiliation** (A11)."], size=12.5, space=3, bullets=True, bullet_color=TEAL)
+card(s, rx, 4.8, rw, 1.0, "What would reverse it", "Scores quoted numerically to supervisees, or a scale where a few "
+     "extra captured events matter.", fill=CARD_C, head_color=CORAL, size=12)
+text(s, rx, 5.92, rw, 0.7, "**Limits:** evaluation set inspected repeatedly; no temporal or external validation; no "
+     "evidence yet that the support programme helps.", size=11.5, color=MUTED)
 
-# 19 — App
-s = make_slide(prs); title(s, "The application makes every trade-off testable", "Demo · App")
-panel(s, "1 · SCORE", "One person, all 3 models", .75, 1.75, 5.7, 1.72, ORANGE)
-panel(s, "2 · EXPLAIN", "Why this score (SHAP)", 6.85, 1.75, 5.7, 1.72, PURPLE)
-panel(s, "3 · STABILITY", "How many of 8 refits select them", .75, 3.8, 5.7, 1.72, ORANGE)
-panel(s, "4 · WHAT IF", "Edit an input, watch the score move", 6.85, 3.8, 5.7, 1.72, PURPLE)
-textbox(s, "streamlit run app.py   ·   backup: screenshots / recording", 3.2, 6.25, 7, .4, 15, PALE, True, PP_ALIGN.CENTER, "Consolas"); footer(s, 20)
+# 20 — App
+s = new_slide("Demo · App", "The Streamlit app makes every trade-off testable", "Demo", 20)
+for i, (head, body) in enumerate([("Scores", "One person's score from all three models"),
+                                  ("Explanation", "Why this score: SHAP / LIME for that person"),
+                                  ("Stability", "How many of the 8 refits select them"),
+                                  ("What-if", "Edit an input and watch the score change")]):
+    x = LM + i * 3.14
+    box(s, x, 2.2, 2.7, 3.0, fill=[CARD_N, CARD_T, CARD, CARD_C][i])
+    circle(s, x + 0.3, 2.5, 0.8, [NAVY, TEAL, GOLD, CORAL][i], str(i + 1), size=24)
+    text(s, x + 0.3, 3.55, 2.1, 0.45, head, size=20, bold=True)
+    text(s, x + 0.3, 4.05, 2.1, 1.0, body, size=14)
+    if i < 3:
+        arrow(s, x + 2.78, 3.55)
+box(s, LM, 5.55, CW, 0.9)
+text(s, LM + 0.3, 5.55, CW - 0.6, 0.9, "Backup: screenshots and a screen recording are ready if the live app fails.   ·   "
+     "Run: streamlit run app.py", size=13.5, color=MUTED, anchor=MSO_ANCHOR.MIDDLE)
 
 # ---------------------------------------------------------------- APPENDIX (Q&A only)
-s = make_slide(prs)
-textbox(s, "APPENDIX", .72, 2.6, 8, .5, 14, ORANGE, True)
-textbox(s, "Supporting evidence\nfor questions", .72, 3.15, 9, 1.5, 34, WHITE, True)
-textbox(s, "Learning curve · economic sensitivity · explanation disagreement · global surrogate · threshold frontier · age · process log", .76, 4.95, 9.5, .9, 15, PALE)
+s = prs.slides.add_slide(prs.slide_layouts[6])
+s.background.fill.solid(); s.background.fill.fore_color.rgb = rgb(BG_TITLE)
+text(s, LM + 0.1, 1.5, 6, 0.35, "APPENDIX", size=14, color=TEAL, bold=True)
+text(s, LM + 0.1, 2.0, 7, 1.6, "Supporting evidence\nfor questions", size=44, bold=True, line=0.95)
+text(s, LM + 0.1, 3.75, 6, 0.4, "Not presented — kept ready for Q&A.", size=16, color=MUTED)
+for k, item in enumerate(["A1  Learning curve", "A2  Economic sensitivity", "A3  Explanation disagreement",
+                          "A4  Global surrogate", "A5  Threshold frontier", "A6  Age", "A7  Process log", "A8  LIME",
+                          "A9  Permutation importance", "A10  Method overview", "A11  No-gang pilot arm"]):
+    text(s, 7.9 + (k // 6) * 2.6, 1.55 + (k % 6) * 0.62, 2.5, 0.5, item, size=14)
 
-s = make_slide(prs); title(s, "Which model for which agency size?", "A1 · Learning curve")
-picture(s, FIG / "learning_curve.png", .8, 1.8, 11.7)
-textbox(s, "Subsamples of one Georgia cohort test sample-size sensitivity; they do not validate transfer to other agencies.", 1.0, 6.7, 11, .5, 13, ORANGE, True, PP_ALIGN.CENTER)
-
-s = make_slide(prs); title(s, "Model value is a scenario, stress-tested", "A2 · Economic sensitivity")
-card(s, "SERVICE CAPACITY", "20%", .8, 1.9)
-card(s, "LOGISTIC NET", f"${inc_econ['logistic']/1e6:.2f}M", 3.75, 1.9, TEAL, f"XGBoost ${inc_econ['xgboost']/1e6:.2f}M")
-card(s, "HISTORICAL SCORE NET", f"${inc_econ['incumbent']/1e6:.2f}M", 6.7, 1.9, RED); card(s, "RANDOM NET", f"${inc_econ.get('random', 1.46e6)/1e6:.2f}M", 9.65, 1.9, GREY)
-bullets(s, ["$5,000 support cost · $50,000 event cost · 20% assumed effectiveness — all editable in the app",
-            "Models beat the historical score at every capacity from 5% to 50%",
-            "A randomized or quasi-experimental pilot must estimate real intervention impact"], y=3.72, size=20)
-
-s = make_slide(prs); title(s, "SHAP, permutation importance and XPER rank differently", "A3 · Explanation disagreement")
-picture(s, FIG / "explanation_agreement.png", .6, 1.75, 12.0)
-textbox(s, f"Spearman {agree_lo:.2f}–{agree_hi:.2f}; 8–10 of the top ten features shared. The set of drivers is robust, the order is method-dependent.",
-        1.0, 6.82, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER)
-
-s = make_slide(prs); title(s, "A depth-3 tree that mimics XGBoost", "A4 · Global surrogate")
-picture(s, FIG / "global_surrogate.png", .5, 1.75, 12.3)
-textbox(s, f"Test fidelity R² = {surrogate_r2:.2f}: readable, but it misses much of what XGBoost does. A surrogate can give an illusion of interpretability.",
-        1.0, 6.82, 11, .3, 11, RED, True, PP_ALIGN.CENTER)
-
-s = make_slide(prs); title(s, "Group thresholds: the fairness/utility frontier", "A5 · Threshold frontier")
-picture(s, FIG / "fairness_frontier.png", .5, 1.75, 12.3)
-textbox(s, "Optimised on the evaluation set, so optimistic. Group-specific thresholds by race or gender are disparate treatment.",
-        1.0, 6.82, 11, .3, 11, RED, True, PP_ALIGN.CENTER)
-
-s = make_slide(prs); title(s, "Age: the largest gap, and a policy choice", "A6 · Age")
-picture(s, FIG / "fpdp_age_focus.png", .35, 1.9, 8.4)
-panel(s, "WHY IT IS DIFFERENT", f"FNR gap <33 − 33+: {span(fnr20['Age'])}\n\n"
-      f"Re-arrested 48+: {age_old_fnr:.0%} not selected, vs {age_young_fnr:.0%} at 18–22\n\n"
-      "Age is a direct, validated risk factor: the gap is by design\n\n"
-      "FPDP finds no candidate: age runs through criminal history", 9.0, 1.65, 3.95, 5.0, ORANGE)
-textbox(s, "Ranking by risk or reserving places by age is the client's decision; the course's mitigation has nothing to act on.",
-        .8, 6.82, 11.7, .3, 11, ORANGE, True, PP_ALIGN.CENTER)
-
-s = make_slide(prs); title(s, "How we got here: what we tried, where we landed", "A7 · Process")
-picture(s, FIG / "improvement_journey.png", .55, 1.75, 12.2)
-textbox(s, "Full log in docs/JOURNEY.md — every step measured, including the attempts we rejected.", 1.0, 6.82, 11, .3, 11, ORANGE, True, PP_ALIGN.CENTER)
+APPENDIX = [
+    ("Learning curve", "Which model for which agency size?", "learning_curve.png",
+     "Subsamples of one Georgia cohort test sample-size sensitivity; they do not validate transfer to other agencies."),
+    ("Economic sensitivity", "Model value is a scenario, stress-tested", "incumbent_benchmark.png",
+     f"At 20% capacity: logistic ${inc_econ['logistic'] / 1e6:.3f}M, XGBoost ${inc_econ['xgboost'] / 1e6:.3f}M, historical score "
+     f"${inc_econ['incumbent'] / 1e6:.3f}M, random ${inc_econ['random'] / 1e6:.3f}M. Models beat the historical score at every "
+     "capacity from 5% to 50%; a randomised pilot must estimate the real effect."),
+    ("Explanation disagreement", "SHAP, permutation importance and XPER rank differently", "explanation_agreement.png",
+     f"Spearman {agree_lo:.2f}–{agree_hi:.2f}; {top10_lo}–{top10_hi} of the top ten features shared. The set of drivers is "
+     "robust, the order is method-dependent."),
+    ("Global surrogate", "A depth-3 tree that mimics XGBoost", "global_surrogate.png",
+     f"Test fidelity R² = {surrogate_r2:.2f}: readable, but it misses much of what XGBoost does. A surrogate can give an "
+     "illusion of interpretability."),
+    ("Threshold frontier", "Group thresholds: the fairness/utility frontier", "fairness_frontier.png",
+     "Optimised on the evaluation set, so optimistic. Group-specific thresholds by race or gender are disparate treatment."),
+    ("Age", "Age: the largest gap, and a policy choice", "fpdp_age_focus.png",
+     f"FNR gap <33 − 33+: {span(fnr20['Age']).replace('-', '−')}, mostly following base rates. Re-arrested 48+: {age_old_fnr:.0%} not selected, "
+     f"vs {age_young_fnr:.0%} at 18–22. Age is a validated, legally accepted risk factor and FPDP finds no candidate: it runs "
+     "through criminal history. Rank by risk or by need is the client's policy choice."),
+    ("Process", "How we got here: what we tried, where we landed", "improvement_journey.png",
+     "Full log in docs/JOURNEY.md — every step measured, including the attempts we rejected."),
+    ("LIME", "LIME for three people, with its fidelity", "lime_individual.png",
+     "Category-aware LIME on raw fields: local R² 0.33–0.49; every condition keeps its sign across three seeds. "
+     "Quote it for direction, SHAP for size."),
+    ("Permutation importance", "Permutation importance: shuffle one field, measure the loss", "permutation_importance_readable.png",
+     "Same drivers as SHAP and XPER. TabICLv2 was measured on 10 of 29 fields only: each shuffle needs a full "
+     "foundation-model prediction pass."),
+    ("Method overview", "Which interpretability method, for which model", "interpretability_matrix.png",
+     "Method × model, grouped into global, local and performance explanations."),
+    ("Pilot arm 2", "Dropping gang affiliation, re-evaluated on all four dimensions", "gang_variant_comparison.png",
+     "Gender gap closes; stability and drivers barely change; race stays within ±5 pts but flips sign. "
+     "Cost: AUC −0.014, 27 fewer re-arrests captured."),
+]
+for k, (kicker, title, fig, caption) in enumerate(APPENDIX, start=1):
+    s = new_slide(f"A{k} · {kicker}", title, None, f"A{k}")
+    pw, ph = PImage.from_file(str(FIG / fig)).size
+    if pw / ph < 2.2:  # tall figure: caption beside it
+        ix, iw = picture(s, fig, LM, 1.7, 8.2, 5.0, align="left")
+        cx = ix + iw + 0.4
+        ch_ = 0.9 + 0.3 * (len(caption) // 45)
+        box(s, cx, 1.8, W - LM - cx, ch_)
+        text(s, cx + 0.25, 1.8, W - LM - cx - 0.5, ch_, caption, size=14, anchor=MSO_ANCHOR.MIDDLE)
+    else:            # wide figure: caption below it
+        picture(s, fig, LM, 1.7, CW, 4.1)
+        box(s, LM, 5.95, CW, 0.8)
+        text(s, LM + 0.25, 5.95, CW - 0.5, 0.8, caption, size=13, anchor=MSO_ANCHOR.MIDDLE)
 
 # ---------------------------------------------------------------- SPEAKER NOTES
 # Timings follow reports/presentation_outline.md: 14:25 of talk across 20 core slides,
@@ -434,24 +794,25 @@ NOTES = {
  3: """[P1 · 0:50 · 40s] NIJ's own split: 18,028 training, 7,807 evaluation, Georgia 2013-2015. About 58% are re-arrested. Black and White men have almost the same rate; women are lower. On the right, missing values: the gang field is missing for EVERY woman and no man. The missingness is structured — over to [P2].""",
  4: """[P2 · 1:30 · 40s] We only use what is known when supervision starts: 29 fields. Race, gender and residence are never inputs; we keep them to audit who gets support. Everything recorded after release is excluded — and we proved why: adding those fields lifts AUC from 0.73 to 0.81, because they leak the outcome.""",
  5: """[P2 · 2:10 · 50s] The leak we found. Gang affiliation is missing for every woman. If missingness is kept, gender is recovered from our own inputs at AUC 1.00 — perfectly. TabICL treats a missing value as its own category, so it effectively saw gender. We fixed it with mode-filling and a regression test. But even after the fix, gender is still recoverable at 0.78: excluding an attribute is not removing it. [P5] picks this up.""",
- 6: """[P3 · 3:00 · 50s] Three families, as the brief requires, each tuned by cross-validation on training data only. Logistic with L1, C chosen by grid search. XGBoost with a 60-draw random search; deeper trees overfit and were rejected. TabICL with 16 ensemble members; gains level off near 8. Six other ML models all land in the same narrow AUC band.""",
- 7: """[P3 · 3:50 · 50s] Finding one: performance cannot pick the model. All three within 0.003 AUC. XGBoost beats logistic by 0.0025 on a PAIRED bootstrap — real, but small. Calibration: logistic and XGBoost are indistinguishable from perfect; TabICL's slope is 0.91, significantly below 1 — its probabilities are too extreme.""",
- 8: """[P3 · 4:40 · 50s] The client's real question: is this better than the score agencies already have? The historical Georgia score in the data reaches 0.60 AUC; our models reach 0.73, and roughly double the scenario net value at 20% capacity. Caveats in the same breath: it is a historical score, and the dollars are a scenario. Over to [P4].""",
- 9: """[P4 · 5:30 · 40s] What drives the score. Age at release, gang affiliation and prior record, in both models. In probability points: moving from age 23-27 to 48+ lowers predicted risk by about 27 points; a recorded gang affiliation raises it by about 17.""",
+ 6: """[P3 · 3:00 · 40s] Three families, as the brief requires, each tuned by cross-validation on training data only. Logistic with L1, C chosen by grid search. XGBoost with a 60-draw random search; deeper trees overfit and were rejected. TabICL with 16 ensemble members; gains level off near 8. Five other ML models all land in the same narrow AUC band.""",
+ 7: """[P3 · 3:40 · 45s] Finding one: performance cannot pick the model. The three ROC curves lie on top of each other: AUC 0.730 to 0.733. Is 0.73 good? Reviews of US recidivism tools call an AUC above 0.71 "excellent"; the historical Georgia score, at 0.60, is only "fair". XGBoost beats logistic by 0.0025 on a paired bootstrap: real, but small. Brier, the score NIJ used for this challenge, agrees: about 16% better than predicting the base rate, for all three. It also checks calibration, whether a predicted 70% means 70%: logistic and XGBoost pass; TabICL is slightly overconfident.""",
+ 8: """[P3 · 4:25 · 65s] The client's real question: is this worth paying for, compared with the score they already have? The scenario: 20% capacity, 1,561 offers. Support costs $5,000 a person, a re-arrest costs $50,000, and we ASSUME support prevents 20% of re-arrests. So net value is the number of offered people later re-arrested, times $10,000, minus $7.8M of programme cost. The cost is identical for every ranking, so only precision matters: 82% of our offers reach someone later re-arrested, against 67% for the historical score. That turns $2.7M into $5.0M. Put differently: with our ranking the programme breaks even if it prevents 12% of re-arrests; with the historical score it needs 15%. The dollars are a scenario, not a causal estimate: the data cannot tell us whether support works. Over to [P4].""",
+ 9: """[P4 · 5:30 · 40s] What drives the score. This is a SHAP summary for all 7,807 people: each dot is a person, red means a high value of that field, and dots to the right raise risk. Age comes first in both models - young people (blue) sit on the right - then gang affiliation and prior record. Logistic draws straight bars because it is linear; XGBoost spreads out because it picks up interactions. The cards turn this into probability points with partial dependence, for all three models: set everyone to age 23-27, then to 48+, and the average predicted risk falls by 26 to 29 points; switching gang affiliation from No to Yes raises it by 16 to 17. The three models agree - including TabICL, which SHAP cannot reach. For logistic regression this PDP difference is exactly the course's average marginal effect.""",
  10: """[P4 · 6:10 · 40s] Now from the outside, without opening the model. Partial dependence shows the average effect of one feature; the faint individual curves show each person. All three models agree that risk falls with age. This is the only way we can look inside TabICL at all: it has no native attribution. XGBoost can be summarised by a small surrogate tree, but that tree reproduces only 61% of it. Logistic needs none of this: its coefficients are the explanation.""",
  11: """[P4 · 6:50 · 40s] One person, explained by both models. Red raises risk, green lowers it — this is what an appeal would contest. We checked faithfulness: LIME on raw features fits locally about twice as well as before, and all 63 conditions keep their sign across seeds. We quote LIME for direction and SHAP for size.""",
  12: """[P4 · 7:30 · 40s] Last, explaining PERFORMANCE rather than predictions — XPER, from this course. It splits the AUC itself into contributions: an uninformative model gets about 0.47, and each feature adds its share; age alone adds about 0.09. Compared with SHAP and permutation importance, the three methods agree on WHICH features matter but not on their order, because they answer different questions: prediction, loss, performance. So we quote the set, not the rank. Over to [P5].""",
  13: """[P5 · 8:10 · 45s] Fairness. Our primary metric is FNR: people later re-arrested but not offered support — the real harm here. Race first, the question everyone expects after COMPAS. Base rates are almost equal, so the data does not force a gap. Excluding race guarantees twins get the same score, but race is still recoverable at 0.71 through criminal history. So we audit outcomes, not inputs.""",
  14: """[P5 · 8:55 · 45s] The outcome audit: every race gap is within five points by an equivalence test, and none survives Holm correction. Three caveats: the small gap runs toward MORE support for Black people; the label is recorded arrest, which may carry policing bias; and prediction quality is lower for Black people, AUC 0.72 vs 0.75.""",
  15: """[P5 · 9:40 · 45s] Gender is where we found a problem. Re-arrested women miss support 10 to 12 points more often, in all three models — so it comes from the features. Every model over-predicts women, yet selects them less: with different base rates, calibration and equal FNR cannot both hold. Age shows an even larger gap, but by design — age is a validated risk factor — so it is the client's policy choice; details in the appendix.""",
- 16: """[P5 · 10:25 · 45s] We located the cause with the course's FPDP: gang affiliation, never recorded for women. Dropping it, selected in every one of five training folds, closes about 70% of the gap out of sample for about one AUC point — at the cost of men's FNR rising two points. It is an option for the client, not applied to our recommended model. Over to [P6].""",
+ 16: """[P5 · 10:25 · 45s] We located the cause with the course's FPDP: gang affiliation, never recorded for women. Dropping it, selected in every one of five training folds, closes about 70% of the gap out of sample for about one AUC point — at the cost of men's FNR rising two points. We then re-evaluated the fix on all four dimensions (appendix A11): the gender gap closes, stability and the main drivers barely move, race stays within tolerance, and it costs about 0.014 AUC. So we propose it as a second pilot arm rather than deciding it for the client. Over to [P6].""",
  17: """[P6 · 11:10 · 40s] Stability, in the course's sense: two samples from the same population should give the same model. Eight bootstrap refits, same resamples for all three models. Logistic drifts less than XGBoost on all 28 pairs. Jaccard around 0.77 means about 13% of the selected people change per refit.""",
- 18: """[P6 · 11:50 · 50s] At the level of one person, about one decision in seven flips across refits. Referring contested cases to a human raises precision — but WIDENS the gender gap, because women sit at the margin more often. Abstention is not fairness-neutral.""",
- 19: """[P6 · 12:40 · 60s] Reading across the four dimensions: performance is a tie; interpretability and stability favour logistic; fairness gaps are shared by all three. So: logistic for a shadow pilot, XGBoost as challenger. The two select 85% of the same people and the difference in captured re-arrests includes zero. We do NOT claim logistic is fairer or better calibrated. It reverses if the client quotes scores numerically, or operates at a scale where a dozen extra offers matter.""",
+ 18: """[P6 · 11:50 · 50s] At the level of one person, about one decision in eight flips across refits. Referring contested cases to a human raises precision — but WIDENS the gender gap, because women sit at the margin more often. Abstention is not fairness-neutral.""",
+ 19: """[P6 · 12:40 · 60s] Reading across the four dimensions: performance is a tie; interpretability and stability favour logistic; fairness gaps are shared by all three. So: logistic for a shadow pilot, XGBoost as challenger. The two select 85% of the same people and the difference in captured re-arrests includes zero. We do NOT claim logistic is fairer or better calibrated. It reverses if the client quotes scores numerically, or operates at a scale where a dozen extra offers matter. And the pilot runs a second arm without gang affiliation, the field never recorded for women; appendix A11 shows it on all four dimensions.""",
  20: """[P1 · 13:40 · 45s] Demo one person: scores from all three models, the explanation, how many of eight refits select them, then edit an input and watch the score move. If the app fails, switch to the screenshots.
 
-[APPENDIX CUES] A1 learning curve · A2 economics · A3 explanation disagreement · A4 global surrogate · A5 threshold frontier · A6 age · A7 process""",
+[APPENDIX CUES] A1 learning curve · A2 economics · A3 explanation disagreement · A4 global surrogate · A5 threshold frontier · A6 age · A7 process · A8 LIME · A9 permutation importance · A10 method overview · A11 no-gang pilot arm""",
 }
+
 
 for index, slide in enumerate(prs.slides, start=1):
     if index in NOTES:

@@ -29,6 +29,40 @@ P2 and P5 back each other up because both deal with proxies and leakage.
 - **Gender is presented openly, as the problem we found and worked on.** All three models share the gap, so it comes from the feature set rather than from any one model. It also produced our strongest technical work: the missingness leak, the FPDP diagnosis and the nested mitigation.
 - **Fairness comes before Stability.** The stability section's key finding is that abstention widens the gender FNR gap, and that only makes sense once the audience knows what the gap is.
 
+### Open decision: with or without gang affiliation as the primary model
+
+**Status (27 Sep): team decision pending.** The current deck recommends the logistic model *with* gang affiliation and proposes the no-gang model as a second pilot arm (slides 16 and 19, evidence in A11). If the team makes the **no-gang model primary**, use the storyline below. Slides 1–15 and 17–18 do not change.
+
+**Why the earlier slides can stay: the story becomes a closed loop.**
+Detect (15: re-arrested women miss support more often) → cause (16: FPDP points to `Gang_Affiliated`, Cramér's V = 1.0 with gender) → fix (16: drop the field; nested 5-fold, gap closes ~70% out of fold) → **re-check that the fix creates no new problem** (new slide, all four dimensions) → recommend (19).
+This is the course's detect → explain → mitigate, plus a re-check step. Slides 1–15 describe the baseline *in which we found the problem*, so their numbers stay correct as the starting point. Slide 9 showing gang affiliation as the second-strongest driver sets up why dropping it has a cost.
+
+| Slide | Change |
+|---|---|
+| 16 | Last line: from "proposed as a second pilot arm (A11)" to "we then re-checked the full impact of dropping it on all four dimensions". |
+| **New core slide, between 18 and 19** | "Re-check: does the fix create new problems?" The with vs without gang comparison moves from A11 into the core. It sits after Stability so all four dimensions are introduced before they are re-checked. |
+| 19 | Recommendation becomes: L1 logistic **without gang affiliation** for the shadow pilot, XGBoost (no gang) as challenger. Update the trade-off matrix or say which variant it shows. |
+| A11 | Becomes a backup of the new slide, or is removed. |
+| Speaker notes | Rewrite 16 and 19; write notes for the new slide. |
+
+**What the re-check slide shows** (logistic, evaluation cohort, [gang_variant_eval.csv](../artifacts/gang_variant_eval.csv)):
+
+| Dimension | With gang | Without gang | Reading |
+|---|---:|---:|---|
+| ROC AUC | 0.730 | 0.715 | −0.014, the price of the fix |
+| Net value at 20% / captured re-arrests | $5.045M / 1,285 | $4.775M / 1,258 | still far above the historical score ($2.725M); break-even effect ≈12% vs 15% unchanged |
+| Calibration slope | 0.999 | 0.978 | still close to 1 |
+| Gender FNR gap (M − F) | −0.096 | **0.000** | closed; equal-opportunity p 0.00003 → 0.995 |
+| Race FNR gap (B − W) | −0.005 | +0.026 | still within ±5 pts (TOST) but **flips sign**; CI [0.000, 0.054] |
+| Stability: mean \|Δp\| / top-20% Jaccard | 0.032 / 0.77 | 0.032 / 0.75 | barely changes |
+
+**Prepare for Q&A if this option is chosen:**
+- **Who gets support changes.** Jaccard 0.61 against the with-gang model: about a quarter of support places go to different people. This is intended (the gender selection gap falls from 0.095 to 0.039), but say it openly.
+- **Gender statistical parity is still rejected**, and women's over-prediction worsens slightly (mean score 0.522 → 0.538 vs 0.454 observed).
+- **Logistic still beats XGBoost within the no-gang variant:** more stable (Jaccard 0.75 vs 0.72), gender FNR gap 0.000 vs −0.012, AUC 0.715 vs 0.719. The logistic-over-XGBoost argument on slide 19 survives.
+- **Slides 7–8 and 17–18 show with-gang numbers.** The new slide is the only place the deployed model's numbers appear. The slide 18 abstention result was not recomputed for the no-gang model.
+- **Timing:** one more core slide (~40 s) pushes the talk past 14:25; revisit if needed.
+
 ---
 
 ## P1 · Intro + EDA (1.5 min)
@@ -79,7 +113,7 @@ P2 and P5 back each other up because both deal with proxies and leakage.
 | XGBoost | ordinal encoding for count fields | 5-fold random search, 60 draws; deeper trees overfit and were rejected |
 | TabICLv2 | mixed types | 16 ensemble members; results level off at about 8 |
 
-- Six other ML candidates (CatBoost, LightGBM, EBM, …) all land between AUC 0.729 and 0.733.
+- Five other ML candidates (CatBoost, LightGBM, EBM, HistGB, random forest) all land between test AUC 0.729 and 0.733.
 - Sources: [ml_model_comparison.csv](../artifacts/ml_model_comparison.csv), [estimator_sweep.png](../artifacts/figures/estimator_sweep.png)
 
 ### Slide 7 · Statistical performance: effectively a tie
@@ -90,35 +124,37 @@ P2 and P5 back each other up because both deal with proxies and leakage.
 | XGBoost | 0.7324 | 0.2045 | 0.0112 | 8.7 s |
 | TabICLv2 | 0.7328 | 0.2044 | 0.0199 | 41.8 s |
 
+- **How good is 0.73?** Reviews of US recidivism tools grade AUC < .55 poor, .55–.63 fair, .64–.71 good and ≥ .71 excellent (Desmarais & Singh 2013, CSG Justice Center, Table 2; bands anchored to Cohen's d via Rice & Harris 2005). Our models sit in the "excellent" band; the historical Georgia score (0.60) is "fair".
 - XGBoost's AUC is 0.0025 higher than logistic's, with a paired 95% CI of [0.0006, 0.0044]. The difference is real but small.
-- Calibration: logistic and XGBoost are tied (Cox slopes 0.999 and 1.005). TabICL's slope is 0.913, so its probabilities are too extreme.
-- Sources: [model_comparison.png](../artifacts/figures/model_comparison.png), [performance_calibration.png](../artifacts/figures/performance_calibration.png), [paired_comparisons.csv](../artifacts/paired_comparisons.csv), [calibration_tests.csv](../artifacts/calibration_tests.csv)
+- Brier = mean of (predicted probability − outcome)², lower is better. It is the accuracy score NIJ used to rank this challenge. All three models are about 16% better than predicting the training base rate for everyone (0.245).
+- Calibration gets one sentence, as part of Brier (Brier = calibration error − resolution + uncertainty): does a predicted 70% mean 70% re-arrested? Logistic and XGBoost are statistically indistinguishable from perfect calibration (Cox slopes 0.999 and 1.005); TabICL's slope is 0.913, so its probabilities are slightly too extreme. This sets up "calibration" on slides 15 and 19; in course terms, calibration within groups is *sufficiency*. Bin-dependent ECE and the Spiegelhalter test stay for Q&A.
+- Sources: [performance_benchmark.png](../artifacts/figures/performance_benchmark.png) (from `scripts/deck_figures.py`), [paired_comparisons.csv](../artifacts/paired_comparisons.csv), [validation_baselines.csv](../artifacts/validation_baselines.csv), [calibration_tests.csv](../artifacts/calibration_tests.csv)
 
-### Slide 8 · The client's real question: are we better than the current tool?
-- The historical Georgia supervision score already in the data reaches AUC ≈ 0.60. Our models reach ≈ 0.73.
-- Precision among the selected top 20%: 0.675 for the current tool, 0.82–0.83 for our models.
-- Net value at 20% capacity:
+### Slide 8 · The client's real question: are we better than the current tool, in dollars?
+- Scenario (assumed, not estimated): 20% capacity = 1,561 offers; support costs $5,000 per person; a re-arrest costs $50,000; support prevents 20% of re-arrests.
+- Formula: net value = re-arrested among offers × $50,000 × 20% − offers × $5,000. Logistic: 1,285 × $10,000 − 1,561 × $5,000 = $5.045M.
+- Programme cost is the same for every ranking, so only precision (share of offers reaching someone later re-arrested) differs.
 
-| Ranking | Net value |
-|---|---:|
-| Random | $1.46M |
-| Current tool | $2.73M |
-| Logistic | $5.05M |
-| XGBoost | $5.17M |
-| TabICL | $5.12M |
+| Ranking | AUC | Re-arrested / offers | Precision | Net value |
+|---|---:|---:|---:|---:|
+| Random | 0.51 | 926 / 1,561 | 0.59 | $1.455M |
+| Historical Georgia score | 0.60 | 1,053 / 1,561 | 0.67 | $2.725M |
+| Logistic | 0.73 | 1,285 / 1,561 | 0.82 | $5.045M |
+| XGBoost | 0.73 | 1,297 / 1,561 | 0.83 | $5.165M |
+| TabICL | 0.73 | 1,292 / 1,561 | 0.83 | $5.115M |
 
-- The models beat the current tool at every capacity level.
-- Assumptions: $5,000 support cost per person, $50,000 cost per event, 20% intervention effectiveness. These dollar figures are scenarios, not causal estimates.
-- Sources: [incumbent_benchmark.png](../artifacts/figures/incumbent_benchmark.png), [incumbent_economics.csv](../artifacts/incumbent_economics.csv), [incumbent_capacity_sweep.csv](../artifacts/incumbent_capacity_sweep.csv)
+- Break-even: support pays for itself if precision × $50,000 × effect > $5,000, i.e. effect > 10% / precision. That is 12% with our ranking against 15% with the historical score.
+- The models beat the historical score at every capacity from 5% to 50% (appendix A2). The dollar figures are scenarios, not causal estimates.
+- Sources: [incumbent_economics.csv](../artifacts/incumbent_economics.csv), [incumbent_capacity_sweep.csv](../artifacts/incumbent_capacity_sweep.csv), [incumbent_effectiveness_sweep.csv](../artifacts/incumbent_effectiveness_sweep.csv)
 
 ## P4 · Interpretability (2 min)
 
 ### Slide 9 · Global drivers
-- SHAP global importance.
+- SHAP summary (beeswarm) for logistic and XGBoost on all 7,807 evaluation people: importance and direction in one chart (course p159-160).
 - Logistic effects in probability points:
   - Moving from age 23–27 to 48+ lowers predicted risk by about 27 points. Here age appears as a risk factor, consistent with how we treat it in fairness.
   - A recorded gang affiliation raises predicted risk by about 17 points.
-- Sources: [shap_global.png](../artifacts/figures/shap_global.png), [marginal_effects.png](../artifacts/figures/marginal_effects.png), [probability_contrasts.csv](../artifacts/probability_contrasts.csv)
+- Sources: [shap_summary.png](../artifacts/figures/shap_summary.png), [shap_importance_full.csv](../artifacts/shap_importance_full.csv), [marginal_effects.png](../artifacts/figures/marginal_effects.png), [probability_contrasts.csv](../artifacts/probability_contrasts.csv)
 
 ### Slide 10 · Looking from outside: PDP/ICE for all three models
 - PDP (average effect) and ICE (one curve per person) for age, prior felony arrests and the Georgia score, for all three models. All agree risk falls with age.
@@ -185,6 +221,7 @@ P2 and P5 back each other up because both deal with proxies and leakage.
 
 - The gap closes by about 70%.
 - Costs: men's FNR rises by about 2 points, so part of the improvement is levelling down. Selection rates still differ between men and women.
+- Re-evaluated on all four dimensions (appendix A11): gender gap closes, stability and drivers barely change, race stays within ±5 pts but flips sign, AUC −0.014. Proposed as a **second pilot arm**, not imposed on the client.
 - Sources: [fpdp_gender.png](../artifacts/figures/fpdp_gender.png), [fairness_dependence.png](../artifacts/figures/fairness_dependence.png), [mitigation_nested_summary.csv](../artifacts/mitigation_nested_summary.csv), [fairness_mitigation.csv](../artifacts/fairness_mitigation.csv)
 
 ## P6 · Stability + Trade-offs + Recommendation (2.5 min)
@@ -215,6 +252,7 @@ P2 and P5 back each other up because both deal with proxies and leakage.
   - The two models select 85% of the same people (Jaccard 0.849); only 254 people differ. The difference in re-arrests captured has a CI that includes zero.
   - Logistic is more stable, directly interpretable and about 9× faster.
   - Calibration and fairness are tied, so neither is a reason to choose.
+  - The pilot runs a **second arm without gang affiliation** (never recorded for women); evidence in A11. Team decision pending on whether to make it the primary configuration; see "Open decision: with or without gang affiliation" near the top for the storyline if it becomes primary.
 - What would reverse it: the client values calibration more than direct interpretability (for example, scores quoted numerically to supervisees), or operates at a scale where a few extra captured events matter.
 - Limits, in one line: the evaluation set was inspected repeatedly during development, there is no temporal or external validation, and there is no evidence yet that the support programme helps.
 - ⚠️ [tradeoff_matrix.png](../artifacts/figures/tradeoff_matrix.png) contains an "Age FNR gap" row. Regenerate it without that row.
@@ -240,6 +278,8 @@ P2 and P5 back each other up because both deal with proxies and leakage.
 - **A5 Group-threshold mitigation frontier:** [fairness_frontier.png](../artifacts/figures/fairness_frontier.png). It was optimised on the evaluation set, so it is optimistic.
 - **A6 Age.** Age is a validated and legally accepted risk factor. Its FNR gap of about 0.24 mostly follows from different base rates (0.646 for under-33s, 0.509 for 33+). Whether to rank by risk or by need is a policy choice for the client. Fixing the age field alone does not remove the gap, because it runs through criminal-history inputs that are correlated with age. Sources: [fairness_age_bands.csv](../artifacts/fairness_age_bands.csv), [fpdp_age.png](../artifacts/figures/fpdp_age.png)
 - **A7 Process log:** [improvement_journey.png](../artifacts/figures/improvement_journey.png)
+- **A8 LIME**, **A9 Permutation importance**, **A10 Interpretability method overview**
+- **A11 No-gang pilot arm:** [gang_variant_comparison.png](../artifacts/figures/gang_variant_comparison.png), [gang_variant_eval.csv](../artifacts/gang_variant_eval.csv)
 
 ## Open to-dos
 
@@ -249,6 +289,7 @@ P2 and P5 back each other up because both deal with proxies and leakage.
 - [x] Readable FPDP for slide 15 and appendix A6: `fpdp_gender_focus.png`, `fpdp_age_focus.png` (3 panels instead of 29).
 - [x] Deck rebuilt to follow this outline: 20 core slides + 7 appendix, speaker notes with [P1]-[P6] owner and timing.
 - [x] Age decision (team, 26 Sep): one line on slide 14 plus appendix A6; the age row stays in the trade-off matrix.
+- [ ] **Team decision:** with or without gang affiliation as the primary model (see "Open decision" near the top). If without: rewrite slides 16 and 19, add the re-check slide before 19, update the notes.
 - [ ] Open the deck in PowerPoint and check every slide (it was checked with a layout preview, not rendered in PowerPoint).
 - [ ] Record a backup video of the app demo.
 - [ ] Everyone reads the Q&A section of [presentation_notes.md](presentation_notes.md).
