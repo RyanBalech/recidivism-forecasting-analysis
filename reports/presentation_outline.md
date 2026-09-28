@@ -17,8 +17,8 @@ Paths below are relative to this file (`reports/`). Figures are in `artifacts/fi
 | P6 | Stability + Trade-offs + Recommendation | 2.5 min | 17–19 | P3 |
 | P1 | App demo | 0.75 min | 20 | — |
 
-Interpretability was extended from 3 to 4 slides (26 Sep): PDP/ICE and XPER moved from the appendix
-into the core so every course interpretability method has an evidence slide. Total ≈ 14:25.
+Interpretability has 4 slides (restructured 27 Sep): global (9), local (10), performance (11) and a
+verdict (12), each model read with the tool that suits it. Total ≈ 14:25.
 
 P2 and P5 back each other up because both deal with proxies and leakage.
 
@@ -147,36 +147,34 @@ This is the course's detect → explain → mitigate, plus a re-check step. Slid
 - The models beat the historical score at every capacity from 5% to 50% (appendix A2). The dollar figures are scenarios, not causal estimates.
 - Sources: [incumbent_economics.csv](../artifacts/incumbent_economics.csv), [incumbent_capacity_sweep.csv](../artifacts/incumbent_capacity_sweep.csv), [incumbent_effectiveness_sweep.csv](../artifacts/incumbent_effectiveness_sweep.csv)
 
-## P4 · Interpretability (2 min)
+## P4 · Interpretability (2.7 min)
 
-### Slide 9 · Global drivers
-- SHAP summary (beeswarm) for logistic and XGBoost on all 7,807 evaluation people: importance and direction in one chart (course p159-160).
-- Logistic effects in probability points:
-  - Moving from age 23–27 to 48+ lowers predicted risk by about 27 points. Here age appears as a risk factor, consistent with how we treat it in fairness.
-  - A recorded gang affiliation raises predicted risk by about 17 points.
-- Sources: [shap_summary.png](../artifacts/figures/shap_summary.png), [shap_importance_full.csv](../artifacts/shap_importance_full.csv), [marginal_effects.png](../artifacts/figures/marginal_effects.png), [probability_contrasts.csv](../artifacts/probability_contrasts.csv)
+Structure (27 Sep): the course's three questions, global → local → performance, and in each one **every model is read with the tool that suits it**: logistic through its own coefficients, XGBoost through exact TreeSHAP, TabICLv2 from outside (PDP/ICE/LIME).
 
-### Slide 10 · Looking from outside: PDP/ICE for all three models
-- PDP (average effect) and ICE (one curve per person) for age, prior felony arrests and the Georgia score, for all three models. All agree risk falls with age.
-- The three explanation routes: logistic coefficients read directly; XGBoost needs SHAP, and a depth-3 surrogate reproduces only R² = 0.61; TabICL has no native attribution, so PDP/ICE is the only view.
-- Sources: [pdp_ice.png](../artifacts/figures/pdp_ice.png), [interpretability_summary.json](../artifacts/interpretability_summary.json)
+### Slide 9 · Global drivers: each model, read with its own tool
+- Logistic: odds ratios from the coefficients, level vs reference. Age 18–22 vs 48+ ×5.8; gang Yes vs No ×2.4; 10+ prior felony arrests vs 1 ×2.4 (reference 1, not 0: only 2% have none, so that coefficient is unstable); Georgia score 10 vs 1 ×1.4 (the score is standardised, so the coefficient is divided by its SD).
+- XGBoost: SHAP summary (beeswarm), all 7,807 evaluation people.
+- TabICLv2: PDP + ICE for age, gang and prior felony arrests on 200 evaluation people.
+- Bottom line, PDP differences for logistic / XGBoost / TabICL: age 23–27 → 48+ −27 / −26 / −29 pts; gang No → Yes +17 / +16 / +17; felony arrests 1 → 10+ +18 / +15 / +17. Three tools, one answer.
+- Sources: [logistic_odds_ratios.png](../artifacts/figures/logistic_odds_ratios.png), [shap_summary_xgboost.png](../artifacts/figures/shap_summary_xgboost.png), [pdp_ice_tabicl.png](../artifacts/figures/pdp_ice_tabicl.png), [ice_age_gang.csv](../artifacts/ice_age_gang.csv) (`scripts/deck_figures.py`, `scripts/pdp_ice_slide.py`)
 
-### Slide 11 · Explaining one person, and checking the explanation is faithful
-- A SHAP waterfall explains one person's score.
-- LIME was moved to the raw feature space. This raised its local fit (R²) from 0.25 to 0.41–0.43.
-- Three cases (highest, median and lowest risk), each run with three random seeds, give 63 feature conditions. All 63 keep the same sign across seeds.
-- Sources: [shap_individual.png](../artifacts/figures/shap_individual.png), [lime_individual.png](../artifacts/figures/lime_individual.png), [lime_fidelity.csv](../artifacts/lime_fidelity.csv)
+### Slide 10 · One person on the cut-off: why in, why out
+- The person among the same 200 whose risk is closest to the top-20% cut-off in all three models (fixed by rule): age 28–32, gang Yes, 3 prior felony arrests. Risk 0.755 / 0.765 / 0.784 vs cut-off 0.756 / 0.760 / 0.781: logistic just out, XGBoost and TabICL just in.
+- Logistic: coefficient × (value − average), which is exactly SHAP for a linear model. XGBoost: TreeSHAP. TabICL: this person's ICE curves against the cut-off.
+- Gang affiliation is the largest push in every model (+0.69 / +0.71 log-odds); set it to No and risk falls to 0.57 / 0.58 / 0.59, so no model would offer support.
+- LIME on the same person: gang = Yes is the top reason in all three models; 60/60 logistic/XGBoost conditions have SHAP's sign; local R² only ≈ 0.24, so SHAP for size, LIME for direction.
+- Sources: [local_person.csv](../artifacts/local_person.csv), [local_person_contributions.csv](../artifacts/local_person_contributions.csv), [local_person_lime.csv](../artifacts/local_person_lime.csv) (`scripts/local_person.py`)
 
-### Slide 12 · Explaining performance with XPER; the methods disagree on order
-- XPER (course method) splits the AUC into a benchmark (≈ 0.47) plus feature contributions; age adds ≈ 0.09. Figure: [xper.png](../artifacts/figures/xper.png)
-- Spearman rank correlation is 0.77–0.81 between SHAP and permutation importance, but only 0.53–0.60 between either of them and XPER.
-- The three methods share 8–10 of their top-10 features.
-- Takeaway: quote the *set* of main drivers, not their exact ranking.
-- Interpretability cost by model:
-  - Logistic: read the coefficients directly.
-  - XGBoost: a depth-3 surrogate tree reproduces it with R² = 0.61 only.
-  - TabICL: no native attribution; only PDP/ICE.
-- Sources: [explanation_agreement.png](../artifacts/figures/explanation_agreement.png), [global_surrogate.png](../artifacts/figures/global_surrogate.png)
+### Slide 11 · Explaining performance: which fields earn the accuracy
+- XPER (course method) splits the AUC: an uninformative model ≈ 0.47; age adds ≈ 0.09, prior felony arrests ≈ 0.04 (logistic and XGBoost; too slow for TabICL).
+- Permutation importance (Brier increase when one field is shuffled): age first in all three models, TabICL included (14 of its 29 fields measured).
+- Six fields shown; years in prison ranks low in XPER but mid in permutation importance. Spearman 0.77–0.81 SHAP vs permutation, 0.53–0.60 vs XPER: quote the set of drivers, not the rank.
+- Sources: [performance_explanations.png](../artifacts/figures/performance_explanations.png), [xper_values.csv](../artifacts/xper_values.csv), [permutation_importance.csv](../artifacts/permutation_importance.csv)
+
+### Slide 12 · Verdict: logistic explains itself, TabICL only from outside
+- Grid: global / local / performance / cost to explain × three models; green = exact, amber = approximate or partial.
+- 1) All three agree: age, gang affiliation, prior record. 2) Interpretability favours logistic: only it answers "why me?" exactly and for free. 3) Hand-over to P5: the person on the cut-off is in because of gang affiliation, a field never recorded for women.
+- Full method × model matrix in A10.
 
 ## P5 · Fairness (3 min)
 
@@ -278,8 +276,11 @@ This is the course's detect → explain → mitigate, plus a re-check step. Slid
 - **A5 Group-threshold mitigation frontier:** [fairness_frontier.png](../artifacts/figures/fairness_frontier.png). It was optimised on the evaluation set, so it is optimistic.
 - **A6 Age.** Age is a validated and legally accepted risk factor. Its FNR gap of about 0.24 mostly follows from different base rates (0.646 for under-33s, 0.509 for 33+). Whether to rank by risk or by need is a policy choice for the client. Fixing the age field alone does not remove the gap, because it runs through criminal-history inputs that are correlated with age. Sources: [fairness_age_bands.csv](../artifacts/fairness_age_bands.csv), [fpdp_age.png](../artifacts/figures/fpdp_age.png)
 - **A7 Process log:** [improvement_journey.png](../artifacts/figures/improvement_journey.png)
-- **A8 LIME**, **A9 Permutation importance**, **A10 Interpretability method overview**
+- **A8 LIME on the slide-10 person, all three models:** [lime_person.png](../artifacts/figures/lime_person.png)
+- **A9 Permutation importance**, **A10 Interpretability method overview** (updated to the new slide numbers)
 - **A11 No-gang pilot arm:** [gang_variant_comparison.png](../artifacts/figures/gang_variant_comparison.png), [gang_variant_eval.csv](../artifacts/gang_variant_eval.csv)
+- **A12 Logistic SHAP** (= its coefficients, hence vertical bars): [shap_summary_logistic.png](../artifacts/figures/shap_summary_logistic.png)
+- **A13 PDP/ICE, all three models, age · gang · prior felony arrests:** [pdp_ice_age_gang_felony.png](../artifacts/figures/pdp_ice_age_gang_felony.png)
 
 ## Open to-dos
 
