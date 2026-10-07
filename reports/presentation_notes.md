@@ -5,7 +5,7 @@ Aim for 14 minutes plus a one-minute buffer. Every team member should rehearse e
 ## Talk sequence
 
 The deck follows [presentation_outline.md](presentation_outline.md): **20 core slides in six speaking
-parts plus a 7-slide appendix**, about 14:25 of talk. Each slide's speaker note starts with the part
+parts plus a 13-slide appendix**, about 14:25 of talk. Each slide's speaker note starts with the part
 that speaks it and its timing, e.g. `[P3 · 3:00 · 50s]`.
 
 | Part | Slides | Time | Topic |
@@ -13,7 +13,7 @@ that speaks it and its timing, e.g. `[P3 · 3:00 · 50s]`.
 | P1 | 1-3, 20 | 1:30 + 0:45 | Client, data and EDA; app demo at the end |
 | P2 | 4-5 | 1:30 | Eligible features; the gender leak through missingness |
 | P3 | 6-8 | 2:30 | Models and tuning; performance tie; historical score |
-| P4 | 9-12 | 2:40 | Global drivers; PDP/ICE and explanation cost; one person and faithfulness; XPER and method disagreement |
+| P4 | 9-12 | 2:40 | Global interpretability (each model with its own tool); local interpretability (one person on the cut-off); explaining performance (XPER, permutation); the cost of explaining |
 | P5 | 13-16 | 3:00 | Race (exclusion, outcome audit); gender (over-prediction, FPDP, mitigation); age in one line |
 | P6 | 17-19 | 2:30 | Structural and per-person stability; trade-offs and recommendation |
 
@@ -63,21 +63,35 @@ conditional and we say what reverses it.
 
 **Is the threshold frontier valid mitigation?** It is an in-sample illustration optimized using evaluation labels. Real mitigation needs a separate validation protocol and policy review.
 
+**Why exclude race and gender from the model at all?** Four reasons. (1) *Use*: the score decides who is offered help, and using race or gender directly would treat two otherwise identical people differently because of a protected attribute; for a US criminal-justice client that is legally and ethically hard to defend. (2) *No accuracy to gain from race*: adding race back changes AUC by at most 0.001 in all three models (`race_ab_test.csv`). (3) *Gender would hurt women here*: women are over-predicted (mean score about 0.52 against 0.454 observed); a model allowed to use gender would lower their scores and select even fewer of them, widening the FNR gap we worry about. (4) *We still need them*: excluding them from the inputs is not the same as ignoring them. They stay in the data for the outcome audit, because, as the course puts it, an algorithm can be unfair even when the protected attribute is not used. Gender is recoverable from the other inputs at AUC 0.776 and race at 0.708.
+
 **Does excluding race establish fairness?** It guarantees invariance to that direct input while fixing the other fields. Proxies and group disparities remain; this is not causal counterfactual fairness.
 
 **What does Jaccard 0.75 mean?** Intersection/union is 0.75. For equally sized selected sets, about 14.3% of each selected set is replaced, not 25% of the whole cohort.
 
-**Can TabICL explain individuals?** Native additive attribution is not implemented. Feature edits and ICE examine local responses, with no causal interpretation. This limitation belongs in the trade-off assessment.
+**Can TabICL explain individuals?** Only from the outside. It has no coefficients and no tree structure, and approximate SHAP would need thousands of predictions per person (hours on CPU). For the slide-10 person we used their own ICE curves and LIME (1,000 perturbed rows, three seeds): both put gang affiliation first, like SHAP does for the other two models. No causal interpretation. This limitation is the "cost of explaining" on slide 12.
 
 **Are dollars savings forecasts?** No. Intervention effects are assumed. Risk ranking may differ from treatment-benefit ranking.
 
 **What remains before production?** New-cohort validation, verified input timing, evidence of support benefit, justified tie/eligibility policy, appeals, monitoring and pre-agreed suspension rules.
 
-**Your LIME fit was weak - why should we believe it?** You should not believe the old one, and we replaced it. It explained the *transformed* one-hot space, so perturbations produced people who were two age bands at once or none; the surrogate fitted a region the model never sees and scored R² ≈ 0.25. LIME now runs on the raw features with `categorical_features` declared, so a perturbation swaps one real category for another. Fidelity roughly doubles to R² ≈ 0.41-0.43, reported per case next to every explanation. Three cases fixed by rule (highest / median / lowest risk), three seeds each, and all 63 conditions keep their sign. At 0.41 we quote LIME directionally and use SHAP when a magnitude is needed.
+**Your LIME fit was weak - why should we believe it?** You should not believe the old one, and we replaced it. It explained the *transformed* one-hot space, so perturbations produced people who were two age bands at once or none; the surrogate fitted a region the model never sees and scored R² ≈ 0.25. LIME now runs on the raw features with `categorical_features` declared, so a perturbation swaps one real category for another. Fidelity roughly doubles to R² ≈ 0.41-0.43, reported per case next to every explanation. Three cases fixed by rule (highest / median / lowest risk), three seeds each, and all 63 conditions keep their sign. At 0.41 we quote LIME directionally and use SHAP when a magnitude is needed. Note that on the slide-10 person the fit is lower, R² ≈ 0.24: fidelity varies from person to person, which is why we report it for each one. LIME still puts gang first in all three models and every logistic/XGBoost condition has SHAP's sign, which is all we use it for.
 
 **SHAP, permutation importance and XPER disagree - which is right?** All three, about different questions. SHAP attributes the prediction, permutation importance attributes loss, XPER decomposes AUC. We measured the divergence rather than assuming it away: Spearman 0.77-0.81 between SHAP and permutation importance, 0.53-0.60 between either and XPER, with 8-10 features shared in the top ten. So the set of drivers is robust and the ordering is method-dependent - quote the set, not the rank. XPER's reconstruction residual (0.018 logistic, 0.023 XGBoost) stays visible because its kernel approximation has no endpoint constraints.
 
 **What does a coefficient of 0.087 mean to my agency?** Nothing directly - it is per standardized unit. We report average marginal effects and average probability contrasts instead. Moving a supervisee from the 23-27 band to 48-or-older lowers predicted three-year arrest risk by about 27 points; a recorded gang affiliation raises it by about 17. Each contrast sets one real category for everyone, so there are no impossible rows. These are model responses to a counterfactual edit, not causal effects of ageing.
+
+**"Six times the odds" - so six times more likely?** No. Odds are p / (1 - p). Holding every other field fixed, a person over 48 with a 30% risk (odds 0.43) becomes about 71% at age 18-22 (odds 2.49): odds ×5.8, probability about ×2.4. Odds ratios come straight from the coefficients, exp(β_a - β_b), which is why logistic needs no second tool. The Georgia score is standardised inside the pipeline, so its per-point odds ratio divides the coefficient by the training SD: 10 vs 1 is ×1.4.
+
+**Why compare prior felony arrests with 1, not 0?** Only about 2% of training rows have none, so that level's coefficient is unstable (it would make the curve look U-shaped). Against one arrest the odds rise with the count, up to ×2.4 for ten or more.
+
+**How was the slide-10 person chosen?** By a fixed rule, before any explanation was looked at: among the 200 PDP/ICE people, the one whose risk is closest to the top-20% cut-off in all three models (evaluation ID 925). The cut-off is where an explanation decides an offer.
+
+**Logistic does not select that person - and you recommend logistic?** They sit 0.001 below the cut-off; XGBoost and TabICL put them just above. Slide 18 shows about a third of selected people sit at such a margin, where no model's decision is reliable. That is an argument for human review of marginal cases, not for a different model.
+
+**XPER says a model with no information scores 0.47. Shouldn't that be 0.5?** In theory, yes. The benchmark is estimated on 150 people with a kernel approximation that does not force the parts to add up exactly (residual +0.02), so 0.47 is "about a coin flip", not worse than one.
+
+**Slide 7 says TabICL takes 42 seconds. Why is explaining it so costly?** 42 s is one fit-and-predict pass on a GPU. Explanations need many passes: PDP/ICE for 200 people is 4,000 predictions, LIME 1,000 per run, XPER over a million. Our explanation runs were on CPU, where 200 ICE curves took about an hour; exact SHAP and XPER are out of reach.
 
 **XGBoost is measurably more accurate - why ship the weaker model?** Because the two significant advantages it has (+0.0025 AUC, -0.0010 Brier) do not reach the decision. At the deployed top-20% rule the two models offer support to **85% of the same people** (Jaccard 0.849; only 254 of 7,807 differ), and the difference in captured re-arrests is about 14 offers with a 95% interval of -29 to 0, which includes zero. What logistic wins is refit stability - lower drift on all 28 resample pairs (0.0322 vs 0.0351) and a more stable selected set (Jaccard 0.773 vs 0.747) - plus coefficients read directly with no second tool and no surrogate fidelity loss, and about a ninth of the runtime. We are not trading accuracy for interpretability; the accuracy difference does not change who gets help.
 

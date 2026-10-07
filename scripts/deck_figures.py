@@ -194,25 +194,28 @@ def interpretability_matrix() -> None:
     """Which interpretability method was applied to which model, grouped as in the course syllabus
     (global, local, explaining performance), with where each result is shown."""
     DONE, PART, NONE, NATIVE = "#2A9D8F", "#E9C46A", "#D9D9D9", "#1D6F63"
+    perm = pd.read_csv(ARTIFACT_DIR / "permutation_importance.csv")
+    n_tab = int((perm.model == "tabicl").sum())
     rows = [
         ("NATIVELY INTERPRETABLE (white box)", None),
-        ("Coefficients / odds ratios", [("native", NATIVE, "notebook"), ("—", NONE, ""), ("—", NONE, "")]),
-        ("Average marginal effects", [("✓", DONE, "notebook"), ("—", NONE, ""), ("—", NONE, "")]),
+        ("Coefficients / odds ratios", [("native", NATIVE, "slide 9"), ("—", NONE, ""), ("—", NONE, "")]),
+        ("Average marginal effects (= PDP difference)", [("✓", DONE, "slide 9 · notebook"), ("—", NONE, ""), ("—", NONE, "")]),
         ("AdaLogit / PLTR (white-box variants)", [("✓ tie", DONE, "AUC 0.7296 / 0.7292"), ("—", NONE, ""), ("—", NONE, "")]),
         ("GLOBAL — what drives the model", None),
         ("Impurity (gain) importance", [("—", NONE, "trees only"), ("✓", DONE, "artifact"), ("—", NONE, "")]),
-        ("SHAP summary", [("✓", DONE, "slide 9"), ("✓", DONE, "slide 9"), ("✗ too slow", NONE, "no exact explainer")]),
-        ("PDP (average curve)", [("✓", DONE, "slides 9-10"), ("✓", DONE, "slides 9-10"), ("✓", DONE, "slides 9-10")]),
-        ("Global surrogate tree", [("not needed", NONE, "already linear"), ("✓ R² 0.61", PART, "slide 10 · A4"), ("—", NONE, "")]),
+        ("SHAP summary", [("✓", DONE, "A12 (= coefficients)"), ("✓", DONE, "slide 9"), ("✗ too slow", NONE, "no exact explainer")]),
+        ("PDP + ICE (200 people)", [("✓", DONE, "A13"), ("✓", DONE, "A13"), ("✓", DONE, "slide 9 · A13")]),
+        ("Global surrogate tree", [("not needed", NONE, "already linear"), ("✓ R² 0.61", PART, "A4"), ("—", NONE, "")]),
         ("LOCAL — one person", None),
-        ("ICE (one curve per person)", [("✓", DONE, "slide 10"), ("✓", DONE, "slide 10"), ("✓", DONE, "slide 10")]),
-        ("SHAP (one person)", [("✓", DONE, "slide 11"), ("✓", DONE, "slide 11"), ("✗ too slow", NONE, "")]),
-        ("LIME + fidelity check", [("✓", DONE, "slide 11 · A8"), ("✓", DONE, "slide 11 · A8"), ("—", NONE, "")]),
+        ("SHAP / contributions (one person)", [("✓", DONE, "slide 10"), ("✓", DONE, "slide 10"), ("✗ too slow", NONE, "")]),
+        ("ICE for one person", [("✓", DONE, "app"), ("✓", DONE, "app"), ("✓", DONE, "slide 10")]),
+        ("LIME + fidelity check", [("✓", DONE, "slide 10 · A8"), ("✓", DONE, "slide 10 · A8"), ("✓ lighter", PART, "slide 10 · A8")]),
         ("What-if: change one field", [("✓", DONE, "app"), ("✓", DONE, "app"), ("✓", DONE, "app")]),
-        ("PERFORMANCE — what drives the AUC", None),
-        ("Permutation importance", [("✓", DONE, "slide 12 · A9"), ("✓", DONE, "slide 12 · A9"), ("partial", PART, "10 of 29 fields")]),
-        ("XPER", [("✓", DONE, "slide 12"), ("✓", DONE, "slide 12"), ("✗ too slow", NONE, "")]),
-        ("Method agreement (SHAP·PI·XPER)", [("✓", DONE, "slide 12 · A3"), ("✓", DONE, "slide 12 · A3"), ("—", NONE, "")]),
+        ("PERFORMANCE — what drives the accuracy", None),
+        ("Permutation importance", [("✓", DONE, "slide 11 · A9"), ("✓", DONE, "slide 11 · A9"),
+                                    ("partial", PART, f"slide 11 · {n_tab} of 29 fields")]),
+        ("XPER", [("✓", DONE, "slide 11"), ("✓", DONE, "slide 11"), ("✗ too slow", NONE, "")]),
+        ("Method agreement (SHAP·PI·XPER)", [("✓", DONE, "slide 11 · A3"), ("✓", DONE, "slide 11 · A3"), ("—", NONE, "")]),
     ]
     fig, ax = plt.subplots(figsize=(14, 10.2))
     ax.axis("off")
@@ -239,7 +242,7 @@ def interpretability_matrix() -> None:
     ax.set_title("Interpretability methods applied, by model (course grouping)",
                  fontsize=14, fontweight="bold", pad=6)
     fig.text(0.5, 0.01, "Logistic explains itself; XGBoost needs post-hoc tools; TabICLv2 can only be probed from outside "
-             "(PDP/ICE, what-if) — exact SHAP, LIME and XPER need too many foundation-model predictions.",
+             "(PDP/ICE, LIME with fewer samples, what-if) — exact SHAP and XPER need too many foundation-model predictions.",
              ha="center", fontsize=10, style="italic")
     fig.tight_layout(rect=[0, 0.03, 1, 1])
     fig.savefig(FIGURE_DIR / "interpretability_matrix.png", dpi=180, bbox_inches="tight")
@@ -283,11 +286,160 @@ def impurity_importance() -> None:
         .reset_index().to_csv(ARTIFACT_DIR / "xgboost_impurity_importance.csv", index=False)
 
 
+def logistic_odds_ratios() -> None:
+    """Slide 9, logistic column: the model read directly, as odds ratios between two levels.
+
+    With every level one-hot encoded, a single coefficient has no reference, so each bar compares
+    two levels: exp(beta_a - beta_b). Prior felony arrests are compared with 1, not 0: only 172
+    training people (2%) have none, so the 0 coefficient is unstable and makes the curve look U-shaped.
+    The CSV keeps every level; the figure shows a subset so it fits one slide column.
+    """
+    import joblib
+
+    from recidivism.config import MODEL_DIR
+
+    coef = pd.read_csv(ARTIFACT_DIR / "logistic_coefficients.csv").set_index("feature").coefficient
+    # The risk score is standardised before the model: its coefficient is per training SD, not per point.
+    score_sd = joblib.load(MODEL_DIR / "logistic.joblib")["prepare"].named_transformers_["numeric"]["scale"].scale_[0]
+    felony = "Prior_Arrest_Episodes_Felony"
+    rows = [("Age", f"{band} vs 48+", coef[f"Age_at_Release_{band}"] - coef["Age_at_Release_48 or older"])
+            for band in ["18-22", "23-27", "28-32", "33-37", "38-42", "43-47"]]
+    rows += [("Prior felony arrests", f"{n} vs 1", coef[f"{felony}_{n}"] - coef[f"{felony}_1"])
+             for n in ["0", "2", "3", "4", "5", "6", "7", "8", "9", "10 or more"]]
+    rows += [
+        ("Other", "Gang affiliated: Yes vs No", coef["Gang_Affiliated_Yes"] - coef["Gang_Affiliated_No"]),
+        ("Other", "Georgia risk score: 10 vs 1", 9 * coef["Supervision_Risk_Score_First"] / score_sd),
+        ("Other", "Parole/probation-violation arrests: 5+ vs 0", coef["_v1_5 or more"] - coef["_v1_0"]),
+        ("Other", "Parole revoked before: Yes vs No", coef["Prior_Revocations_Parole_Yes"] - coef["Prior_Revocations_Parole_No"]),
+        ("Other", "Mental health / substance abuse: Yes vs No", coef["Condition_MH_SA_Yes"] - coef["Condition_MH_SA_No"]),
+    ]
+    frame = pd.DataFrame(rows, columns=["group", "contrast", "log_odds"]).assign(odds_ratio=lambda d: np.exp(d.log_odds))
+    frame.to_csv(ARTIFACT_DIR / "logistic_odds_ratios.csv", index=False)
+
+    shown = {"Age": ["18-22 vs 48+", "28-32 vs 48+", "38-42 vs 48+"],
+             "Prior felony arrests": ["3 vs 1", "6 vs 1", "10 or more vs 1"]}
+    plot = frame[frame.apply(lambda r: r.group == "Other" or r.contrast in shown[r.group], axis=1)].copy()
+    plot["label"] = plot.apply(lambda r: r.contrast if r.group == "Other" else
+                               f"{r.group.replace('Prior felony arrests', 'Felony arrests')}: {r.contrast.replace(' or more', '+')}", axis=1)
+    group_colour = {"Age": PALETTE["logistic"], "Prior felony arrests": "#2A9D8F", "Other": "#8D99AE"}
+    plot = plot[::-1]
+
+    sns.set_theme(style="whitegrid", context="talk")
+    fig, ax = plt.subplots(figsize=(8, 7.5))
+    colors = ["#C1121F" if "Gang" in l else group_colour[g] for g, l in zip(plot.group, plot.label)]
+    ax.barh(plot.label, plot.odds_ratio, color=colors)
+    ax.axvline(1, color="grey", lw=1.5, ls="--")
+    for y, v in enumerate(plot.odds_ratio):
+        ax.text(v + 0.07, y, f"×{v:.1f}", va="center", fontsize=12, fontweight="bold")
+    ax.set_xlim(0, plot.odds_ratio.max() * 1.22)
+    ax.set_xlabel("Odds ratio (1 = no difference)", fontsize=13)
+    ax.set_title("Logistic regression: read the coefficients\n(odds of re-arrest, level vs reference)", fontsize=14)
+    ax.tick_params(axis="y", labelsize=11)
+    fig.tight_layout()
+    fig.savefig(FIGURE_DIR / "logistic_odds_ratios.png", dpi=180, bbox_inches="tight")
+    plt.close(fig)
+
+
+def shap_summary_single(model: str) -> None:
+    """SHAP summary for one model, all evaluation people: XGBoost for slide 9, logistic for the appendix."""
+    import joblib
+    import shap
+
+    from interpretability import shap_for
+    from recidivism.config import MODEL_DIR, pretty
+    from recidivism.modeling import ordinal_encode
+
+    split = load_official_split()
+    X = split.X_test
+    colour = ordinal_encode(X)
+    for col in colour.columns:
+        if not pd.api.types.is_numeric_dtype(colour[col]):
+            cats = sorted(colour[col].dropna().astype(str).unique())
+            colour[col] = colour[col].map({c: i for i, c in enumerate(cats)})
+        colour[col] = colour[col].astype(float).fillna(colour[col].astype(float).median())
+    values, _ = shap_for(joblib.load(MODEL_DIR / f"{model}.joblib"), split.X_train, X, model)
+    values = values[list(X.columns)]
+    fig = plt.figure(figsize=(8, 6.5))
+    shap.summary_plot(values.to_numpy(), colour.to_numpy(), feature_names=[pretty(c) for c in X.columns],
+                      max_display=8, show=False, plot_size=None)
+    plt.title(f"{DISPLAY[model]}: SHAP summary, all {len(X):,} people", fontsize=14)
+    plt.xlabel("SHAP value (log-odds): right = raises risk", fontsize=12)
+    fig.tight_layout()
+    fig.savefig(FIGURE_DIR / f"shap_summary_{model}.png", dpi=180, bbox_inches="tight")
+    plt.close(fig)
+
+
+def performance_explanations() -> None:
+    """Slide 11: which fields earn the performance. XPER splits the AUC (logistic, XGBoost; too slow
+    for TabICLv2); permutation importance measures the Brier loss when a field is shuffled (all three,
+    TabICLv2 on 10 fields). Same field order in both panels."""
+    from recidivism.config import pretty
+
+    xper = pd.read_csv(ARTIFACT_DIR / "xper_values.csv")
+    xper = xper[~xper.feature.str.startswith("benchmark")].pivot(index="feature", columns="model", values="xper")
+    perm = pd.read_csv(ARTIFACT_DIR / "permutation_importance.csv").pivot(index="feature", columns="model", values="importance")
+    rank = (xper.rank(ascending=False).mean(axis=1) + perm[["logistic", "xgboost"]].rank(ascending=False).mean(axis=1)) / 2
+    # Top five by average rank, plus years in prison: the methods disagree most on where it ranks.
+    fields = rank.sort_values().index[:5].tolist()
+    fields += [f for f in ["Prison_Years"] if f not in fields]
+
+    sns.set_theme(style="whitegrid", context="talk")
+    fig, (ax_x, ax_p) = plt.subplots(1, 2, figsize=(17, 6.2), sharey=True)
+    y = np.arange(len(fields))[::-1]
+    for ax, frame, models, xlabel, title in [
+            (ax_x, xper, ["logistic", "xgboost"], "Share of the AUC earned by the field", "XPER: split the AUC"),
+            (ax_p, perm, MODELS, "Brier loss increase when the field is shuffled", "Permutation importance: shuffle, measure the loss")]:
+        h = 0.8 / len(models)
+        for j, m in enumerate(models):
+            vals = frame.reindex(fields)[m]
+            ax.barh(y + (len(models) - 1) / 2 * h - j * h, vals.fillna(0), h, color=PALETTE[m], label=DISPLAY[m])
+            for yy, v in zip(y + (len(models) - 1) / 2 * h - j * h, vals):
+                if pd.isna(v):
+                    ax.text(0, yy, " not measured", va="center", fontsize=9, color="grey")
+        ax.axvline(0, color="grey", lw=1)
+        ax.set_xlabel(xlabel, fontsize=12)
+        ax.set_title(title, fontsize=14)
+        ax.legend(fontsize=11, loc="lower right")
+    ax_x.set_yticks(y, [pretty(f) for f in fields], fontsize=12)
+    fig.tight_layout()
+    fig.savefig(FIGURE_DIR / "performance_explanations.png", dpi=180, bbox_inches="tight")
+    plt.close(fig)
+
+
+def lime_person_figure() -> None:
+    """Appendix A8: LIME on the slide-10 person for all three models (mean weight ± sd over 3 seeds)."""
+    from recidivism.config import pretty
+
+    lime = pd.read_csv(ARTIFACT_DIR / "local_person_lime.csv")
+    sns.set_theme(style="whitegrid", context="talk")
+    fig, axes = plt.subplots(1, 3, figsize=(21, 6.8))
+    for ax, m in zip(axes, MODELS):
+        part = lime[lime.model == m]
+        agg = part.groupby("condition").weight.agg(["mean", "std"])
+        agg = agg.reindex(agg["mean"].abs().sort_values().index[-8:])
+        ax.barh([pretty(c) for c in agg.index], agg["mean"], xerr=agg["std"].fillna(0), capsize=3,
+                color=["#C1121F" if v > 0 else "#2A9D8F" for v in agg["mean"]])
+        ax.axvline(0, color="grey", lw=1)
+        samples = "1,000" if m == "tabicl" else "5,000"
+        ax.set_title(f"{DISPLAY[m]}: local R² {part.local_r2.mean():.2f}\n({samples} samples × 3 seeds)", fontsize=13)
+        ax.set_xlabel("LIME weight (mean ± sd over seeds)", fontsize=11)
+        ax.tick_params(axis="y", labelsize=10)
+    fig.suptitle("LIME on the slide-10 person: gang = Yes is the top reason in all three models", fontsize=15)
+    fig.tight_layout()
+    fig.savefig(FIGURE_DIR / "lime_person.png", dpi=180, bbox_inches="tight")
+    plt.close(fig)
+
+
 def main() -> None:
     sys.path.insert(0, str(ROOT / "scripts"))
+    interpretability_matrix()  # first: seaborn themes set by later figures drop the ✓/✗ glyphs
+    logistic_odds_ratios()
+    shap_summary_single("xgboost")
+    shap_summary_single("logistic")
+    performance_explanations()
+    lime_person_figure()
     impurity_importance()
     permutation_figure()
-    interpretability_matrix()
     shap_summary()
     eda_overview()
     performance_benchmark()

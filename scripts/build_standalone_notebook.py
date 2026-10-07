@@ -177,7 +177,7 @@ def main() -> None:
 
 This notebook follows the familiar machine-learning workflow: **load data → explore the training data → choose and engineer eligible features → check leakage → train → evaluate → explain → test stability and fairness → recommend**. The three NIJ source CSVs are compressed in the notebook's metadata and loaded by a short cell, with SHA-256 checks. This `.ipynb` can stand alone as the analysis file; the course presentation and app are separate deliverables. It does not import code from `src/` or `scripts/`, run shell commands, or read saved models and result tables. It still requires installed third-party Python packages and TabICL's checkpoint, which TabICL can obtain through its normal package mechanism.
 
-To rerun in a fresh Python environment, save the notebook locally and open it from its folder. Install `numpy`, `pandas`, `scikit-learn==1.7.2`, `xgboost`, `tabicl==2.2.0`, `torch`, `shap`, `lime`, `statsmodels`, `matplotlib` and `ipykernel`, then use **Run All**. A first TabICL checkpoint download may require internet access; CUDA speeds up its repeated fits.
+To rerun in a fresh Python environment, save the notebook locally and open it from its folder. Install `numpy`, `pandas`, `scikit-learn==1.7.2`, `xgboost`, `tabicl==2.2.0`, `torch`, `shap`, `lime`, `XPER==0.0.92`, `statsmodels`, `matplotlib` and `ipykernel`, then use **Run All**. A first TabICL checkpoint download may require internet access; CUDA speeds up its repeated fits.
 
 **Client and decision.** A community-supervision software vendor is considering a voluntary re-entry support offer to the highest-risk 20% of people at supervision start. This is a retrospective course analysis, not an operationally validated tool. Our target is cumulative new arrest within three years. NIJ's challenge used conditional annual forecasts, so these results are not leaderboard-comparable.
 
@@ -462,14 +462,43 @@ for name,p in probabilities.items():
 display(pd.DataFrame(economics).set_index('model'))"""),
         md("""## 7. Interpret what the models use
 
-Logistic coefficients are effects on log-odds per transformed unit; they are not causal. Average marginal effects below instead perturb one raw field while holding all others fixed, then average the change in predicted probability. For categorical features we compare each level to its training mode. Permutation importance measures the decline in evaluation AUC when a raw field is shuffled. Correlated fields may share credit."""),
-        code("""logit=models['logistic']
-coefs=pd.DataFrame({'transformed_feature':logit[-2].get_feature_names_out(),
-                    'coefficient':logit[-1].coef_[0]})
-coefs['odds_ratio']=np.exp(coefs.coefficient)
-display(coefs.reindex(coefs.coefficient.abs().sort_values(ascending=False).index).head(15))
+We ask the course's three questions: what drives each model overall (**global**), why one person receives their score (**local**), and which fields earn the model its accuracy (**performance**). Each model is read with the tool that suits it: logistic regression through its own coefficients, XGBoost through exact TreeSHAP, and TabICLv2, which has neither coefficients nor a fast exact explainer, from outside with PDP, ICE and LIME. All of these describe model behaviour, not causal effects.
 
-base_p=logit.predict_proba(X_eval)[:,1]
+### Global: logistic regression, read from its coefficients
+
+Every category is one-hot encoded, so a single coefficient has no reference level. We therefore report odds ratios between two levels, exp(β_a − β_b). Age bands are compared with 48 or older, and prior felony arrests with one arrest: only about 2% of training rows have none, so that level's coefficient is unstable. The Georgia risk score is standardised inside the pipeline, so its coefficient is divided by the training standard deviation to give a per-point effect."""),
+        code("""logit=models['logistic']
+coef=pd.Series(logit[-1].coef_[0],index=logit[-2].get_feature_names_out())
+numeric_cols=list(logit[-2].transformers_[0][2])
+score_sd=logit[-2].named_transformers_['numeric']['scale'].scale_[numeric_cols.index('Supervision_Risk_Score_First')]
+
+def odds(field,level,reference):
+    return float(np.exp(coef[f'{field}_{level}']-coef[f'{field}_{reference}']))
+
+felony_levels=['0','2','3','4','5','6','7','8','9','10 or more']
+odds_ratios=pd.DataFrame(
+    [('Age',f'{band} vs 48 or older',odds('Age_at_Release',band,'48 or older')) for band in age_order[:-1]]
+    +[('Prior felony arrests',f'{n} vs 1',odds('Prior_Arrest_Episodes_Felony',n,'1')) for n in felony_levels]
+    +[('Other','Gang affiliated: Yes vs No',odds('Gang_Affiliated','Yes','No')),
+      ('Other','Georgia risk score: 10 vs 1',float(np.exp(9*coef['Supervision_Risk_Score_First']/score_sd))),
+      ('Other','Parole/probation-violation arrests: 5 or more vs 0',odds('_v1','5 or more','0')),
+      ('Other','Parole revoked before: Yes vs No',odds('Prior_Revocations_Parole','Yes','No')),
+      ('Other','Mental health / substance abuse: Yes vs No',odds('Condition_MH_SA','Yes','No'))],
+    columns=['field','contrast','odds_ratio'])
+display(odds_ratios.round(2))
+
+shown=odds_ratios[odds_ratios.field.eq('Other')|odds_ratios.contrast.isin(
+    ['18-22 vs 48 or older','28-32 vs 48 or older','38-42 vs 48 or older','3 vs 1','6 vs 1','10 or more vs 1'])][::-1]
+labels=[c if f=='Other' else f'{f}: {c}' for f,c in zip(shown.field,shown.contrast)]
+fig,ax=plt.subplots(figsize=(9,5.5))
+ax.barh(labels,shown.odds_ratio,color=['#c1121f' if 'Gang' in l else '#234e70' for l in labels])
+ax.axvline(1,color='grey',ls='--')
+for y,v in enumerate(shown.odds_ratio):
+    ax.text(v+.05,y,f'x{v:.1f}',va='center')
+ax.set(xlabel='Odds ratio (1 = no difference)',title='Logistic regression: odds of new arrest, level vs reference')
+plt.tight_layout(); plt.show()"""),
+        md("""The same contrasts on the probability scale are **average marginal effects**: set every evaluation row to one level, then to the reference, and average the change in predicted probability. For a categorical field this is exactly a difference between two points of a partial dependence curve."""),
+        code("""base_p=logit.predict_proba(X_eval)[:,1]
 effects=[]
 for feature in FEATURES:
     observed=X_train[feature].dropna()
@@ -491,40 +520,28 @@ for feature in FEATURES:
                             'mean_probability_change':effect})
 effects=pd.DataFrame(effects)
 display(effects.reindex(effects.mean_probability_change.abs().sort_values(ascending=False).index).head(15))"""),
-        code("""# Permute original columns, so one-hot levels move together.
-importance=[]
-for name in ['logistic','xgboost']:
-    result=permutation_importance(models[name],X_eval,y_eval,scoring='roc_auc',
-                                  n_repeats=3,random_state=SEED,n_jobs=1)
-    importance.extend({'model':name,'feature':f,'auc_drop':v}
-                      for f,v in zip(FEATURES,result.importances_mean))
-importance=pd.DataFrame(importance)
-display(importance.sort_values(['model','auc_drop'],ascending=[True,False]).groupby('model').head(10))
-print('Permutation importance is descriptive on this repeatedly inspected evaluation cohort.')"""),
-        md("""### SHAP, a global surrogate and partial dependence
+        md("""### Global: XGBoost, through SHAP
 
-SHAP attributes XGBoost's raw score (log-odds) across its transformed inputs. We sum one-hot levels back to their original fields for the global view. A depth-three decision tree is a readable approximation of XGBoost; its R² on evaluation probabilities tells us how much of the original model it can actually explain. Partial dependence then changes age for the same 200 records and averages each model's probabilities. These are model behavior descriptions, not causal effects."""),
+TreeSHAP computes exact SHAP values for tree ensembles in seconds, so every evaluation person is explained. In the summary plot each dot is a person: further right raises predicted risk, and the colour is the field's value (ordered categories by rank). A depth-three decision tree then tries to mimic XGBoost; its R² on evaluation probabilities shows how much of the model a readable surrogate can actually explain."""),
         code("""import shap
 
-sample_ix=np.random.default_rng(SEED).choice(len(X_eval),1000,replace=False)
-X_shap=X_eval.iloc[sample_ix]
 pipe=models['xgboost']
-prepared=pipe[:-1].transform(X_shap)
+prepared=pipe[:-1].transform(X_eval)
 prepared=prepared.toarray() if hasattr(prepared,'toarray') else prepared
 shap_values=shap.TreeExplainer(pipe[-1]).shap_values(prepared)
 transformed_names=pipe[-2].get_feature_names_out()
-shap_importance=pd.DataFrame({'transformed_feature':transformed_names,
-                               'mean_abs_shap':np.abs(shap_values).mean(axis=0)})
 def original_field(name):
     name=str(name).removeprefix('missingindicator_')
     match=[f for f in FEATURES if name==f or name.startswith(f+'_')]
     return max(match,key=len) if match else name
-shap_importance['feature']=shap_importance.transformed_feature.map(original_field)
-shap_global=shap_importance.groupby('feature').mean_abs_shap.sum().sort_values(ascending=False)
-display(shap_global.head(10).to_frame())
-fig,ax=plt.subplots(figsize=(8,4))
-shap_global.head(10).sort_values().plot.barh(ax=ax,title='XGBoost global mean absolute SHAP')
-ax.set_xlabel('Mean absolute contribution to raw score'); plt.tight_layout(); plt.show()
+fields=[original_field(n) for n in transformed_names]
+shap_raw=pd.DataFrame(shap_values,columns=transformed_names).T.groupby(fields).sum().T[FEATURES]
+shap_global=shap_raw.abs().mean().sort_values(ascending=False)
+display(shap_global.head(10).rename('mean_abs_shap').to_frame())
+colour=ordinal_encode(X_eval).apply(lambda c: c if pd.api.types.is_numeric_dtype(c)
+                                    else c.astype('category').cat.codes.replace(-1,np.nan))
+shap.summary_plot(shap_raw.to_numpy(),colour.to_numpy(float),feature_names=FEATURES,max_display=8,show=False)
+plt.title(f'XGBoost SHAP summary, all {len(X_eval):,} evaluation people'); plt.tight_layout(); plt.show()
 
 encoded_train=pd.get_dummies(ordinal_encode(X_train)).fillna(-1)
 encoded_eval=pd.get_dummies(ordinal_encode(X_eval)).reindex(columns=encoded_train.columns,fill_value=0).fillna(-1)
@@ -532,38 +549,76 @@ surrogate=DecisionTreeRegressor(max_depth=3,min_samples_leaf=200,random_state=SE
 surrogate.fit(encoded_train,models['xgboost'].predict_proba(X_train)[:,1])
 surrogate_r2=r2_score(probabilities['xgboost'],surrogate.predict(encoded_eval))
 print('Depth-three surrogate R² on evaluation probabilities:',round(surrogate_r2,3))"""),
-        code("""# Local SHAP for the predetermined median-risk person, grouped to raw features.
-local_ix=int(np.argsort(probabilities['xgboost'])[len(X_eval)//2])
-local_prepared=pipe[:-1].transform(X_eval.iloc[[local_ix]])
-local_prepared=local_prepared.toarray() if hasattr(local_prepared,'toarray') else local_prepared
-local_values=shap.TreeExplainer(pipe[-1]).shap_values(local_prepared)[0]
-local_shap=(pd.DataFrame({'feature':[original_field(n) for n in transformed_names],
-                          'contribution':local_values})
-            .groupby('feature').contribution.sum().sort_values(key=abs,ascending=False).head(10))
-display(local_shap.rename('raw-score contribution').to_frame())
-fig,ax=plt.subplots(figsize=(9,5))
-local_shap.sort_values().plot.barh(ax=ax,color=['#c1121f' if v>0 else '#2a9d8f'
-                                            for v in local_shap.sort_values()])
-ax.set(xlabel='Contribution to XGBoost raw score',
-       title='Local SHAP: median-risk person'); plt.tight_layout(); plt.show()"""),
-        code("""age_order=['18-22','23-27','28-32','33-37','38-42','43-47','48 or older']
-ice_people=X_eval.iloc[np.random.default_rng(SEED).choice(len(X_eval),200,replace=False)]
-pdp=[]
-for name,model in models.items():
-    for band in age_order:
-        changed=ice_people.copy(); changed['Age_at_Release']=band
-        if name=='tabicl':
-            pred=model.predict_proba(changed.fillna(category_modes))[:,1]
-        else:
-            pred=model.predict_proba(changed)[:,1]
-        pdp.append({'model':name,'age_band':band,'mean_probability':pred.mean()})
-pdp=pd.DataFrame(pdp)
-display(pdp.pivot(index='age_band',columns='model',values='mean_probability').round(3))
-fig,ax=plt.subplots(figsize=(9,4))
-for name,part in pdp.groupby('model'):
-    ax.plot(part.age_band,part.mean_probability,marker='o',label=name)
-ax.set(ylabel='Mean predicted probability',title='Age partial dependence')
-ax.tick_params(axis='x',rotation=35); ax.legend(); plt.tight_layout(); plt.show()"""),
+        md("""### Global, from outside: PDP and ICE for all three models
+
+The same 200 evaluation people are set to every age band, to gang affiliation No and Yes, and to every prior-felony count. Each person's predictions form one ICE curve; their average is the partial dependence (PDP). This is model-agnostic, so it is the global view available for TabICLv2 too. The PDP difference between two levels is the average marginal effect in percentage points."""),
+        code("""def predict(name,frame):
+    frame=frame.fillna(category_modes) if name=='tabicl' else frame
+    return models[name].predict_proba(frame)[:,1]
+
+ice_ix=np.random.default_rng(SEED).choice(len(X_eval),1000,replace=False)[:200]
+ice_people=X_eval.iloc[ice_ix].reset_index(drop=True)
+grid={'Age_at_Release':age_order,'Gang_Affiliated':['No','Yes'],
+      'Prior_Arrest_Episodes_Felony':['0','1','2','3','4','5','6','7','8','9','10 or more']}
+settings=[(f,v) for f,values in grid.items() for v in values]
+batch=pd.concat([ice_people.assign(**{f:v}) for f,v in settings],ignore_index=True)
+ice={name:pd.DataFrame(predict(name,batch).reshape(len(settings),len(ice_people)).T,
+                       columns=pd.MultiIndex.from_tuples(settings)) for name in models}
+contrasts=pd.DataFrame({name:{
+    'Age 23-27 -> 48 or older':f[('Age_at_Release','48 or older')].mean()-f[('Age_at_Release','23-27')].mean(),
+    'Gang No -> Yes':f[('Gang_Affiliated','Yes')].mean()-f[('Gang_Affiliated','No')].mean(),
+    'Felony arrests 1 -> 10 or more':f[('Prior_Arrest_Episodes_Felony','10 or more')].mean()
+                                    -f[('Prior_Arrest_Episodes_Felony','1')].mean()} for name,f in ice.items()})
+display((100*contrasts).round(1).rename_axis('PDP difference (points)'))
+
+colours={'logistic':'#234e70','xgboost':'#fb8500','tabicl':'#7b2cbf'}
+fig,axes=plt.subplots(3,3,figsize=(15,11),sharey=True)
+for c,(name,frame) in enumerate(ice.items()):
+    for r,(feature,values) in enumerate(grid.items()):
+        ax=axes[r][c]; x=np.arange(len(values)); curves=frame[feature][values]
+        for _,curve in curves.iterrows():
+            ax.plot(x,curve.to_numpy(),color=colours[name],alpha=.07,lw=1)
+        ax.plot(x,curves.mean().to_numpy(),color='black',lw=3,marker='o',ms=4)
+        ax.set_xticks(x,[v.replace(' or more','+').replace(' or older','+') for v in values],fontsize=8)
+        ax.set_title(f'{name} · {feature}',fontsize=10); ax.set_ylim(0,1)
+fig.suptitle('PDP (black) and ICE (one faint line per person, 200 people)'); plt.tight_layout(); plt.show()"""),
+        md("""### Local: one person on the support cut-off
+
+A local explanation matters most where a small change decides the offer. Among the same 200 people we take the one whose predicted risk is closest to the top-20% cut-off in all three models, fixed by that rule before looking at any explanation. Logistic regression is explained by coefficient × (value − training average) on each prepared column, summed back to raw fields: for a linear model this is exactly its SHAP value. XGBoost uses TreeSHAP. For TabICLv2 we read this person's own ICE curves against the cut-off."""),
+        code("""cutoff={name:float(np.sort(p)[::-1][round(len(p)*.20)-1]) for name,p in probabilities.items()}
+own=pd.DataFrame({name:probabilities[name][ice_ix] for name in models})
+person_ix=int((own-pd.Series(cutoff)).abs().sum(axis=1).idxmin())
+person=ice_people.iloc[[person_ix]]
+display(person.T.rename(columns={person_ix:'raw value'}).head(10))
+
+def dense(matrix):
+    return matrix.toarray() if hasattr(matrix,'toarray') else matrix
+background=dense(logit[:-1].transform(X_train)).mean(axis=0)
+logit_fields=[original_field(n) for n in logit[-2].get_feature_names_out()]
+contrib_logit=pd.Series((dense(logit[:-1].transform(person))[0]-background)*logit[-1].coef_[0],
+                        index=logit_fields).groupby(level=0).sum()
+contrib_xgb=pd.Series(shap.TreeExplainer(pipe[-1]).shap_values(dense(pipe[:-1].transform(person)))[0],
+                      index=fields).groupby(level=0).sum()
+
+local=pd.DataFrame({'risk':own.iloc[person_ix],'cutoff':pd.Series(cutoff)})
+local['offered_support']=local.risk>=local.cutoff
+local['risk_if_gang_No']=[ice[name][('Gang_Affiliated','No')].iloc[person_ix] for name in local.index]
+display(local.round(3))
+
+fig,axes=plt.subplots(1,2,figsize=(14,4.5))
+for ax,(name,contrib) in zip(axes,[('logistic: coefficient x value',contrib_logit),('xgboost: TreeSHAP',contrib_xgb)]):
+    top=contrib.reindex(contrib.abs().sort_values(ascending=False).index[:8])[::-1]
+    ax.barh(top.index,top.values,color=['#c1121f' if v>0 else '#2a9d8f' for v in top.values])
+    ax.axvline(0,color='grey'); ax.set(title=name,xlabel='Contribution (log-odds)')
+plt.tight_layout(); plt.show()
+fig,axes=plt.subplots(1,3,figsize=(15,3.8),sharey=True)
+for ax,(feature,values) in zip(axes,grid.items()):
+    curve=ice['tabicl'][feature][values].iloc[person_ix]
+    ax.axhline(cutoff['tabicl'],color='#2a9d8f',ls='--',label='top-20% cut-off')
+    ax.plot(values,curve.to_numpy(),color=colours['tabicl'],marker='o')
+    ax.plot(person[feature].iloc[0],curve[person[feature].iloc[0]],'o',ms=13,mfc='none',mec='black')
+    ax.set_title(f'tabicl ICE · {feature}',fontsize=10); ax.tick_params(axis='x',labelsize=8,rotation=35)
+axes[0].legend(); plt.tight_layout(); plt.show()"""),
         md("""### Local explanation with a fidelity check
 
 LIME samples nearby raw-feature values. Categorical variables are declared as categories so it does not create impossible combinations of independent one-hot flags. Its weighted local R² measures how faithfully the small surrogate approximates XGBoost around the chosen person. A low R² means the explanation should be treated cautiously."""),
@@ -617,6 +672,30 @@ pd.Series(dict(median_rules)).sort_values().plot.barh(ax=ax)
 ax.set(xlabel='LIME contribution to local probability',
        title=f'Median-risk explanation (local R²={lime_results.loc[(lime_results.case=="median") & (lime_results.seed==0),"local_r2"].iloc[0]:.2f})')
 plt.tight_layout(); plt.show()"""),
+        md("""LIME is then run on the same person for all three models (three seeds each; 1,000 perturbed rows for TabICLv2 instead of 5,000, because each of its predictions is expensive). We check whether its top reason matches the explanations above and whether each condition has the same sign as SHAP."""),
+        code("""_,person_arr,_,_,_=lime_space(X_train,person)
+lime_person=[]
+for name in models:
+    def proba(z,name=name):
+        q=predict(name,decode(z)); return np.column_stack([1-q,q])
+    for seed in (0,1,2):
+        explainer=LimeTabularExplainer(lime_train,feature_names=FEATURES,categorical_features=cat_ix,
+                                       categorical_names=cat_names,class_names=['no','yes'],
+                                       discretize_continuous=True,random_state=seed)
+        explanation=explainer.explain_instance(person_arr[0],proba,num_features=10,
+                                               num_samples=1000 if name=='tabicl' else 5000)
+        for condition,weight in explanation.as_list():
+            field=max((f for f in FEATURES if condition.startswith(f) or f' {f} ' in f' {condition} '),key=len)
+            shap_value={'logistic':contrib_logit,'xgboost':contrib_xgb}.get(name,pd.Series(dtype=float)).get(field,np.nan)
+            lime_person.append({'model':name,'seed':seed,'condition':condition,'weight':weight,
+                                'shap':shap_value,'local_r2':explanation.score})
+lime_person=pd.DataFrame(lime_person)
+top=lime_person.loc[lime_person.groupby(['model','seed']).weight.apply(lambda w:w.abs().idxmax())]
+checked=lime_person.dropna(subset=['shap'])
+display(pd.DataFrame({'top_reason':top.groupby('model').condition.agg(lambda c:', '.join(sorted(set(c)))),
+                      'local_r2':lime_person.groupby('model').local_r2.mean()}).round(3))
+print('Conditions with the same sign as SHAP (logistic, XGBoost):',
+      int((checked.weight.gt(0)==checked.shap.gt(0)).sum()),'of',len(checked))"""),
         md("""### One person's complete path
 
 The median-risk evaluation person is fixed by XGBoost's rank. We show their raw fields, trained preprocessing, three probabilities, local explanation and support decision. These are predictions, not a diagnosis or a reason to impose a sanction."""),
@@ -634,6 +713,55 @@ print(f'XGBoost rank {rank} of {len(xgb_p)}; support offer at 20% capacity:',
       bool(select_top(xgb_p)[ix]))
 print('LIME local R² for this case:',
       lime_results.loc[lime_results.case=='median','local_r2'].round(3).tolist())"""),
+        md("""### Performance: which fields earn the accuracy
+
+SHAP and LIME explain predictions. **XPER** (Hué, Hurlin, Pérignon and Saurin) explains performance: it splits the AUC itself into a benchmark, the AUC of an uninformative model, plus one contribution per field. It needs many coalition evaluations, so it runs on 150 evaluation people with a kernel approximation, and is not run for TabICLv2. **Permutation importance** shuffles one field and measures how much the Brier score worsens, on 1,000 evaluation people. TabICLv2 is measured on 14 fields only, since each shuffle needs a full foundation-model prediction pass."""),
+        code("""perf_ix=np.random.default_rng(SEED).choice(len(X_eval),1000,replace=False)
+X_perf,y_perf=X_eval.iloc[perf_ix].reset_index(drop=True),y_eval.iloc[perf_ix].reset_index(drop=True)
+importance=[]
+for name in ['logistic','xgboost']:
+    result=permutation_importance(models[name],X_perf,y_perf,scoring='neg_brier_score',
+                                  n_repeats=5,random_state=SEED,n_jobs=1)
+    importance+=[{'model':name,'feature':f,'brier_increase':v} for f,v in zip(FEATURES,result.importances_mean)]
+tabicl_fields=['Supervision_Risk_Score_First','Age_at_Release','Gang_Affiliated','Prior_Arrest_Episodes_Felony',
+               'Prior_Arrest_Episodes_Misd','Prior_Arrest_Episodes_Violent','Prior_Arrest_Episodes_Drug',
+               'Education_Level','Prison_Years','Supervision_Level_First','_v1','Prior_Conviction_Episodes_Misd',
+               'Condition_MH_SA','Prior_Arrest_Episodes_Property']
+base_brier=brier_score_loss(y_perf,predict('tabicl',X_perf))
+rng=np.random.default_rng(SEED)
+for f in tabicl_fields:
+    shuffled=X_perf.copy(); shuffled[f]=rng.permutation(shuffled[f].to_numpy())
+    importance.append({'model':'tabicl','feature':f,
+                       'brier_increase':brier_score_loss(y_perf,predict('tabicl',shuffled))-base_brier})
+importance=pd.DataFrame(importance).pivot(index='feature',columns='model',values='brier_increase')
+display(importance.sort_values('logistic',ascending=False).head(10).round(4))
+print('Permutation importance is descriptive on this repeatedly inspected evaluation cohort.')"""),
+        code("""from XPER.compute.Performance import ModelPerformance
+
+def xper_for(name):
+    xp=ModelPerformance(X_train,y_train,X_eval,y_eval,models[name],sample_size=150,seed=SEED)
+    phi,_=xp.calculate_XPER_values(['AUC'],N_coalition_sampled=60,kernel=True,seed=SEED)
+    print(f'{name}: benchmark AUC {phi[0]:.3f}, sample AUC {float(xp.evaluate(["AUC"])):.3f}, '
+          f'sum of contributions {phi.sum():.3f}')
+    return pd.Series(phi[1:],index=FEATURES,name=name)
+
+xper=pd.concat([xper_for('logistic')],axis=1)"""),
+        code("""xper['xgboost']=xper_for('xgboost')
+display(xper.sort_values('logistic',ascending=False).head(8).round(3))
+
+rank=(xper.rank(ascending=False).mean(axis=1)+importance[['logistic','xgboost']].rank(ascending=False).mean(axis=1))/2
+shown_fields=rank.sort_values().index[:5].tolist()
+shown_fields+=[f for f in ['Prison_Years'] if f not in shown_fields]
+fig,axes=plt.subplots(1,2,figsize=(15,5),sharey=True)
+for ax,frame,names,title in [(axes[0],xper,['logistic','xgboost'],'XPER: share of the AUC'),
+                             (axes[1],importance,['logistic','xgboost','tabicl'],'Permutation: Brier increase')]:
+    y=np.arange(len(shown_fields))[::-1]; h=.8/len(names)
+    for j,name in enumerate(names):
+        ax.barh(y+(len(names)-1)/2*h-j*h,frame.reindex(shown_fields)[name].fillna(0),h,color=colours[name],label=name)
+    ax.set(title=title); ax.legend(fontsize=9)
+axes[0].set_yticks(np.arange(len(shown_fields))[::-1],shown_fields)
+plt.tight_layout(); plt.show()"""),
+        md("""All three explanation routes put the same fields on top: age, prior record and gang affiliation. Their exact order differs between methods, because they answer different questions (a prediction, a loss, a ranking metric), so we quote the set of drivers rather than a ranking. Explaining also becomes harder with complexity: logistic regression explains itself, XGBoost needs SHAP, and TabICLv2 can only be probed from outside. On the person at the cut-off, all three models' explanations point to gang affiliation, a field that is never recorded for women (section 4); section 9 audits what this does to fairness."""),
         md("""## 8. Stability under training resampling
 
 Each model is refitted on the same bootstrap samples of the *training* partition. We compare its new evaluation scores and selected set to its original fit. This measures training-data sensitivity, not future population shift. TabICL refits are compute-heavy and therefore measured with three shared resamples here; the repository's expanded audit uses eight."""),
@@ -764,7 +892,7 @@ tradeoff['local_explanation_limit']=['direct coefficients' if name=='logistic'
 display(tradeoff.round(4))"""),
         md("""## 10. Recommendation and limits
 
-The primary choice is **L1 logistic regression for a prospective shadow pilot**, with XGBoost running as a challenger. XGBoost has a small but measurable ranking advantage in this retrospective evaluation and captures 12 more observed events among 1,561 offers. Logistic offers direct coefficient interpretation, simpler maintenance and greater refit stability in these resamples. TabICL has the highest point AUC but uses more compute and has no equally direct native explanation. The median-risk person's LIME surrogate reached only about R² = 0.33, so that local rule list is a limited approximation.
+The primary choice is **L1 logistic regression for a prospective shadow pilot**, with XGBoost running as a challenger. XGBoost has a small but measurable ranking advantage in this retrospective evaluation and captures 12 more observed events among 1,561 offers. Logistic offers direct coefficient interpretation, simpler maintenance and greater refit stability in these resamples. TabICL has the highest point AUC but uses more compute and can only be explained from outside (PDP, ICE, LIME); exact SHAP and XPER are out of reach for it. All three models agree on the main drivers: age, prior record and gang affiliation. The median-risk person's LIME surrogate reached only about R² = 0.33, so that local rule list is a limited approximation.
 
 The fairness gaps are material, particularly for women who are later re-arrested and across age bands. In the three training folds, dropping `Gang_Affiliated` reduced the female-minus-male FNR gap by about 0.08 but also lowered AUC by about 0.01. This is a real trade-off, not a free mitigation. The 27 tests above form this notebook's own family: TabICL's race selection-rate test survives Holm here, while none of the race tests survived correction across the broader 54-test course family in the repository audit. The conclusion is sensitive to the declared family; neither result proves race fairness. No model should allocate real services until intervention benefit, external validity, appeals, subgroup monitoring and stop rules are established. These data record arrests, not who would benefit most from help.
 
